@@ -3,27 +3,28 @@ import Layout from "@/components/Layout";
 import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
 import { Brain, ListChecks, Kanban, Users, ArrowRight, Check } from "lucide-react";
+import { trackEvent } from "@/lib/analytics";
 
 const features = [
   {
     icon: <Brain className="w-8 h-8" />,
-    title: "AI-Powered Matching",
-    description: "Our algorithms learn what 'great' looks like for your company—then find more people like that."
+    title: "Flexible Screening",
+    description: "Manual review when you need control. AI screening when volume demands speed. Your call."
   },
   {
     icon: <ListChecks className="w-8 h-8" />,
-    title: "Automated Screening",
-    description: "Resume parsing, skill scoring, and bias detection—all running in the background while you focus on high-value work."
+    title: "Recruiter Dashboard",
+    description: "Clear daily priorities. Open VantaHire and know exactly what needs attention—today."
   },
   {
     icon: <Kanban className="w-8 h-8" />,
-    title: "Pipeline Management",
-    description: "Kanban boards, stage automation, and bulk actions. Move candidates through your process without the busywork."
+    title: "Job Command Center",
+    description: "Candidates, outreach, scheduling—all centered on the job. No more 12-tab chaos."
   },
   {
     icon: <Users className="w-8 h-8" />,
-    title: "Team Collaboration",
-    description: "Shared notes, interview feedback, and role-based access. Keep everyone aligned without endless email threads."
+    title: "Leadership Insights",
+    description: "Real-time pipeline health and bottleneck detection—without running reports or chasing updates."
   }
 ];
 
@@ -56,12 +57,28 @@ export default function ProductPage() {
   return (
     <Layout>
       <Helmet>
-        <title>Product | VantaHire - The Recruiting Platform That Works</title>
-        <meta name="description" content="Post jobs, screen candidates, and make hires—without the chaos. See how VantaHire's AI-powered platform simplifies recruiting." />
-        <link rel="canonical" href={`${window.location.origin}/product`} />
-        <meta property="og:title" content="Product | VantaHire" />
-        <meta property="og:description" content="The recruiting platform that gets out of your way. AI-powered matching, automated screening, and seamless pipeline management." />
+        <title>Product | VantaHire - The Recruiter-First ATS</title>
+        <meta name="description" content="The ATS designed to remove friction and double your team's efficiency. Human decisions, AI acceleration." />
+        <link rel="canonical" href="https://www.vantahire.com/product" />
+        <meta property="og:title" content="The Recruiter-First ATS That Actually Works" />
+        <meta property="og:description" content="The recruiter-first ATS that removes friction. Built with recruiters, designed for velocity." />
+        <meta property="og:url" content="https://www.vantahire.com/product" />
         <meta property="og:type" content="website" />
+        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Product | VantaHire - Recruiter-First ATS" />
+        <meta name="twitter:description" content="The ATS designed to remove friction and double your team's efficiency." />
+        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" },
+              { "@type": "ListItem", "position": 2, "name": "Product", "item": "https://www.vantahire.com/product" }
+            ]
+          })}
+        </script>
       </Helmet>
 
       <div className="public-theme min-h-screen bg-background text-foreground">
@@ -75,29 +92,38 @@ export default function ProductPage() {
           <div className="text-center mb-20 pt-8">
             <div className="w-20 h-1.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] rounded-full mx-auto mb-6"></div>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
-              <span className="text-white">The Recruiting Platform That</span>
+              <span className="text-white">The Recruiter-First ATS That</span>
               <br />
-              <span className="gradient-text-purple">Gets Out of Your Way</span>
+              <span className="gradient-text-purple">Actually Works</span>
             </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto mb-8">
-              Post jobs, screen candidates, and make hires—without the chaos.
+            <p className="text-xl text-white/80 max-w-2xl mx-auto mb-2">
+              Human decisions, AI acceleration.
+            </p>
+            <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
+              Track candidates, automate workflows, and hire faster—without the complexity.
             </p>
             <Button
               variant="gold"
               size="lg"
-              onClick={() => window.location.href = '/recruiter-auth'}
+              onClick={() => {
+                trackEvent("cta_click", { location: "product", action: "start_free" });
+                window.location.href = '/recruiter-auth';
+              }}
               className="rounded-full px-8 py-6 text-lg font-semibold"
             >
-              See It in Action
+              See the Difference
               <ArrowRight className="ml-2 w-5 h-5" />
             </Button>
           </div>
 
           {/* Platform Features */}
           <div className="mb-24">
-            <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-12">
-              Everything You Need, Nothing You Don't
+            <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-4">
+              What Efficiency Looks Like
             </h2>
+            <p className="text-lg text-muted-foreground text-center mb-12 max-w-2xl mx-auto">
+              Most recruiting systems add features. We remove friction.
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
               {features.map((feature, index) => (
                 <div
@@ -141,15 +167,15 @@ export default function ProductPage() {
           {/* Benefits */}
           <div className="max-w-4xl mx-auto mb-24">
             <div className="bg-gradient-to-br from-[hsl(var(--vanta-dark))]/90 to-[hsl(var(--vanta-dark))]/70 p-8 md:p-12 rounded-2xl border border-white/5">
-              <h2 className="text-2xl md:text-3xl font-bold text-white mb-8">Why Teams Choose VantaHire</h2>
+              <h2 className="text-2xl md:text-3xl font-bold text-white mb-8">Built Different. Built With You.</h2>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {[
-                  "Save 10+ hours per week on manual screening",
-                  "Reduce time-to-hire by up to 40%",
-                  "Built-in bias detection for fairer hiring",
-                  "Unlimited job postings on all paid plans",
+                  "Designed for 2X recruiter efficiency",
+                  "70% fewer clicks to action",
+                  "Day-1 productivity—no training required",
+                  "One-glance pipeline visibility",
                   "No per-seat pricing—invite your whole team",
-                  "Dedicated support when you need it"
+                  "Built with recruiter feedback from day one"
                 ].map((benefit, index) => (
                   <div key={index} className="flex items-center gap-3">
                     <Check className="w-5 h-5 text-primary flex-shrink-0" />
@@ -163,27 +189,34 @@ export default function ProductPage() {
           {/* CTA Section */}
           <div className="text-center py-12">
             <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
-              Ready to Simplify Your Hiring?
+              Ready to Recruit Faster?
             </h2>
             <p className="text-lg text-muted-foreground mb-8">
-              Start free. No credit card required.
+              Remove the friction. Start free. No credit card required.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button
                 variant="gold"
                 size="lg"
-                onClick={() => window.location.href = '/recruiter-auth'}
+                onClick={() => {
+                  trackEvent("cta_click", { location: "product", action: "start_free" });
+                  window.location.href = '/recruiter-auth';
+                }}
                 className="rounded-full px-8 py-6 text-lg font-semibold"
               >
-                Get Started Free
+                Start Recruiting Faster
+                <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
               <Button
                 variant="outlinePurple"
                 size="lg"
-                onClick={() => window.open('https://cal.com/vantahire/quick-connect', '_blank')}
+                onClick={() => {
+                  trackEvent("cta_click", { location: "product", action: "get_walkthrough" });
+                  window.open('https://cal.com/vantahire/quick-connect', '_blank');
+                }}
                 className="rounded-full px-8 py-6 text-lg"
               >
-                Book a Demo
+                Get a Walkthrough
               </Button>
             </div>
           </div>

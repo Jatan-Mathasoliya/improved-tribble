@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
+import { Helmet } from "react-helmet-async";
 import { User, Building, MapPin, Linkedin, Briefcase, Calendar, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -154,6 +155,48 @@ export default function RecruiterProfilePage() {
 
   return (
     <Layout>
+      <Helmet>
+        <title>{profile.displayName} - Recruiter | VantaHire</title>
+        <meta name="description" content={`${profile.displayName}${profile.company ? ` at ${profile.company}` : ''}${profile.location ? ` in ${profile.location}` : ''}. View profile and job listings on VantaHire.`} />
+        <link rel="canonical" href={`https://www.vantahire.com/recruiters/${recruiterIdOrPublicId}`} />
+        <meta property="og:title" content={`${profile.displayName} - Recruiter | VantaHire`} />
+        <meta property="og:description" content={profile.bio || `View ${profile.displayName}'s recruiter profile and job listings on VantaHire.`} />
+        <meta property="og:url" content={`https://www.vantahire.com/recruiters/${recruiterIdOrPublicId}`} />
+        <meta property="og:type" content="profile" />
+        <meta property="og:image" content={profile.photoUrl || "https://www.vantahire.com/og-image.jpg"} />
+        <meta name="twitter:card" content="summary" />
+        <meta name="twitter:title" content={`${profile.displayName} - Recruiter | VantaHire`} />
+        <meta name="twitter:description" content={profile.bio || `View ${profile.displayName}'s recruiter profile and job listings.`} />
+        <meta name="twitter:image" content={profile.photoUrl || "https://www.vantahire.com/twitter-image.jpg"} />
+
+        {/* BreadcrumbList JSON-LD */}
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "Home",
+                "item": "https://www.vantahire.com"
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "Recruiters",
+                "item": "https://www.vantahire.com/recruiters"
+              },
+              {
+                "@type": "ListItem",
+                "position": 3,
+                "name": profile.displayName,
+                "item": `https://www.vantahire.com/recruiters/${recruiterIdOrPublicId}`
+              }
+            ]
+          })}
+        </script>
+      </Helmet>
       <div className="public-theme min-h-screen bg-background text-foreground py-12">
         {/* Premium background effects */}
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxIiBjeT0iMSIgcj0iMSIgZmlsbD0id2hpdGUiIGZpbGwtb3BhY2l0eT0iMC4wNSIvPjwvc3ZnPg==')] opacity-10"></div>

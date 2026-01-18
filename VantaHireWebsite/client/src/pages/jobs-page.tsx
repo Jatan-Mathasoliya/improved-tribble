@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useSearch } from "wouter";
 import { Helmet } from "react-helmet-async";
+import { DEFAULT_SITE_URL } from "@/lib/seoHelpers";
 import { Search, MapPin, Clock, Filter, Briefcase, ArrowUpDown, X, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -154,7 +155,7 @@ export default function JobsPage() {
 
   // Generate dynamic meta tags based on filters and results
   const metaData = useMemo(() => {
-    const baseUrl = window.location.origin;
+    const baseUrl = DEFAULT_SITE_URL;
     const count = data?.pagination.total || 0;
 
     // Build title with filters
@@ -170,18 +171,11 @@ export default function JobsPage() {
     let description = `Browse ${count} open roles across IT, Telecom, Automotive, Fintech, Healthcare.`;
     if (location) description += ` Find opportunities in ${location}.`;
     if (search) description += ` Search: ${search}.`;
-    description += " AI-powered matching with specialist recruiters.";
+    description += " Recruiter-first ATS built for recruiting velocity.";
 
-    // Build canonical URL with query params (include all active filters)
-    const params = new URLSearchParams();
-    if (search) params.set("search", search);
-    if (location) params.set("location", location);
-    if (type && type !== "all") params.set("type", type);
-    if (skills) params.set("skills", skills);
-    if (sortBy && sortBy !== "recent") params.set("sortBy", sortBy);
-    if (page > 1) params.set("page", page.toString());
-
-    const canonicalUrl = `${baseUrl}/jobs${params.toString() ? `?${params.toString()}` : ''}`;
+    // Canonical URL should always be the base jobs page to prevent duplicate content
+    // Query params create filtered views, not separate pages
+    const canonicalUrl = `${baseUrl}/jobs`;
 
     return { title, description, canonicalUrl, baseUrl };
   }, [location, type, search, skills, sortBy, page, data?.pagination.total]);

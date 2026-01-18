@@ -1,10 +1,61 @@
 import { Helmet } from "react-helmet-async";
-import { Download, FileType, Copy, Check, Image, Video, FileText } from "lucide-react";
+import { Download, FileType, Copy, Check, Image, Video, FileText, MessageSquare, Target, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Layout from "@/components/Layout";
 import { useState } from "react";
+
+// Messaging Guidelines Data
+const taglineHierarchy = [
+  { level: "Primary", text: "Recruiting Velocity, by Design", usage: "Hero, Logo lockup" },
+  { level: "Secondary", text: "Human decisions, AI acceleration.", usage: "Subheadline, signature" },
+  { level: "Tertiary", text: "Built with recruiters, not around them.", usage: "Supporting copy" }
+];
+
+const keyPhrases = [
+  { use: "Recruiting velocity", insteadOf: "Faster hiring" },
+  { use: "Human decisions, AI acceleration", insteadOf: "AI-powered" },
+  { use: "Built with recruiters", insteadOf: "Built for recruiters" },
+  { use: "At a glance", insteadOf: "Easy to use" },
+  { use: "Designed for velocity", insteadOf: "Fast" },
+  { use: "Zero friction", insteadOf: "Simple" },
+  { use: "Day-1 productive", insteadOf: "Easy onboarding" }
+];
+
+const audienceMessaging = [
+  {
+    audience: "Consulting Firms/Agencies",
+    message: "50+ roles across clients? Velocity without chaos. Do more with less."
+  },
+  {
+    audience: "Startups",
+    message: "Your ATS shouldn't slow you down. 2X efficiency makes a lean team feel twice its size."
+  },
+  {
+    audience: "Leadership",
+    message: "Pipeline health and recruiter activity—visible without chasing updates."
+  },
+  {
+    audience: "Recruiters",
+    message: "Less clicking, more recruiting. Know where to start every day."
+  }
+];
+
+const coreValues = [
+  {
+    title: "Recruiter-First",
+    description: "If it adds clicks, it doesn't ship."
+  },
+  {
+    title: "Velocity Over Bureaucracy",
+    description: "Built for teams that move fast."
+  },
+  {
+    title: "Clarity Over Complexity",
+    description: "Answers at a glance, not in exports."
+  }
+];
 
 const handleDownload = (file: string, name: string) => {
   const link = document.createElement("a");
@@ -36,8 +87,18 @@ export default function BrandAssetsPage() {
   return (
     <Layout>
       <Helmet>
-        <title>Brand Assets | VantaHire</title>
-        <meta name="description" content="Download official VantaHire logo and brand assets in multiple formats." />
+        <title>Brand & Messaging | VantaHire</title>
+        <meta name="description" content="VantaHire brand assets, messaging guidelines, and official logos. Recruiting Velocity, by Design." />
+        <link rel="canonical" href="https://www.vantahire.com/brand" />
+        <meta property="og:title" content="Brand & Messaging | VantaHire" />
+        <meta property="og:description" content="VantaHire brand assets, messaging guidelines, and official logos. Recruiting Velocity, by Design." />
+        <meta property="og:url" content="https://www.vantahire.com/brand" />
+        <meta property="og:type" content="website" />
+        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Brand & Messaging | VantaHire" />
+        <meta name="twitter:description" content="VantaHire brand assets, messaging guidelines, and official logos. Recruiting Velocity, by Design." />
+        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
       </Helmet>
 
       <div className="public-theme min-h-screen bg-background text-foreground">
@@ -51,11 +112,11 @@ export default function BrandAssetsPage() {
           <div className="text-center mb-16 pt-16">
             <div className="w-20 h-1.5 bg-gradient-to-r from-[#7B38FB] to-[#F59E0B] rounded-full mx-auto mb-6"></div>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
-              <span className="text-white">Brand</span>{" "}
-              <span className="bg-gradient-to-r from-purple-400 to-amber-400 bg-clip-text text-transparent">Assets</span>
+              <span className="text-white">Brand &</span>{" "}
+              <span className="bg-gradient-to-r from-purple-400 to-amber-400 bg-clip-text text-transparent">Messaging</span>
             </h1>
             <p className="text-lg md:text-xl text-white/70 max-w-2xl mx-auto leading-relaxed">
-              Download the official VantaHire logo and brand assets in multiple formats.
+              Official VantaHire brand assets, messaging guidelines, and visual identity.
             </p>
           </div>
 
@@ -393,12 +454,91 @@ export default function BrandAssetsPage() {
             <p className="text-white/40 text-sm text-center mt-4">Click any color to copy hex code</p>
           </section>
 
+          {/* Brand Messaging Section */}
+          <section className="mb-16 max-w-5xl mx-auto">
+            <h2 className="text-2xl font-bold text-white mb-8 text-center">Brand Messaging</h2>
+
+            {/* Tagline Hierarchy */}
+            <div className="bg-white/5 border border-white/10 rounded-xl p-8 mb-6">
+              <h3 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
+                <MessageSquare className="h-5 w-5 text-primary" />
+                Tagline Hierarchy
+              </h3>
+              <div className="space-y-4">
+                {taglineHierarchy.map((item, index) => (
+                  <div key={index} className="flex flex-col md:flex-row md:items-center gap-2 md:gap-6 p-4 bg-white/5 rounded-lg">
+                    <Badge variant="outline" className="w-fit border-primary/50 text-primary">
+                      {item.level}
+                    </Badge>
+                    <p className="text-white font-medium flex-1">"{item.text}"</p>
+                    <p className="text-white/50 text-sm">{item.usage}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Core Values */}
+            <div className="bg-white/5 border border-white/10 rounded-xl p-8 mb-6">
+              <h3 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
+                <Target className="h-5 w-5 text-primary" />
+                Core Values
+              </h3>
+              <div className="grid md:grid-cols-3 gap-4">
+                {coreValues.map((value, index) => (
+                  <div key={index} className="p-4 bg-white/5 rounded-lg">
+                    <h4 className="text-white font-semibold mb-2">{value.title}</h4>
+                    <p className="text-white/60 text-sm">{value.description}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Key Phrases */}
+            <div className="bg-white/5 border border-white/10 rounded-xl p-8 mb-6">
+              <h3 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
+                <Zap className="h-5 w-5 text-primary" />
+                Key Phrases
+              </h3>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-white/10">
+                      <th className="text-left py-3 px-4 text-primary font-medium">Use This</th>
+                      <th className="text-left py-3 px-4 text-white/50 font-medium">Instead Of</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {keyPhrases.map((phrase, index) => (
+                      <tr key={index} className="border-b border-white/5">
+                        <td className="py-3 px-4 text-white">{phrase.use}</td>
+                        <td className="py-3 px-4 text-white/50 line-through">{phrase.insteadOf}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Audience Messaging */}
+            <div className="bg-white/5 border border-white/10 rounded-xl p-8">
+              <h3 className="text-xl font-semibold text-white mb-6">Audience Messaging</h3>
+              <div className="grid md:grid-cols-2 gap-4">
+                {audienceMessaging.map((item, index) => (
+                  <div key={index} className="p-4 bg-white/5 rounded-lg">
+                    <p className="text-primary text-sm font-medium mb-2">{item.audience}</p>
+                    <p className="text-white/80">"{item.message}"</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+
           {/* Usage Guidelines */}
           <section className="mb-16 max-w-5xl mx-auto">
             <div className="bg-white/5 border border-white/10 rounded-xl p-8">
               <h2 className="text-xl font-semibold text-white mb-6 flex items-center gap-2">
                 <FileType className="h-5 w-5 text-primary" />
-                Usage Guidelines
+                Logo Usage Guidelines
               </h2>
               <div className="grid md:grid-cols-2 gap-8">
                 <div>

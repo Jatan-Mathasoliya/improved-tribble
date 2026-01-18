@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
+import { trackEvent } from "@/lib/analytics";
 import { Rocket, Building2, Users, Briefcase, Code, Wifi, CreditCard, HeartPulse, Car } from "lucide-react";
 
 const useCases = [
@@ -92,10 +93,26 @@ export default function UseCasesPage() {
       <Helmet>
         <title>Use Cases | VantaHire - Built for Teams Like Yours</title>
         <meta name="description" content="See how startups, agencies, enterprises, and HR teams use VantaHire to hire faster. Industry solutions for IT, Telecom, Fintech, Healthcare, and Automotive." />
-        <link rel="canonical" href={`${window.location.origin}/use-cases`} />
-        <meta property="og:title" content="Use Cases | VantaHire" />
+        <link rel="canonical" href="https://www.vantahire.com/use-cases" />
+        <meta property="og:title" content="Use Cases | VantaHire - Built for Teams Like Yours" />
         <meta property="og:description" content="From startups to enterprises, see how teams use VantaHire to transform their hiring." />
+        <meta property="og:url" content="https://www.vantahire.com/use-cases" />
         <meta property="og:type" content="website" />
+        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Use Cases | VantaHire - Built for Teams Like Yours" />
+        <meta name="twitter:description" content="From startups to enterprises, see how teams use VantaHire to transform their hiring." />
+        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" },
+              { "@type": "ListItem", "position": 2, "name": "Use Cases", "item": "https://www.vantahire.com/use-cases" }
+            ]
+          })}
+        </script>
       </Helmet>
 
       <div className="public-theme min-h-screen bg-background text-foreground">
@@ -179,7 +196,10 @@ export default function UseCasesPage() {
               <Button
                 variant="gold"
                 size="lg"
-                onClick={() => window.location.href = '/recruiter-auth'}
+                onClick={() => {
+                  trackEvent("cta_click", { location: "use_cases", action: "start_free" });
+                  window.location.href = '/recruiter-auth';
+                }}
                 className="rounded-full px-8 py-6 text-lg font-semibold"
               >
                 Get Started Free
@@ -187,7 +207,10 @@ export default function UseCasesPage() {
               <Button
                 variant="outlinePurple"
                 size="lg"
-                onClick={() => window.open('https://cal.com/vantahire/quick-connect', '_blank')}
+                onClick={() => {
+                  trackEvent("cta_click", { location: "use_cases", action: "get_walkthrough" });
+                  window.open('https://cal.com/vantahire/quick-connect', '_blank');
+                }}
                 className="rounded-full px-8 py-6 text-lg"
               >
                 Talk to Sales

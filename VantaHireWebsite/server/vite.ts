@@ -5,7 +5,7 @@ import { fileURLToPath } from "url";
 import { type Server } from "http";
 import { nanoid } from "nanoid";
 import { storage } from "./storage";
-import { generateJobPostingSchema } from "./seoUtils";
+import { generateJobPostingSchema, stripHtml } from "./seoUtils";
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -84,9 +84,58 @@ export async function setupVite(app: Express, server: Server) {
  * Inject JSON-LD structured data into HTML for SEO
  */
 function injectJsonLd(html: string, jsonLd: object): string {
-  const script = `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`;
+  const script = `<script type="application/ld+json" data-schema="jobposting">${JSON.stringify(jsonLd)}</script>`;
   // Inject before </head> for early discovery by crawlers
   return html.replace('</head>', `${script}\n</head>`);
+}
+
+function escapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeHtmlText(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function upsertMetaTag(html: string, attr: 'name' | 'property', key: string, content: string): string {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`<meta\\s+[^>]*${attr}=["']${escapedKey}["'][^>]*>`, 'i');
+  const tag = `<meta ${attr}="${key}" content="${escapeHtmlAttr(content)}" />`;
+  if (regex.test(html)) {
+    return html.replace(regex, tag);
+  }
+  return html.replace('</head>', `${tag}\n</head>`);
+}
+
+function upsertLinkRel(html: string, rel: string, href: string): string {
+  const escapedRel = rel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`<link\\s+[^>]*rel=["']${escapedRel}["'][^>]*>`, 'i');
+  const tag = `<link rel="${rel}" href="${escapeHtmlAttr(href)}" />`;
+  if (regex.test(html)) {
+    return html.replace(regex, tag);
+  }
+  return html.replace('</head>', `${tag}\n</head>`);
+}
+
+function upsertTitle(html: string, title: string): string {
+  const tag = `<title>${escapeHtmlText(title)}</title>`;
+  if (/<title>.*<\/title>/i.test(html)) {
+    return html.replace(/<title>.*<\/title>/i, tag);
+  }
+  return html.replace('</head>', `${tag}\n</head>`);
+}
+
+function truncateText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return `${text.substring(0, maxLength - 3)}...`;
 }
 
 /**
@@ -170,6 +219,13 @@ export function serveStatic(app: Express) {
 
       // Generate JSON-LD
       const baseUrl = process.env.BASE_URL || 'https://www.vantahire.com';
+      const jobUrl = job.slug ? `${baseUrl}/jobs/${job.slug}` : `${baseUrl}/jobs/${job.id}`;
+      const pageTitle = `${job.title} | VantaHire`;
+      const metaDescription = truncateText(
+        `Apply for ${job.title} at ${job.location}. ${stripHtml(job.description)}`,
+        155
+      );
+
       const jsonLd = generateJobPostingSchema({
         id: job.id,
         title: job.title,
@@ -184,6 +240,21 @@ export function serveStatic(app: Express) {
         expiresAt: job.expiresAt,
         slug: job.slug,
       }, baseUrl);
+
+      // Inject job-specific meta tags for crawlers that don't run JS
+      html = upsertTitle(html, pageTitle);
+      html = upsertMetaTag(html, 'name', 'title', pageTitle);
+      html = upsertMetaTag(html, 'name', 'description', metaDescription);
+      html = upsertLinkRel(html, 'canonical', jobUrl);
+      html = upsertMetaTag(html, 'property', 'og:title', pageTitle);
+      html = upsertMetaTag(html, 'property', 'og:description', metaDescription);
+      html = upsertMetaTag(html, 'property', 'og:url', jobUrl);
+      html = upsertMetaTag(html, 'property', 'og:type', 'website');
+      html = upsertMetaTag(html, 'property', 'og:image', `${baseUrl}/og-image.jpg`);
+      html = upsertMetaTag(html, 'name', 'twitter:card', 'summary_large_image');
+      html = upsertMetaTag(html, 'name', 'twitter:title', pageTitle);
+      html = upsertMetaTag(html, 'name', 'twitter:description', metaDescription);
+      html = upsertMetaTag(html, 'name', 'twitter:image', `${baseUrl}/twitter-image.jpg`);
 
       // Only inject if JSON-LD generation succeeded
       if (jsonLd) {

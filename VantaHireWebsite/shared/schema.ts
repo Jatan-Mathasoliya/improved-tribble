@@ -967,6 +967,13 @@ export const insertContactSchema = createInsertSchema(contactSubmissions).pick({
   message: true,
 });
 
+const countWords = (value: string): number =>
+  value
+    .replace(/<[^>]+>/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+
 export const insertJobSchema = createInsertSchema(jobs).pick({
   title: true,
   location: true,
@@ -980,7 +987,9 @@ export const insertJobSchema = createInsertSchema(jobs).pick({
   title: z.string().min(1).max(100),
   location: z.string().min(1).max(100),
   type: z.enum(["full-time", "part-time", "contract", "remote"]),
-  description: z.string().min(10).max(5000),
+  description: z.string().min(10).max(5000).refine((value) => countWords(value) >= 200, {
+    message: "Description must be at least 200 words",
+  }),
   skills: z.array(z.string().min(1).max(50)).max(20).optional(),
   deadline: z.string().transform(str => new Date(str)).optional(),
   clientId: z.number().int().positive().optional(),

@@ -51,20 +51,26 @@ const About = () => {
   }, []);
 
   const tabs = [
-    { name: "Our Story", icon: <Users className="h-5 w-5" /> },
+    { name: "The Problem", icon: <Users className="h-5 w-5" /> },
     { name: "Our Approach", icon: <Trophy className="h-5 w-5" /> },
-    { name: "Our Impact", icon: <Building className="h-5 w-5" /> }
+    { name: "The Result", icon: <Building className="h-5 w-5" /> }
   ];
 
   const tabContents = [
     <div key="story" className="space-y-4">
       <p className="text-lg leading-relaxed">
-        We've been in your shoes. Our founders spent years building hiring teams at Adobe, Ericsson, Cloudera,
-        and Cradlepoint—and got tired of the same broken processes.
+        We talked to recruiters across consulting firms, agencies, and fast-growing teams and heard the same thing:
+      </p>
+      <p className="text-lg leading-relaxed text-white/90 italic">
+        "My ATS works against me, not with me."
       </p>
       <p className="text-lg leading-relaxed">
-        So we built VantaHire: <span className="text-[#FF5BA8] font-semibold">AI + human expertise</span>, working together
-        to make hiring faster, fairer, and actually enjoyable.
+        Most systems were built without recruiter input and optimized for enterprise complexity. Simple questions like
+        "how many candidates are in my pipeline?" take multiple screens and exports.
+      </p>
+      <p className="text-lg leading-relaxed">
+        So we built the ATS recruiters actually wanted: <span className="text-[#FF5BA8] font-semibold">every workflow validated by recruiters,
+        every screen optimized for velocity</span>.
       </p>
     </div>,
     <div key="approach" className="space-y-4">
@@ -73,10 +79,10 @@ const About = () => {
       </p>
       <ul className="space-y-3 mt-4">
         {[
-          "Smart AI, not magic: Our algorithms surface candidates you'd miss, while humans validate every match.",
-          "Speed that doesn't sacrifice quality: Close roles in weeks, not months—without cutting corners.",
-          "Fewer regrettable hires: Better matching = better retention. Our candidates stick around.",
-          "Fairness built-in: Bias detection ensures diverse, qualified candidate pools every time."
+          "Recruiter-first, not afterthought: If it adds clicks, it doesn't ship.",
+          "Velocity over bureaucracy: Built for teams that move fast—not approval chains.",
+          "Clarity over complexity: Answers at a glance, not buried in reports.",
+          "Human decisions, AI acceleration: Smart algorithms surface candidates; you make the calls."
         ].map((item, i) => (
           <li key={i} className="flex items-start">
             <Check className="h-5 w-5 text-[#7B38FB] mr-2 mt-1 flex-shrink-0" />
@@ -90,11 +96,11 @@ const About = () => {
         <span className="font-semibold text-white">2,500+ placements.</span> <span className="font-semibold text-white">96% satisfaction.</span> <span className="font-semibold text-white">20+ years of expertise.</span>
       </p>
       <p className="text-lg leading-relaxed">
-        From scrappy startups hiring their first engineer to enterprises scaling teams of 50+,
-        we've helped teams find the people who actually move the needle.
+        From consulting firms managing 50+ roles to startups hiring their first engineer,
+        we've helped teams recruit faster without the complexity.
       </p>
       <p className="text-lg leading-relaxed text-white/90 italic">
-        "We cut our time-to-hire significantly. VantaHire just works."
+        "For the first time, I open my ATS and know exactly what to do."
       </p>
     </div>
   ];
@@ -129,7 +135,7 @@ const About = () => {
           </h2>
 
           <p className="text-lg text-white/80 max-w-2xl mx-auto animate-slide-up" style={{ animationDelay: '0.6s' }}>
-            AI-powered precision meets human expertise. Discover how we deliver ≈40% faster hires with 60% fewer mis-hires.
+            We built VantaHire because your ATS wasn't built for you. Discover our recruiter-first approach.
           </p>
         </div>
 

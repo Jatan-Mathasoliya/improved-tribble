@@ -26,6 +26,13 @@ import type { CsrfMiddleware } from './types/routes';
 import { db } from './db';
 import { and, eq, gte, lte, inArray, or } from 'drizzle-orm';
 
+const countWords = (value: string): number =>
+  value
+    .replace(/<[^>]+>/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+
 /** Check if a string is a numeric ID */
 function isNumericId(id: string): boolean {
   return /^\d+$/.test(id);
@@ -270,6 +277,10 @@ export function registerJobsRoutes(
           res.status(400).json({ error: 'Description must be a string' });
           return;
         }
+        if (countWords(description) < 200) {
+          res.status(400).json({ error: 'Description must be at least 200 words' });
+          return;
+        }
         updates.description = description;
       }
 
@@ -282,7 +293,7 @@ export function registerJobsRoutes(
       }
 
       if (type !== undefined) {
-        const validTypes = ['full-time', 'part-time', 'contract', 'internship'];
+        const validTypes = ['full-time', 'part-time', 'contract', 'internship', 'remote'];
         if (!validTypes.includes(type)) {
           res.status(400).json({ error: 'Invalid job type' });
           return;

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Linkedin, MapPin, Briefcase } from "lucide-react";
 import Layout from "@/components/Layout";
+import { Helmet } from "react-helmet-async";
 import type { Consultant } from "@shared/schema";
 
 export default function ConsultantsPage() {
@@ -23,6 +24,11 @@ export default function ConsultantsPage() {
 
   return (
     <Layout>
+      <Helmet>
+        <title>Our Consultants | VantaHire</title>
+        <meta name="description" content="Meet our network of specialist consultants and recruiters with expertise across IT, Telecom, Fintech, Healthcare, and Automotive." />
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
       <div className="public-theme min-h-screen bg-background text-foreground">
         {/* Background effects */}
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxIiBjeT0iMSIgcj0iMSIgZmlsbD0id2hpdGUiIGZpbGwtb3BhY2l0eT0iMC4wNSIvPjwvc3ZnPg==')] opacity-10"></div>

@@ -3,19 +3,41 @@
 
 User-agent: *
 Allow: /
+
+# Block admin and dashboard pages
 Disallow: /admin
 Disallow: /admin-dashboard
 Disallow: /admin-super-dashboard
 Disallow: /unified-admin-dashboard
 Disallow: /recruiter-dashboard
+Disallow: /hiring-manager
 Disallow: /my-dashboard
+Disallow: /my-jobs
+Disallow: /applications
+Disallow: /candidates
+Disallow: /clients
+Disallow: /profile/settings
 Disallow: /application-management
+
+# Block auth pages
+Disallow: /auth
+Disallow: /candidate-auth
+Disallow: /recruiter-auth
+Disallow: /verify-email
+Disallow: /reset-password
+Disallow: /register-hiring-manager
+Disallow: /accept-co-recruiter
+Disallow: /register-co-recruiter
+
+# Block API routes
 Disallow: /api/
 
-# AI Crawler Resources
-Allow: /llms.txt
-Allow: /llms-full.txt
-Allow: /llms-small.txt
+# Block form and shortlist tokens
+Disallow: /form/
+Disallow: /client-shortlist/
+
+# Block pages not ready for indexing
+Disallow: /consultants
 
 # Sitemap locations
 Sitemap: https://www.vantahire.com/sitemap.xml

@@ -300,6 +300,7 @@ export default function RegisterHiringManager() {
                     <Input
                       id="password"
                       type="password"
+                      autoComplete="new-password"
                       value={registerData.password}
                       onChange={(e) => setRegisterData(prev => ({ ...prev, password: e.target.value }))}
                       placeholder="Create a strong password"
@@ -315,6 +316,7 @@ export default function RegisterHiringManager() {
                     <Input
                       id="confirmPassword"
                       type="password"
+                      autoComplete="new-password"
                       value={registerData.confirmPassword}
                       onChange={(e) => setRegisterData(prev => ({ ...prev, confirmPassword: e.target.value }))}
                       placeholder="Confirm your password"

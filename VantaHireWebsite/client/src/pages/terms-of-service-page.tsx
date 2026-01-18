@@ -1,10 +1,25 @@
 import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Users, Shield, AlertTriangle, Scale, Ban } from "lucide-react";
+import { Helmet } from "react-helmet-async";
 
 export default function TermsOfServicePage() {
   return (
     <Layout>
+      <Helmet>
+        <title>Terms of Service | VantaHire</title>
+        <meta name="description" content="VantaHire Terms of Service. Read our terms and conditions for using our recruiter-first ATS platform." />
+        <link rel="canonical" href="https://www.vantahire.com/terms-of-service" />
+        <meta property="og:title" content="Terms of Service | VantaHire" />
+        <meta property="og:description" content="Terms and conditions for using VantaHire ATS platform." />
+        <meta property="og:url" content="https://www.vantahire.com/terms-of-service" />
+        <meta property="og:type" content="website" />
+        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Terms of Service | VantaHire" />
+        <meta name="twitter:description" content="Terms and conditions for using VantaHire ATS platform." />
+        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+      </Helmet>
       <div className="container mx-auto px-4 py-16 max-w-4xl">
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">

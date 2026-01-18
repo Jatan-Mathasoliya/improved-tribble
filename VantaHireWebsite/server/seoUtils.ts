@@ -1,24 +1,32 @@
 /**
- * Sanitize HTML description to plain text for structured data
- * Simple HTML tag stripping for SEO purposes
+ * Remove script/style tags from job descriptions while preserving HTML.
  */
 export function sanitizeDescription(html: string): string {
   if (!html) return '';
 
-  // Remove HTML tags using regex
-  // This is safe for our use case (converting to plain text for SEO)
-  let plainText = html
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '') // Remove script tags and content
-    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '') // Remove style tags and content
-    .replace(/<[^>]+>/g, '') // Remove all HTML tags
-    .replace(/&nbsp;/g, ' ') // Replace &nbsp; with space
-    .replace(/&amp;/g, '&') // Replace &amp; with &
-    .replace(/&lt;/g, '<') // Replace &lt; with <
-    .replace(/&gt;/g, '>') // Replace &gt; with >
-    .replace(/&quot;/g, '"') // Replace &quot; with "
-    .replace(/&#039;/g, "'"); // Replace &#039; with '
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+    .trim();
+}
 
-  // Normalize whitespace
+/**
+ * Strip HTML tags for text-only meta descriptions.
+ */
+export function stripHtml(html: string): string {
+  if (!html) return '';
+
+  let plainText = html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'");
+
   return plainText.replace(/\s+/g, ' ').trim();
 }
 
@@ -83,6 +91,24 @@ function detectCountry(location: string): string {
   return 'IN'; // Default to India for APAC focus
 }
 
+function getCountryName(countryCode: string): string {
+  const names: Record<string, string> = {
+    IN: 'India',
+    SG: 'Singapore',
+    MY: 'Malaysia',
+    PH: 'Philippines',
+    ID: 'Indonesia',
+    VN: 'Vietnam',
+    TH: 'Thailand',
+    AU: 'Australia',
+    US: 'United States',
+    GB: 'United Kingdom',
+    AE: 'United Arab Emirates',
+  };
+
+  return names[countryCode] || countryCode;
+}
+
 /**
  * Parse job location to determine if remote or physical location
  * Returns jobLocationType for remote, or jobLocation for physical
@@ -100,6 +126,7 @@ export function parseJobLocation(location: string | null) {
   if (isRemote) {
     // Check if remote is region-specific (e.g., "Remote - India", "Remote (US only)")
     const countryCode = detectCountry(location);
+    const countryName = getCountryName(countryCode);
     const isGlobalRemote = lower.includes('anywhere') || lower.includes('global') || lower.includes('worldwide');
 
     if (isGlobalRemote) {
@@ -107,14 +134,14 @@ export function parseJobLocation(location: string | null) {
     }
 
     // Region-specific remote
-    return {
-      jobLocationType: 'TELECOMMUTE',
-      applicantLocationRequirements: {
-        '@type': 'Country',
-        name: countryCode,
-      },
-    };
-  }
+      return {
+        jobLocationType: 'TELECOMMUTE',
+        applicantLocationRequirements: {
+          '@type': 'Country',
+          name: countryName,
+        },
+      };
+    }
 
   // Handle multiple locations (e.g., "Bangalore/Mumbai") - use first one
   const firstLocation = location.split('/')[0]?.split(',')[0]?.trim() || '';
@@ -157,6 +184,7 @@ export function validateJobPosting(job: {
   description?: string;
   createdAt?: Date | string | null;
   location?: string;
+  type?: string | null;
 }): string[] {
   const errors: string[] = [];
 
@@ -164,8 +192,8 @@ export function validateJobPosting(job: {
     errors.push('Missing title');
   }
 
-  if (!job.description || job.description.trim().length < 200) {
-    errors.push('Description too short (minimum 200 characters for Google Jobs)');
+  if (!job.description || job.description.trim().length === 0) {
+    errors.push('Missing description');
   }
 
   if (!job.createdAt) {
@@ -178,7 +206,10 @@ export function validateJobPosting(job: {
   }
 
   if (!job.location || job.location.trim().length === 0) {
-    errors.push('Missing location');
+    const isRemote = job.type?.toLowerCase() === 'remote';
+    if (!isRemote) {
+      errors.push('Missing location');
+    }
   }
 
   return errors;
@@ -209,14 +240,18 @@ export function generateJobPostingSchema(job: {
     return null;
   }
 
-  // Sanitize description to plain text
-  const plainDescription = sanitizeDescription(job.description);
+  // Preserve HTML in description for Google Jobs
+  const htmlDescription = sanitizeDescription(job.description);
 
   // Map employment type
   const employmentType = mapEmploymentType(job.type);
 
   // Parse location
-  const locationData = parseJobLocation(job.location);
+  const locationData = job.location
+    ? parseJobLocation(job.location)
+    : job.type?.toLowerCase() === 'remote'
+      ? { jobLocationType: 'TELECOMMUTE' }
+      : null;
 
   // Format dates
   const datePosted = formatISODate(job.createdAt);
@@ -246,7 +281,7 @@ export function generateJobPostingSchema(job: {
     '@context': 'https://schema.org',
     '@type': 'JobPosting',
     title: job.title,
-    description: plainDescription,
+    description: htmlDescription,
     datePosted,
     hiringOrganization,
     identifier: {

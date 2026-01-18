@@ -3,6 +3,7 @@ import Layout from "@/components/Layout";
 import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
 import { Check, X, ChevronDown } from "lucide-react";
+import { trackEvent } from "@/lib/analytics";
 
 const plans = [
   {
@@ -91,6 +92,8 @@ export default function PricingPage() {
   }, []);
 
   const handleCta = (plan: typeof plans[0]) => {
+    const planKey = plan.name.toLowerCase();
+    trackEvent("plan_cta_click", { plan: planKey, source: "pricing_page" });
     if (plan.name === "Enterprise") {
       window.open('https://cal.com/vantahire/quick-connect', '_blank');
     } else {
@@ -103,10 +106,74 @@ export default function PricingPage() {
       <Helmet>
         <title>Pricing | VantaHire - Simple Pricing, No Surprises</title>
         <meta name="description" content="Start free, scale when you're ready. VantaHire pricing starts at ₹0/month with unlimited jobs on Pro at ₹999/month." />
-        <link rel="canonical" href={`${window.location.origin}/pricing`} />
-        <meta property="og:title" content="Pricing | VantaHire" />
+        <link rel="canonical" href="https://www.vantahire.com/pricing" />
+        <meta property="og:title" content="Pricing | VantaHire - Simple Pricing, No Surprises" />
         <meta property="og:description" content="Simple, transparent pricing. No per-seat fees. Start free and upgrade when you're ready." />
+        <meta property="og:url" content="https://www.vantahire.com/pricing" />
         <meta property="og:type" content="website" />
+        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Pricing | VantaHire - Simple Pricing, No Surprises" />
+        <meta name="twitter:description" content="Simple, transparent pricing. No per-seat fees. Start free and upgrade when you're ready." />
+        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" },
+              { "@type": "ListItem", "position": 2, "name": "Pricing", "item": "https://www.vantahire.com/pricing" }
+            ]
+          })}
+        </script>
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Can I try before I buy?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes! Our Free plan lets you try VantaHire with one active job. When you're ready for more, upgrade to Pro and get a 14-day free trial."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What payment methods do you accept?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "We accept all major credit cards, UPI, and bank transfers for annual plans. Enterprise customers can also pay via invoice."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can I cancel anytime?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Absolutely. You can cancel your subscription at any time. Your access continues until the end of your billing period."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Do you offer discounts for startups?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes! Early-stage startups can get 50% off Pro for the first year. Contact us to learn more about our startup program."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Is there a limit on team members?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "No per-seat pricing! Invite your entire team on Pro and Enterprise plans without paying extra per user."
+                }
+              }
+            ]
+          })}
+        </script>
       </Helmet>
 
       <div className="public-theme min-h-screen bg-background text-foreground">

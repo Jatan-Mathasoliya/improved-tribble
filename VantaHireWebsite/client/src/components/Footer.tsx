@@ -130,6 +130,11 @@ const Footer = ({ minimal = false }: FooterProps) => {
                   Jobs
                 </Link>
               </li>
+              <li>
+                <Link href="/brand" className="text-[var(--text-muted)] text-sm hover:text-primary transition-colors">
+                  Brand Assets
+                </Link>
+              </li>
             </ul>
           </div>
         </div>

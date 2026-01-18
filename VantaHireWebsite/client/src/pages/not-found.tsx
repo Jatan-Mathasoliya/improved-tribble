@@ -1,10 +1,16 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
 import Footer from "@/components/Footer";
+import { Helmet } from "react-helmet-async";
 
 export default function NotFound() {
   return (
-    <div className="public-theme min-h-screen bg-background text-foreground w-full flex flex-col">
+    <>
+      <Helmet>
+        <title>Page Not Found | VantaHire</title>
+        <meta name="robots" content="noindex, nofollow" />
+      </Helmet>
+      <div className="public-theme min-h-screen bg-background text-foreground w-full flex flex-col">
       <div className="flex-1 flex items-center justify-center">
         <Card className="w-full max-w-md mx-4 bg-muted/50 backdrop-blur-sm border-border">
           <CardContent className="pt-6">
@@ -19,7 +25,8 @@ export default function NotFound() {
           </CardContent>
         </Card>
       </div>
-      <Footer />
-    </div>
+        <Footer />
+      </div>
+    </>
   );
 }

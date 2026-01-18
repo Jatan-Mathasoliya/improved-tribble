@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { trackEvent } from "@/lib/analytics";
 import { Menu, X } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
@@ -38,6 +39,11 @@ const Header = () => {
 
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
+  };
+
+  const openConsultation = () => {
+    trackEvent("cta_click", { location: "site_header", action: "schedule_consultation" });
+    window.open('https://cal.com/vantahire/quick-connect', '_blank');
   };
 
   const scrollToSection = (id: string) => {
@@ -101,6 +107,12 @@ const Header = () => {
 
           <Link href="/pricing" className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70 hover:text-white">
             <span className="relative z-10">Pricing</span>
+            <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
+            <span className="absolute inset-0 -z-10 bg-white/0 group-hover:bg-white/5 transition-colors duration-300 rounded-md"></span>
+          </Link>
+
+          <Link href="/compare" className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70 hover:text-white">
+            <span className="relative z-10">Compare</span>
             <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
             <span className="absolute inset-0 -z-10 bg-white/0 group-hover:bg-white/5 transition-colors duration-300 rounded-md"></span>
           </Link>
@@ -209,7 +221,7 @@ const Header = () => {
             variant="gradient" 
             size="lg" 
             className="rounded-full premium-card hover:scale-105 transform transition-all duration-300 group shadow-lg"
-            onClick={() => window.open('https://cal.com/vantahire/quick-connect', '_blank')}
+            onClick={openConsultation}
           >
             <span className="group-hover:tracking-wide transition-all duration-300">
               Schedule a Free Consultation
@@ -283,6 +295,13 @@ const Header = () => {
             onClick={() => setIsMenuOpen(false)}
           >
             Pricing
+          </Link>
+          <Link
+            href="/compare"
+            className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
+            onClick={() => setIsMenuOpen(false)}
+          >
+            Compare
           </Link>
           {/* Mobile Jobs link */}
           <Link
@@ -369,7 +388,7 @@ const Header = () => {
               variant="gradient" 
               size="lg" 
               className="rounded-full w-full hover:shadow-lg hover:scale-105 transition-all duration-300"
-              onClick={() => window.open('https://cal.com/vantahire/quick-connect', '_blank')}
+              onClick={openConsultation}
             >
               Schedule a Free Consultation
             </Button>
