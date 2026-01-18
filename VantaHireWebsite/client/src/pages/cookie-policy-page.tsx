@@ -358,7 +358,7 @@ export default function CookiePolicyPage() {
                 If you have questions about our use of cookies, please contact us:
               </p>
               <div className="bg-muted p-4 rounded-lg space-y-2">
-                <p><strong className="text-foreground">Deori RecruiterHub Solutions OPC Pvt Ltd</strong></p>
+                <p><strong className="text-foreground"><a href="https://airevolabs.com" target="_blank" rel="noopener noreferrer" className="hover:underline">Airevolabs LLP</a></strong></p>
                 <p>Email: privacy@vantahire.com</p>
                 <p>Subject: Cookie Policy Inquiry</p>
               </div>

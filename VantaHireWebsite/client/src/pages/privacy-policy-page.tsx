@@ -41,7 +41,7 @@ export default function PrivacyPolicyPage() {
             </CardHeader>
             <CardContent className="text-muted-foreground/50 space-y-4">
               <p>
-                VantaHire, a unit of Deori RecruiterHub Solutions OPC Pvt Ltd ("we," "our," or "us"),
+                VantaHire, a brand of <a href="https://airevolabs.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Airevolabs LLP</a> ("we," "our," or "us"),
                 is committed to protecting your privacy. This Privacy Policy explains how we collect,
                 use, disclose, and safeguard your information when you use our applicant tracking system
                 and recruitment platform.
@@ -281,7 +281,7 @@ export default function PrivacyPolicyPage() {
                 If you have questions about this Privacy Policy or our data practices, please contact us:
               </p>
               <div className="bg-muted p-4 rounded-lg space-y-2">
-                <p><strong className="text-foreground">Deori RecruiterHub Solutions OPC Pvt Ltd</strong></p>
+                <p><strong className="text-foreground"><a href="https://airevolabs.com" target="_blank" rel="noopener noreferrer" className="hover:underline">Airevolabs LLP</a></strong></p>
                 <p>Email: privacy@vantahire.com</p>
                 <p>Subject: Privacy Policy Inquiry</p>
               </div>
