@@ -47,7 +47,6 @@ export interface WhatsAppTemplateVariables {
 const TEMPLATE_PARAMETER_ORDER: Record<string, string[]> = {
   application_received: ['candidate_name', 'job_title', 'recruiter_name'],
   interview_invite: ['candidate_name', 'job_title', 'interview_date', 'interview_time', 'interview_location', 'recruiter_name'],
-  status_update: ['candidate_name', 'job_title', 'new_status', 'recruiter_name'],
   offer_extended: ['candidate_name', 'job_title', 'recruiter_name'],
   rejection: ['candidate_name', 'job_title', 'recruiter_name'],
 };
@@ -284,10 +283,13 @@ export async function sendWhatsAppInterviewInvitation(
     return;
   }
 
+  const location = interviewDetails.location.trim();
+  const displayLocation = location.toLowerCase().startsWith('http') ? 'Online Interview (Check email for link)' : location;
+
   await sendWhatsAppTemplatedMessage(applicationId, template.id, {
     interview_date: interviewDetails.date,
     interview_time: interviewDetails.time,
-    interview_location: interviewDetails.location,
+    interview_location: displayLocation,
   });
 }
 
