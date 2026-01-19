@@ -41,18 +41,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         defaultSrc: ["'self'"],
         // scriptSrc: Mautic form embed requires inline scripts for form handling
         // 'unsafe-inline' needed in both dev and prod for Mautic form functionality
+        // Google Tag Manager needed for analytics
         scriptSrc: isDevelopment
-          ? ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://assets.apollo.io", "https://mautic.evalmatch.app"]
-          : ["'self'", "'unsafe-inline'", "https://assets.apollo.io", "https://mautic.evalmatch.app"],
+          ? ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://assets.apollo.io", "https://mautic.evalmatch.app", "https://www.googletagmanager.com"]
+          : ["'self'", "'unsafe-inline'", "https://assets.apollo.io", "https://mautic.evalmatch.app", "https://www.googletagmanager.com"],
         // style: allow inline styles for UI libraries and static landing pages with embedded CSS
         // 'unsafe-inline' needed in both dev and prod for inline <style> blocks
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://mautic.evalmatch.app"],
         imgSrc: ["'self'", "data:", "https:"],
         // connectSrc: Restrict WebSocket connections in production
         // Mautic form submissions require connection to mautic domain
+        // Google Analytics requires connection to google-analytics.com
         connectSrc: isDevelopment
-          ? ["'self'", "ws:", "wss:", "https://assets.apollo.io", "https://mautic.evalmatch.app"]
-          : ["'self'", "https://assets.apollo.io", "https://mautic.evalmatch.app"],
+          ? ["'self'", "ws:", "wss:", "https://assets.apollo.io", "https://mautic.evalmatch.app", "https://www.google-analytics.com", "https://region1.google-analytics.com"]
+          : ["'self'", "https://assets.apollo.io", "https://mautic.evalmatch.app", "https://www.google-analytics.com", "https://region1.google-analytics.com"],
         fontSrc: [
           "'self'",
           "data:",

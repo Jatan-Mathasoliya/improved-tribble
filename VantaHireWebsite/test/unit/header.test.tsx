@@ -56,7 +56,7 @@ describe('Header Component', () => {
     // Navigation links appear in both desktop and mobile versions
     expect(screen.getAllByText('Jobs').length).toBeGreaterThan(0);
     expect(screen.getAllByText('About').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Services').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Compare').length).toBeGreaterThan(0);
   });
 
   it('shows consultation button when user is not logged in', () => {

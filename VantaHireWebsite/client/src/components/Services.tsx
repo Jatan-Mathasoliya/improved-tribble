@@ -1,45 +1,42 @@
-import { Brain, ListChecks, Layers, ArrowRight } from "lucide-react";
+import { LayoutDashboard, SlidersHorizontal, Target, BarChart3, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const services = [
+const pillars = [
   {
-    icon: <Brain className="w-7 h-7" />,
+    number: "01",
+    icon: <LayoutDashboard className="w-7 h-7" />,
     iconBg: "bg-primary/20",
     iconColor: "text-primary",
-    title: "Smart Matching",
-    description: "Our AI learns what great looks like—for your company.",
-    features: [
-      "AI-powered candidate scoring",
-      "Culture fit analysis",
-      "Skills-based matching",
-      "Bias detection built-in"
-    ]
+    title: "Recruiter Dashboard",
+    subtitle: "Know Where to Start",
+    description: "Clear daily priorities. Open VantaHire and know exactly what needs attention—today."
   },
   {
-    icon: <ListChecks className="w-7 h-7" />,
+    number: "02",
+    icon: <SlidersHorizontal className="w-7 h-7" />,
     iconBg: "bg-warning/20",
     iconColor: "text-warning",
-    title: "Automated Shortlists",
-    description: "Top candidates ranked instantly, so you only talk to the best.",
-    features: [
-      "48-72 hour shortlists",
-      "Pre-vetted candidates only",
-      "Resume parsing & analysis",
-      "One-click screening"
-    ]
+    title: "Flexible Screening",
+    subtitle: "Screen Your Way",
+    description: "Manual review when you need control. AI screening when volume demands speed. Your call."
   },
   {
-    icon: <Layers className="w-7 h-7" />,
+    number: "03",
+    icon: <Target className="w-7 h-7" />,
+    iconBg: "bg-blue-500/20",
+    iconColor: "text-blue-400",
+    title: "Job Command Center",
+    subtitle: "One Job, One Place",
+    description: "Candidates, outreach, scheduling—all centered on the job. No more 12-tab chaos."
+  },
+  {
+    number: "04",
+    icon: <BarChart3 className="w-7 h-7" />,
     iconBg: "bg-gradient-to-br from-purple-500/15 to-amber-500/15",
     iconColor: "text-primary",
-    title: "One Platform",
-    description: "From sourcing to interviews to offers—all in one place.",
-    features: [
-      "Kanban pipeline management",
-      "Email templates & scheduling",
-      "Team collaboration",
-      "Analytics & reporting"
-    ]
+    title: "Leadership Insights",
+    subtitle: "Visibility, Not Micromanagement",
+    description: "Real-time pipeline health and bottleneck detection—without running reports or chasing updates."
   }
 ];
 
@@ -50,39 +47,35 @@ const Services = () => {
         {/* Section Header */}
         <div className="text-center mb-16">
           <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
-            Why Teams Love VantaHire
+            What Efficiency Looks Like
           </h2>
           <p className="text-[var(--text-secondary)] text-lg max-w-2xl mx-auto">
-            Powerful AI features that make hiring feel effortless.
+            Most recruiting systems add features. We remove friction.
           </p>
         </div>
 
-        {/* Services Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-6xl mx-auto">
-          {services.map((service, index) => (
-            <div key={index} className="service-card">
-              {/* Icon */}
-              <div className={`w-16 h-16 rounded-xl flex items-center justify-center mb-6 ${service.iconBg}`}>
-                <span className={service.iconColor}>{service.icon}</span>
+        {/* Pillars Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 max-w-5xl mx-auto">
+          {pillars.map((pillar, index) => (
+            <div key={index} className="service-card relative">
+              {/* Number Badge */}
+              <div className="absolute top-6 right-6 text-4xl font-bold text-white/10">
+                {pillar.number}
               </div>
 
-              {/* Title */}
-              <h3 className="text-xl font-bold text-white mb-3">{service.title}</h3>
+              {/* Icon */}
+              <div className={`w-14 h-14 rounded-xl flex items-center justify-center mb-5 ${pillar.iconBg}`}>
+                <span className={pillar.iconColor}>{pillar.icon}</span>
+              </div>
+
+              {/* Title & Subtitle */}
+              <h3 className="text-xl font-bold text-white mb-1">{pillar.title}</h3>
+              <p className="text-primary text-sm font-medium mb-3">{pillar.subtitle}</p>
 
               {/* Description */}
-              <p className="text-[var(--text-secondary)] text-sm mb-6 leading-relaxed min-h-[40px]">
-                {service.description}
+              <p className="text-[var(--text-secondary)] text-sm leading-relaxed">
+                {pillar.description}
               </p>
-
-              {/* Features */}
-              <ul className="space-y-3">
-                {service.features.map((feature, idx) => (
-                  <li key={idx} className="flex items-center gap-3 text-[var(--text-muted)] text-sm">
-                    <span className="text-warning font-bold">→</span>
-                    {feature}
-                  </li>
-                ))}
-              </ul>
             </div>
           ))}
         </div>

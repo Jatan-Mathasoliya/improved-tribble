@@ -4,6 +4,8 @@
 
 import { Job } from "@shared/schema";
 
+export const DEFAULT_SITE_URL = "https://www.vantahire.com";
+
 /**
  * Strip HTML tags and normalize whitespace for meta descriptions
  */
@@ -12,6 +14,17 @@ export function stripHtml(html: string): string {
   div.innerHTML = html;
   const text = div.textContent || div.innerText || '';
   return text.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Remove script/style tags while preserving HTML for JobPosting descriptions.
+ */
+export function sanitizeDescriptionHtml(html: string): string {
+  if (!html) return '';
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+    .trim();
 }
 
 /**
@@ -62,6 +75,24 @@ function detectCountry(location: string): string {
   return 'IN'; // Default to India for APAC focus
 }
 
+function getCountryName(countryCode: string): string {
+  const names: Record<string, string> = {
+    IN: 'India',
+    SG: 'Singapore',
+    MY: 'Malaysia',
+    PH: 'Philippines',
+    ID: 'Indonesia',
+    VN: 'Vietnam',
+    TH: 'Thailand',
+    AU: 'Australia',
+    US: 'United States',
+    GB: 'United Kingdom',
+    AE: 'United Arab Emirates',
+  };
+
+  return names[countryCode] || countryCode;
+}
+
 /**
  * Parse job location for structured data
  */
@@ -74,6 +105,7 @@ function parseJobLocation(location: string | null) {
 
   if (isRemote) {
     const countryCode = detectCountry(location);
+    const countryName = getCountryName(countryCode);
     const isGlobalRemote = lower.includes('anywhere') || lower.includes('global') || lower.includes('worldwide');
 
     if (isGlobalRemote) {
@@ -85,7 +117,7 @@ function parseJobLocation(location: string | null) {
       jobLocationType: 'TELECOMMUTE',
       applicantLocationRequirements: {
         '@type': 'Country',
-        name: countryCode,
+        name: countryName,
       },
     };
   }
@@ -109,7 +141,7 @@ function parseJobLocation(location: string | null) {
  * Generate JobPosting JSON-LD structured data
  * Returns null if validation fails (mirrors server behavior)
  */
-export function generateJobPostingJsonLd(job: JobWithClientData, baseUrl: string = window.location.origin) {
+export function generateJobPostingJsonLd(job: JobWithClientData, baseUrl: string = DEFAULT_SITE_URL) {
   // Validate minimum requirements for Google Jobs
   if (!job.title || job.title.trim().length === 0) {
     console.warn('JobPosting validation failed: missing title', job.id);
@@ -117,8 +149,11 @@ export function generateJobPostingJsonLd(job: JobWithClientData, baseUrl: string
   }
 
   if (!job.location || job.location.trim().length === 0) {
-    console.warn('JobPosting validation failed: missing location', job.id);
-    return null;
+    const isRemote = job.type?.toLowerCase() === 'remote';
+    if (!isRemote) {
+      console.warn('JobPosting validation failed: missing location', job.id);
+      return null;
+    }
   }
 
   if (!job.createdAt) {
@@ -135,12 +170,7 @@ export function generateJobPostingJsonLd(job: JobWithClientData, baseUrl: string
 
   // Sanitize description
   const plainDescription = stripHtml(job.description);
-
-  // Google Jobs requires minimum 200 characters in description
-  if (plainDescription.length < 200) {
-    console.warn('JobPosting validation failed: description too short', job.id, plainDescription.length);
-    return null;
-  }
+  const htmlDescription = sanitizeDescriptionHtml(job.description);
 
   // Map employment type
   const employmentTypeMap: Record<string, string> = {
@@ -153,7 +183,11 @@ export function generateJobPostingJsonLd(job: JobWithClientData, baseUrl: string
   const employmentType = job.type ? employmentTypeMap[job.type.toLowerCase()] : undefined;
 
   // Parse location
-  const locationData = parseJobLocation(job.location);
+  const locationData = job.location
+    ? parseJobLocation(job.location)
+    : job.type?.toLowerCase() === 'remote'
+      ? { jobLocationType: 'TELECOMMUTE' }
+      : null;
 
   // Generate canonical URL (prefer slug for SEO-friendly URLs)
   const jobUrl = job.slug
@@ -179,7 +213,7 @@ export function generateJobPostingJsonLd(job: JobWithClientData, baseUrl: string
     '@context': 'https://schema.org',
     '@type': 'JobPosting',
     title: job.title,
-    description: plainDescription,
+    description: htmlDescription,
     datePosted: datePosted.toISOString(),
     hiringOrganization,
     identifier: {
@@ -225,7 +259,7 @@ export function generateJobPostingJsonLd(job: JobWithClientData, baseUrl: string
 /**
  * Generate canonical URL for job with slug support
  */
-export function getJobCanonicalUrl(job: Job, baseUrl: string = window.location.origin): string {
+export function getJobCanonicalUrl(job: Job, baseUrl: string = DEFAULT_SITE_URL): string {
   return job.slug
     ? `${baseUrl}/jobs/${job.slug}`
     : `${baseUrl}/jobs/${job.id}`;

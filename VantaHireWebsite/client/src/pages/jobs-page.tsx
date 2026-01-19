@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useSearch } from "wouter";
 import { Helmet } from "react-helmet-async";
 import { Search, MapPin, Clock, Filter, Briefcase, ArrowUpDown, X, User, IndianRupee } from "lucide-react";
+import { DEFAULT_SITE_URL } from "@/lib/seoHelpers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -164,7 +165,7 @@ export default function JobsPage() {
 
   // Generate dynamic meta tags based on filters and results
   const metaData = useMemo(() => {
-    const baseUrl = window.location.origin;
+    const baseUrl = DEFAULT_SITE_URL;
     const count = data?.pagination.total || 0;
 
     // Build title with filters
@@ -180,7 +181,7 @@ export default function JobsPage() {
     let description = `Browse ${count} open roles across IT, Telecom, Automotive, Fintech, Healthcare.`;
     if (location) description += ` Find opportunities in ${location}.`;
     if (search) description += ` Search: ${search}.`;
-    description += " AI-powered matching with specialist recruiters.";
+    description += " Recruiter-first ATS built for recruiting velocity.";
 
     // Build canonical URL with query params (include all active filters)
     const params = new URLSearchParams();
@@ -193,7 +194,7 @@ export default function JobsPage() {
     if (sortBy && sortBy !== "recent") params.set("sortBy", sortBy);
     if (page > 1) params.set("page", page.toString());
 
-    const canonicalUrl = `${baseUrl}/jobs${params.toString() ? `?${params.toString()}` : ''}`;
+    const canonicalUrl = `${baseUrl}/jobs`;
 
     return { title, description, canonicalUrl, baseUrl };
   }, [location, type, search, minSalary, maxSalary, salaryPeriod, sortBy, page, data?.pagination.total]);

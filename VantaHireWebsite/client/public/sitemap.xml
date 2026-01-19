@@ -3,45 +3,91 @@
 
   <!-- Homepage -->
   <url>
-    <loc>https://vantahire.com/</loc>
-    <lastmod>2025-10-23</lastmod>
+    <loc>https://www.vantahire.com/</loc>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
 
-  <!-- Jobs Listing -->
+  <!-- Marketing Pages -->
   <url>
-    <loc>https://vantahire.com/jobs</loc>
-    <lastmod>2025-10-23</lastmod>
+    <loc>https://www.vantahire.com/landing/hiring-insights.html</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.6</priority>
+  </url>
+
+  <url>
+    <loc>https://www.vantahire.com/product</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <url>
+    <loc>https://www.vantahire.com/features</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <url>
+    <loc>https://www.vantahire.com/pricing</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+
+  <url>
+    <loc>https://www.vantahire.com/compare</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://www.vantahire.com/use-cases</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+
+  <url>
+    <loc>https://www.vantahire.com/about</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+  <url>
+    <loc>https://www.vantahire.com/brand</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.5</priority>
+  </url>
+
+  <!-- Jobs -->
+  <url>
+    <loc>https://www.vantahire.com/jobs</loc>
     <changefreq>daily</changefreq>
     <priority>0.9</priority>
   </url>
 
-  <!-- Candidate Auth -->
+  <!-- Recruiters Directory -->
   <url>
-    <loc>https://vantahire.com/candidate-auth</loc>
-    <lastmod>2025-10-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-
-  <!-- Recruiter Auth -->
-  <url>
-    <loc>https://vantahire.com/recruiter-auth</loc>
-    <lastmod>2025-10-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-
-  <!-- Consultants Page -->
-  <url>
-    <loc>https://vantahire.com/consultants</loc>
-    <lastmod>2025-10-23</lastmod>
+    <loc>https://www.vantahire.com/recruiters</loc>
     <changefreq>weekly</changefreq>
-    <priority>0.6</priority>
+    <priority>0.7</priority>
   </url>
 
-  <!-- Note: Job detail pages and dynamic content should be generated dynamically -->
-  <!-- or added via a dynamic sitemap generation script -->
+  <!-- Legal Pages -->
+  <url>
+    <loc>https://www.vantahire.com/privacy-policy</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+
+  <url>
+    <loc>https://www.vantahire.com/terms-of-service</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
+
+  <url>
+    <loc>https://www.vantahire.com/cookie-policy</loc>
+    <changefreq>yearly</changefreq>
+    <priority>0.3</priority>
+  </url>
 
 </urlset>

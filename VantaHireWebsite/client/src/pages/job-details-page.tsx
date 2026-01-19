@@ -20,7 +20,7 @@ import { differenceInDays, format } from "date-fns";
 import Layout from "@/components/Layout";
 import { useAuth } from "@/hooks/use-auth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { generateJobPostingJsonLd, generateJobMetaDescription, getJobCanonicalUrl } from "@/lib/seoHelpers";
+import { DEFAULT_SITE_URL, generateJobPostingJsonLd, generateJobMetaDescription, getJobCanonicalUrl } from "@/lib/seoHelpers";
 
 // Types for audit log
 interface AuditLogEntry {
@@ -296,12 +296,15 @@ export default function JobDetailsPage() {
   const metaDescription = generateJobMetaDescription(job);
   const canonicalUrl = getJobCanonicalUrl(job);
   const jobPostingJsonLd = generateJobPostingJsonLd(job);
+  const hasServerJobPostingJsonLd = typeof document !== "undefined" &&
+    !!document.querySelector('script[type="application/ld+json"][data-schema="jobposting"]');
+  const shouldRenderJobPostingJsonLd = typeof document === "undefined" || !hasServerJobPostingJsonLd;
 
   return (
     <Layout>
       <Helmet>
         {/* Page Title and Meta */}
-        <title>{job.title} - VantaHire | AI + Human Expertise for Faster, Fairer Hiring</title>
+        <title>{job.title} | VantaHire</title>
         <meta name="description" content={metaDescription} />
         <link rel="canonical" href={canonicalUrl} />
 
@@ -310,7 +313,7 @@ export default function JobDetailsPage() {
         <meta property="og:description" content={metaDescription} />
         <meta property="og:url" content={canonicalUrl} />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content={`${window.location.origin}/og-image.jpg`} />
+        <meta property="og:image" content={`${DEFAULT_SITE_URL}/og-image.jpg`} />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
 
@@ -318,14 +321,42 @@ export default function JobDetailsPage() {
         <meta name="twitter:title" content={`${job.title} - VantaHire`} />
         <meta name="twitter:description" content={metaDescription} />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:image" content={`${window.location.origin}/twitter-image.jpg`} />
+        <meta name="twitter:image" content={`${DEFAULT_SITE_URL}/twitter-image.jpg`} />
 
         {/* JobPosting JSON-LD for Google Jobs */}
-        {jobPostingJsonLd && (
+        {shouldRenderJobPostingJsonLd && jobPostingJsonLd && (
           <script type="application/ld+json">
             {JSON.stringify(jobPostingJsonLd)}
           </script>
         )}
+
+        {/* BreadcrumbList JSON-LD */}
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              {
+                "@type": "ListItem",
+                "position": 1,
+                "name": "Home",
+                "item": DEFAULT_SITE_URL
+              },
+              {
+                "@type": "ListItem",
+                "position": 2,
+                "name": "Jobs",
+                "item": `${DEFAULT_SITE_URL}/jobs`
+              },
+              {
+                "@type": "ListItem",
+                "position": 3,
+                "name": job.title,
+                "item": canonicalUrl
+              }
+            ]
+          })}
+        </script>
       </Helmet>
 
       <div className="public-theme min-h-screen bg-background text-foreground">
@@ -342,12 +373,11 @@ export default function JobDetailsPage() {
               <div className="flex items-center gap-3 mb-4">
                 <Briefcase className="h-8 w-8 text-[#7B38FB]" />
                 <h1 className="text-4xl md:text-5xl font-bold">
-                  <span className="animate-gradient-text">Job</span>
-                  <span className="text-foreground ml-3">Details</span>
+                  <span className="animate-gradient-text">{job.title}</span>
                 </h1>
               </div>
               <p className="text-lg md:text-xl text-muted-foreground max-w-2xl leading-relaxed animate-slide-up" style={{ animationDelay: '0.3s' }}>
-                Explore this opportunity and submit your application
+                {job.title} opportunity at {job.location} — Apply now
               </p>
             </div>
 

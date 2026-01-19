@@ -1,17 +1,17 @@
-import { Clock, UserMinus, Banknote, ArrowRight } from "lucide-react";
+import { HelpCircle, MousePointerClick, Boxes, ArrowRight } from "lucide-react";
 
 const painPoints = [
   {
-    icon: <Clock className="w-6 h-6 text-red-400" />,
-    text: "Spending hours scrolling through unqualified resumes"
+    icon: <HelpCircle className="w-6 h-6 text-red-400" />,
+    text: "No clear daily starting point — you open it and wonder where to begin"
   },
   {
-    icon: <UserMinus className="w-6 h-6 text-red-400" />,
-    text: "Losing great candidates because you moved too slow"
+    icon: <MousePointerClick className="w-6 h-6 text-red-400" />,
+    text: "Too many clicks for simple actions — tools slow you down instead of speeding you up"
   },
   {
-    icon: <Banknote className="w-6 h-6 text-red-400" />,
-    text: "Paying agencies 20% for hires you could've made yourself"
+    icon: <Boxes className="w-6 h-6 text-red-400" />,
+    text: "Built for complexity, not clarity — workflows designed for enterprises, not recruiters"
   }
 ];
 
@@ -22,7 +22,7 @@ const PainPoints = () => {
         <div className="max-w-3xl mx-auto">
           {/* Header */}
           <h2 className="text-3xl md:text-4xl font-bold text-white mb-12 text-center">
-            Recruiting Shouldn't Feel Like This
+            Why Recruiters Hate Their ATS
           </h2>
 
           {/* Pain Points List */}
@@ -31,13 +31,18 @@ const PainPoints = () => {
               {painPoints.map((point, index) => (
                 <div
                   key={index}
-                  className="flex items-center gap-4 text-lg text-[var(--text-secondary)]"
+                  className="flex items-start gap-4 text-lg text-[var(--text-secondary)]"
                 >
-                  <span className="flex-shrink-0">{point.icon}</span>
+                  <span className="flex-shrink-0 mt-1">{point.icon}</span>
                   <span>{point.text}</span>
                 </div>
               ))}
             </div>
+
+            {/* Transition */}
+            <p className="text-[var(--text-muted)] mb-6">
+              The result? Recruiters spend more time managing the ATS than recruiting.
+            </p>
 
             {/* Contrast */}
             <a
@@ -46,7 +51,7 @@ const PainPoints = () => {
               onClick={(e) => { e.preventDefault(); window.location.href = '/product'; }}
             >
               <ArrowRight className="w-6 h-6 text-primary" />
-              <span className="gradient-text-purple">VantaHire fixes all of this.</span>
+              <span className="gradient-text-purple">We built VantaHire to give you that time back.</span>
             </a>
           </div>
         </div>

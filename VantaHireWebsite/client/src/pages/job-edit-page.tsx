@@ -19,6 +19,14 @@ import { JobSubNav } from "@/components/JobSubNav";
 import { PageHeaderSkeleton } from "@/components/skeletons";
 import { CoRecruiterManagement } from "@/components/CoRecruiterManagement";
 
+const MIN_DESCRIPTION_WORDS = 200;
+const countWords = (value: string): number =>
+  value
+    .replace(/<[^>]+>/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+
 export default function JobEditPage() {
   const [match, params] = useRoute("/jobs/:id/edit");
   const { user } = useAuth();
@@ -42,6 +50,8 @@ export default function JobEditPage() {
   const [clientId, setClientId] = useState<string>("");
   const [newSkill, setNewSkill] = useState("");
   const [newGoodToHaveSkill, setNewGoodToHaveSkill] = useState("");
+  const descriptionWordCount = countWords(formData.description);
+  const descriptionWordsRemaining = Math.max(0, MIN_DESCRIPTION_WORDS - descriptionWordCount);
 
   const jobId = params?.id ? parseInt(params.id) : null;
 
@@ -242,7 +252,18 @@ export default function JobEditPage() {
                   <Label htmlFor="type">Job Type</Label>
                   <Select
                     value={formData.type}
-                    onValueChange={(value) => setFormData({ ...formData, type: value })}
+                    onValueChange={(value) =>
+                      setFormData((prev) => {
+                        const nextType = value as typeof prev.type;
+                        let nextLocation = prev.location;
+                        if (nextType === "remote" && !nextLocation.trim()) {
+                          nextLocation = "Remote";
+                        } else if (prev.type === "remote" && nextType !== "remote" && nextLocation.trim().toLowerCase() === "remote") {
+                          nextLocation = "";
+                        }
+                        return { ...prev, type: nextType, location: nextLocation };
+                      })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -252,6 +273,7 @@ export default function JobEditPage() {
                       <SelectItem value="part-time">Part Time</SelectItem>
                       <SelectItem value="contract">Contract</SelectItem>
                       <SelectItem value="internship">Internship</SelectItem>
+                      <SelectItem value="remote">Remote</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -266,15 +288,15 @@ export default function JobEditPage() {
                     required
                   />
                   <p className="text-sm text-muted-foreground">
-                    {formData.description.length} characters
+                    {descriptionWordCount}/{MIN_DESCRIPTION_WORDS} words
                   </p>
                   {/* SEO warning for short descriptions */}
-                  {formData.description.length > 0 && formData.description.length < 200 && (
+                  {descriptionWordCount > 0 && descriptionWordCount < MIN_DESCRIPTION_WORDS && (
                     <div className="flex items-start gap-2 p-2 bg-amber-50 border border-amber-200 rounded text-sm">
                       <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 flex-shrink-0" />
                       <p className="text-amber-800">
-                        <strong>SEO tip:</strong> Descriptions under 200 characters may not appear in Google Jobs.
-                        {formData.description.length < 200 && ` Add ${200 - formData.description.length} more characters for better visibility.`}
+                        <strong>SEO tip:</strong> Descriptions under {MIN_DESCRIPTION_WORDS} words may not appear in Google Jobs.
+                        {descriptionWordsRemaining > 0 && ` Add ${descriptionWordsRemaining} more words for better visibility.`}
                       </p>
                     </div>
                   )}

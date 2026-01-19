@@ -2,6 +2,7 @@ import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Cookie, Settings, BarChart3, Shield, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Helmet } from "react-helmet-async";
 
 export default function CookiePolicyPage() {
   const handleOpenCookiePreferences = () => {
@@ -10,6 +11,20 @@ export default function CookiePolicyPage() {
 
   return (
     <Layout>
+      <Helmet>
+        <title>Cookie Policy | VantaHire</title>
+        <meta name="description" content="VantaHire Cookie Policy. Learn about the cookies we use and how to manage your preferences." />
+        <link rel="canonical" href="https://www.vantahire.com/cookie-policy" />
+        <meta property="og:title" content="Cookie Policy | VantaHire" />
+        <meta property="og:description" content="Learn about cookies used on VantaHire and manage your preferences." />
+        <meta property="og:url" content="https://www.vantahire.com/cookie-policy" />
+        <meta property="og:type" content="website" />
+        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Cookie Policy | VantaHire" />
+        <meta name="twitter:description" content="Learn about cookies used on VantaHire and manage your preferences." />
+        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+      </Helmet>
       <div className="container mx-auto px-4 py-16 max-w-4xl">
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
@@ -343,7 +358,7 @@ export default function CookiePolicyPage() {
                 If you have questions about our use of cookies, please contact us:
               </p>
               <div className="bg-muted p-4 rounded-lg space-y-2">
-                <p><strong className="text-foreground">Deori RecruiterHub Solutions OPC Pvt Ltd</strong></p>
+                <p><strong className="text-foreground"><a href="https://www.airevolabs.com" target="_blank" rel="noopener noreferrer" className="hover:underline">Airevolabs LLP</a></strong></p>
                 <p>Email: privacy@vantahire.com</p>
                 <p>Subject: Cookie Policy Inquiry</p>
               </div>

@@ -159,6 +159,7 @@ export default function CandidateAuth() {
                         <Input
                           id="password"
                           type="password"
+                          autoComplete="current-password"
                           value={loginData.password}
                           onChange={(e) => setLoginData(prev => ({ ...prev, password: e.target.value }))}
                           className="bg-muted/30 border-border text-foreground placeholder:text-muted-foreground"
@@ -221,6 +222,7 @@ export default function CandidateAuth() {
                         <Input
                           id="regPassword"
                           type="password"
+                          autoComplete="new-password"
                           value={registerData.password}
                           onChange={(e) => setRegisterData(prev => ({ ...prev, password: e.target.value }))}
                           className="bg-muted/30 border-border text-foreground placeholder:text-muted-foreground"

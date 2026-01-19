@@ -43,6 +43,14 @@ import {
 } from "@/components/ui/tooltip";
 import { JdAiAnalysisDrawer } from "@/components/jd/JdAiAnalysisDrawer";
 
+const MIN_DESCRIPTION_WORDS = 200;
+const countWords = (value: string): number =>
+  value
+    .replace(/<[^>]+>/g, ' ')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean).length;
+
 // Step validation schemas
 const step1Schema = z.object({
   title: z.string().min(3, "Job title must be at least 3 characters"),
@@ -52,7 +60,11 @@ const step1Schema = z.object({
 });
 
 const step2Schema = z.object({
-  description: z.string().min(50, "Description must be at least 50 characters"),
+  description: z.string()
+    .min(10, "Description is required")
+    .refine((value) => countWords(value) >= MIN_DESCRIPTION_WORDS, {
+      message: `Description must be at least ${MIN_DESCRIPTION_WORDS} words`,
+    }),
   skills: z.array(z.string()).optional(),
   goodToHaveSkills: z.array(z.string()).optional(),
   salaryMin: z.string().optional(),
@@ -128,6 +140,8 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
   const [hiringManagerId, setHiringManagerId] = useState<string>("");
   const [clientId, setClientId] = useState<string>("");
   const [showAiDrawer, setShowAiDrawer] = useState(false);
+  const descriptionWordCount = countWords(formData.description);
+  const descriptionWordsRemaining = Math.max(0, MIN_DESCRIPTION_WORDS - descriptionWordCount);
 
   // Setup step state
   const [cloneFromJobId, setCloneFromJobId] = useState<string>("");
@@ -552,7 +566,18 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                   </Label>
                   <Select
                     value={formData.type}
-                    onValueChange={(value: any) => setFormData({ ...formData, type: value })}
+                    onValueChange={(value: any) =>
+                      setFormData((prev) => {
+                        const nextType = value as typeof prev.type;
+                        let nextLocation = prev.location;
+                        if (nextType === "remote" && !nextLocation.trim()) {
+                          nextLocation = "Remote";
+                        } else if (prev.type === "remote" && nextType !== "remote" && nextLocation.trim().toLowerCase() === "remote") {
+                          nextLocation = "";
+                        }
+                        return { ...prev, type: nextType, location: nextLocation };
+                      })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -766,22 +791,20 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                 <div className="flex justify-between mt-1">
                   {renderFieldError("description") || (
                     <p className="text-sm text-muted-foreground">
-                      {formData.description.length}/5000 characters
+                      {descriptionWordCount}/{MIN_DESCRIPTION_WORDS} words
                     </p>
                   )}
                   <p className="text-sm text-muted-foreground">
-                    {formData.description.length < 50
-                      ? `${50 - formData.description.length} more needed`
-                      : ""}
+                    {descriptionWordsRemaining > 0 ? `${descriptionWordsRemaining} more words needed` : ""}
                   </p>
                 </div>
                 {/* SEO warning for short descriptions */}
-                {formData.description.length >= 50 && formData.description.length < 200 && (
+                {descriptionWordCount > 0 && descriptionWordCount < MIN_DESCRIPTION_WORDS && (
                   <div className="flex items-start gap-2 mt-2 p-2 bg-warning/10 border border-warning/30 rounded text-sm">
                     <AlertCircle className="h-4 w-4 text-warning mt-0.5 flex-shrink-0" />
                     <p className="text-warning-foreground">
-                      <strong>SEO tip:</strong> Descriptions under 200 characters may not appear in Google Jobs search results.
-                      Add {200 - formData.description.length} more characters for better visibility.
+                      <strong>SEO tip:</strong> Descriptions under {MIN_DESCRIPTION_WORDS} words may not appear in Google Jobs search results.
+                      Add {descriptionWordsRemaining} more words for better visibility.
                     </p>
                   </div>
                 )}

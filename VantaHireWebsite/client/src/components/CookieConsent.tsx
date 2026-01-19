@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { loadApolloTracker } from '@/lib/analytics';
+import { loadApolloTracker, loadGoogleAnalytics } from '@/lib/analytics';
 import { getClientConfig } from '@/lib/config';
 
 const CONSENT_KEY = 'consent.analytics';
@@ -36,8 +36,11 @@ export function CookieConsent() {
     try {
       localStorage.setItem(CONSENT_KEY, 'accepted');
     } catch {}
-    // Inject Apollo only after consent, using server-provided appId
+    // Inject analytics only after consent
     try {
+      // Load Google Analytics
+      loadGoogleAnalytics();
+      // Load Apollo using server-provided appId
       const cfg = await getClientConfig();
       if (cfg.apolloAppId) loadApolloTracker(cfg.apolloAppId);
     } catch {}
@@ -82,6 +85,9 @@ export function AnalyticsOnConsent() {
       try {
         const val = localStorage.getItem(CONSENT_KEY);
         if (val === 'accepted') {
+          // Load Google Analytics
+          loadGoogleAnalytics();
+          // Load Apollo
           const cfg = await getClientConfig();
           if (cfg.apolloAppId) loadApolloTracker(cfg.apolloAppId);
         }

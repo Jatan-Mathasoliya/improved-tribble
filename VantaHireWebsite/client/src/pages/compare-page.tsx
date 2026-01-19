@@ -3,33 +3,34 @@ import Layout from "@/components/Layout";
 import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
 import { Check, X, ArrowRight } from "lucide-react";
+import { trackEvent } from "@/lib/analytics";
 
 const atsComparison = [
-  { feature: "AI candidate matching", vantahire: true, others: false },
-  { feature: "Bias detection", vantahire: true, others: false },
+  { feature: "Built with recruiter input", vantahire: true, others: false },
+  { feature: "Day-1 productivity", vantahire: true, others: false },
+  { feature: "AI-powered screening", vantahire: true, others: "Limited" },
   { feature: "No per-seat pricing", vantahire: true, others: false },
-  { feature: "India-focused pricing (₹)", vantahire: true, others: false },
-  { feature: "Free tier available", vantahire: true, others: "Limited" },
+  { feature: "One-glance pipeline visibility", vantahire: true, others: false },
   { feature: "Setup time", vantahire: "Minutes", others: "Days to weeks" },
-  { feature: "Local support", vantahire: true, others: "Limited" }
+  { feature: "Onboarding", vantahire: "Self-serve", others: "Weeks of training" }
 ];
 
 const differentiators = [
   {
-    title: "AI + Human Expertise",
-    description: "Unlike pure-play ATS platforms, we combine smart algorithms with recruiting know-how from 20+ years in the industry."
+    title: "Recruiter-First, Not Afterthought",
+    description: "Every workflow designed with recruiter feedback from day one. If it adds clicks, it doesn't ship."
   },
   {
-    title: "India-First Pricing",
-    description: "Built for the Indian market with ₹ pricing, local payment methods, and support that understands your timezone."
+    title: "Velocity Over Bureaucracy",
+    description: "Built for teams that move fast—not approval chains and enterprise bloat."
   },
   {
-    title: "Speed That Matters",
-    description: "Get your first shortlist in hours, not days. Our AI works while you sleep."
+    title: "Clarity Over Complexity",
+    description: "Answers at a glance, not buried in reports. Pipeline status, bottlenecks, counts—one screen."
   },
   {
-    title: "No Hidden Costs",
-    description: "Flat monthly pricing with no per-seat fees. Invite your whole team without watching the meter."
+    title: "Human Decisions, AI Acceleration",
+    description: "Smart algorithms surface candidates; you make the calls. AI works for you, not instead of you."
   }
 ];
 
@@ -44,12 +45,28 @@ export default function ComparePage() {
   return (
     <Layout>
       <Helmet>
-        <title>Compare | VantaHire vs Traditional Recruiting</title>
-        <meta name="description" content="See how VantaHire compares to traditional agencies and other ATS platforms. Better features, lower cost, faster results." />
-        <link rel="canonical" href={`${window.location.origin}/compare`} />
-        <meta property="og:title" content="Compare | VantaHire" />
-        <meta property="og:description" content="Why teams switch to VantaHire. Compare features, pricing, and results." />
+        <title>Compare | VantaHire vs Complex ATS Platforms</title>
+        <meta name="description" content="See how VantaHire compares to traditional ATS platforms. Built with recruiters, designed for velocity, zero complexity." />
+        <link rel="canonical" href="https://www.vantahire.com/compare" />
+        <meta property="og:title" content="Compare | VantaHire vs Complex ATS Platforms" />
+        <meta property="og:description" content="They add features. We remove friction. See how VantaHire makes recruiting teams 2X more efficient." />
+        <meta property="og:url" content="https://www.vantahire.com/compare" />
         <meta property="og:type" content="website" />
+        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Compare | VantaHire vs Complex ATS Platforms" />
+        <meta name="twitter:description" content="They add features. We remove friction. See how VantaHire makes recruiting teams 2X more efficient." />
+        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" },
+              { "@type": "ListItem", "position": 2, "name": "Compare", "item": "https://www.vantahire.com/compare" }
+            ]
+          })}
+        </script>
       </Helmet>
 
       <div className="public-theme min-h-screen bg-background text-foreground">
@@ -63,19 +80,19 @@ export default function ComparePage() {
           <div className="text-center mb-20 pt-8">
             <div className="w-20 h-1.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] rounded-full mx-auto mb-6"></div>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
-              <span className="text-white">Why Teams Switch to</span>
+              <span className="text-white">Complex ATS vs.</span>
               <br />
               <span className="gradient-text-purple">VantaHire</span>
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              See how we stack up against traditional recruiting.
+              They add features. We remove friction. That's how teams move faster.
             </p>
           </div>
 
           {/* VantaHire vs Other ATS */}
           <div className="mb-20">
             <h2 className="text-2xl md:text-3xl font-bold text-white text-center mb-8">
-              VantaHire vs Other ATS Platforms
+              VantaHire vs Traditional Recruiting Systems
             </h2>
             <div className="max-w-4xl mx-auto overflow-x-auto">
               <table className="w-full">
@@ -143,7 +160,10 @@ export default function ComparePage() {
               <Button
                 variant="gold"
                 size="lg"
-                onClick={() => window.location.href = '/recruiter-auth'}
+                onClick={() => {
+                  trackEvent("cta_click", { location: "compare", action: "start_free" });
+                  window.location.href = '/recruiter-auth';
+                }}
                 className="rounded-full px-8 py-6 text-lg font-semibold"
               >
                 Start Free Trial
@@ -152,7 +172,10 @@ export default function ComparePage() {
               <Button
                 variant="outlinePurple"
                 size="lg"
-                onClick={() => window.open('https://cal.com/vantahire/quick-connect', '_blank')}
+                onClick={() => {
+                  trackEvent("cta_click", { location: "compare", action: "get_walkthrough" });
+                  window.open('https://cal.com/vantahire/quick-connect', '_blank');
+                }}
                 className="rounded-full px-8 py-6 text-lg"
               >
                 Talk to Sales

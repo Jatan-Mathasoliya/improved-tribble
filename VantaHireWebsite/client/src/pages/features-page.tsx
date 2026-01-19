@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
+import { trackEvent } from "@/lib/analytics";
 import {
   Search,
   FileSearch,
@@ -138,10 +139,26 @@ export default function FeaturesPage() {
       <Helmet>
         <title>Features | VantaHire - Everything You Need to Hire Faster</title>
         <meta name="description" content="Explore VantaHire's powerful features: AI matching, automated screening, pipeline management, team collaboration, and analytics—all in one platform." />
-        <link rel="canonical" href={`${window.location.origin}/features`} />
-        <meta property="og:title" content="Features | VantaHire" />
+        <link rel="canonical" href="https://www.vantahire.com/features" />
+        <meta property="og:title" content="Features | VantaHire - Everything You Need to Hire Faster" />
         <meta property="og:description" content="Powerful features, zero complexity. See everything VantaHire can do for your hiring process." />
+        <meta property="og:url" content="https://www.vantahire.com/features" />
         <meta property="og:type" content="website" />
+        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Features | VantaHire - Everything You Need to Hire Faster" />
+        <meta name="twitter:description" content="Powerful features, zero complexity. See everything VantaHire can do for your hiring process." />
+        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": [
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" },
+              { "@type": "ListItem", "position": 2, "name": "Features", "item": "https://www.vantahire.com/features" }
+            ]
+          })}
+        </script>
       </Helmet>
 
       <div className="public-theme min-h-screen bg-background text-foreground">
@@ -202,7 +219,10 @@ export default function FeaturesPage() {
               <Button
                 variant="gold"
                 size="lg"
-                onClick={() => window.location.href = '/recruiter-auth'}
+                onClick={() => {
+                  trackEvent("cta_click", { location: "features", action: "start_free" });
+                  window.location.href = '/recruiter-auth';
+                }}
                 className="rounded-full px-8 py-6 text-lg font-semibold"
               >
                 Try It Free

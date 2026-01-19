@@ -1,10 +1,25 @@
 import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Users, Shield, AlertTriangle, Scale, Ban } from "lucide-react";
+import { Helmet } from "react-helmet-async";
 
 export default function TermsOfServicePage() {
   return (
     <Layout>
+      <Helmet>
+        <title>Terms of Service | VantaHire</title>
+        <meta name="description" content="VantaHire Terms of Service. Read our terms and conditions for using our recruiter-first ATS platform." />
+        <link rel="canonical" href="https://www.vantahire.com/terms-of-service" />
+        <meta property="og:title" content="Terms of Service | VantaHire" />
+        <meta property="og:description" content="Terms and conditions for using VantaHire ATS platform." />
+        <meta property="og:url" content="https://www.vantahire.com/terms-of-service" />
+        <meta property="og:type" content="website" />
+        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Terms of Service | VantaHire" />
+        <meta name="twitter:description" content="Terms and conditions for using VantaHire ATS platform." />
+        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+      </Helmet>
       <div className="container mx-auto px-4 py-16 max-w-4xl">
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
@@ -27,7 +42,7 @@ export default function TermsOfServicePage() {
             <CardContent className="text-muted-foreground/50 space-y-4">
               <p>
                 These Terms of Service ("Terms") govern your access to and use of VantaHire, an applicant
-                tracking system and recruitment platform operated by Deori RecruiterHub Solutions OPC Pvt Ltd
+                tracking system and recruitment platform operated by <a href="https://www.airevolabs.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Airevolabs LLP</a>
                 ("VantaHire," "we," "us," or "our").
               </p>
               <p>
@@ -119,8 +134,7 @@ export default function TermsOfServicePage() {
               <div>
                 <h3 className="text-foreground font-semibold mb-2">Our Content</h3>
                 <p>
-                  VantaHire's platform, design, features, and functionality are owned by Deori RecruiterHub
-                  Solutions OPC Pvt Ltd and are protected by copyright, trademark, and other intellectual
+                  VantaHire's platform, design, features, and functionality are owned by <a href="https://www.airevolabs.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Airevolabs LLP</a> and are protected by copyright, trademark, and other intellectual
                   property laws. You may not copy, modify, or distribute our content without permission.
                 </p>
               </div>
@@ -201,7 +215,7 @@ export default function TermsOfServicePage() {
               <div>
                 <h3 className="text-foreground font-semibold mb-2">Limitation of Liability</h3>
                 <p>
-                  To the maximum extent permitted by law, Deori RecruiterHub Solutions OPC Pvt Ltd shall
+                  To the maximum extent permitted by law, <a href="https://www.airevolabs.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Airevolabs LLP</a> shall
                   not be liable for any indirect, incidental, special, consequential, or punitive damages
                   arising from your use of VantaHire.
                 </p>
@@ -223,7 +237,7 @@ export default function TermsOfServicePage() {
             </CardHeader>
             <CardContent className="text-muted-foreground/50 space-y-4">
               <p>
-                You agree to indemnify and hold harmless Deori RecruiterHub Solutions OPC Pvt Ltd,
+                You agree to indemnify and hold harmless <a href="https://www.airevolabs.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Airevolabs LLP</a>,
                 its officers, directors, employees, and agents from any claims, damages, losses, or
                 expenses arising from:
               </p>
@@ -274,7 +288,7 @@ export default function TermsOfServicePage() {
                 If you have questions about these Terms of Service, please contact us:
               </p>
               <div className="bg-muted p-4 rounded-lg space-y-2">
-                <p><strong className="text-foreground">Deori RecruiterHub Solutions OPC Pvt Ltd</strong></p>
+                <p><strong className="text-foreground"><a href="https://www.airevolabs.com" target="_blank" rel="noopener noreferrer" className="hover:underline">Airevolabs LLP</a></strong></p>
                 <p>Email: legal@vantahire.com</p>
                 <p>Subject: Terms of Service Inquiry</p>
               </div>

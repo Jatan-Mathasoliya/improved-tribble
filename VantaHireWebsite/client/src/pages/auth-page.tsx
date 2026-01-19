@@ -191,6 +191,7 @@ export default function AuthPage() {
                           <Input
                             id="login-password"
                             type="password"
+                            autoComplete="current-password"
                             value={loginData.password}
                             onChange={(e) => setLoginData({ ...loginData, password: e.target.value })}
                             required
@@ -279,6 +280,7 @@ export default function AuthPage() {
                       <Input
                         id="register-password"
                         type="password"
+                        autoComplete="new-password"
                         value={registerData.password}
                         onChange={(e) => setRegisterData({ ...registerData, password: e.target.value })}
                         required

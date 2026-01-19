@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Layout from "@/components/Layout";
+import { Helmet } from "react-helmet-async";
 
 interface PublicRecruiter {
   id: number | string; // publicId if available, otherwise numeric ID
@@ -60,6 +61,20 @@ export default function RecruitersDirectoryPage() {
 
   return (
     <Layout>
+      <Helmet>
+        <title>Recruiters Directory | VantaHire</title>
+        <meta name="description" content="Browse our network of specialist recruiters. Find expert recruiters in IT, Telecom, Fintech, Healthcare, and Automotive industries." />
+        <link rel="canonical" href="https://www.vantahire.com/recruiters" />
+        <meta property="og:title" content="Recruiters Directory | VantaHire" />
+        <meta property="og:description" content="Connect with specialist recruiters across industries." />
+        <meta property="og:url" content="https://www.vantahire.com/recruiters" />
+        <meta property="og:type" content="website" />
+        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Recruiters Directory | VantaHire" />
+        <meta name="twitter:description" content="Connect with specialist recruiters across industries." />
+        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+      </Helmet>
       <div className="public-theme min-h-screen bg-background text-foreground py-12">
         {/* Premium background effects */}
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxIiBjeT0iMSIgcj0iMSIgZmlsbD0id2hpdGUiIGZpbGwtb3BhY2l0eT0iMC4wNSIvPjwvc3ZnPg==')] opacity-10"></div>

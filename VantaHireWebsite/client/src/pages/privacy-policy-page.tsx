@@ -1,10 +1,25 @@
 import Layout from "@/components/Layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Shield, Mail, Lock, Database, Users, Eye } from "lucide-react";
+import { Helmet } from "react-helmet-async";
 
 export default function PrivacyPolicyPage() {
   return (
     <Layout>
+      <Helmet>
+        <title>Privacy Policy | VantaHire</title>
+        <meta name="description" content="VantaHire Privacy Policy. Learn how we collect, use, and protect your personal information when using our recruiter-first ATS platform." />
+        <link rel="canonical" href="https://www.vantahire.com/privacy-policy" />
+        <meta property="og:title" content="Privacy Policy | VantaHire" />
+        <meta property="og:description" content="Learn how VantaHire protects your privacy and handles your data." />
+        <meta property="og:url" content="https://www.vantahire.com/privacy-policy" />
+        <meta property="og:type" content="website" />
+        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Privacy Policy | VantaHire" />
+        <meta name="twitter:description" content="Learn how VantaHire protects your privacy and handles your data." />
+        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+      </Helmet>
       <div className="container mx-auto px-4 py-16 max-w-4xl">
         <div className="mb-8">
           <div className="flex items-center gap-3 mb-4">
@@ -26,7 +41,7 @@ export default function PrivacyPolicyPage() {
             </CardHeader>
             <CardContent className="text-muted-foreground/50 space-y-4">
               <p>
-                VantaHire, a unit of Deori RecruiterHub Solutions OPC Pvt Ltd ("we," "our," or "us"),
+                VantaHire, a brand of <a href="https://www.airevolabs.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Airevolabs LLP</a> ("we," "our," or "us"),
                 is committed to protecting your privacy. This Privacy Policy explains how we collect,
                 use, disclose, and safeguard your information when you use our applicant tracking system
                 and recruitment platform.
@@ -266,7 +281,7 @@ export default function PrivacyPolicyPage() {
                 If you have questions about this Privacy Policy or our data practices, please contact us:
               </p>
               <div className="bg-muted p-4 rounded-lg space-y-2">
-                <p><strong className="text-foreground">Deori RecruiterHub Solutions OPC Pvt Ltd</strong></p>
+                <p><strong className="text-foreground"><a href="https://www.airevolabs.com" target="_blank" rel="noopener noreferrer" className="hover:underline">Airevolabs LLP</a></strong></p>
                 <p>Email: privacy@vantahire.com</p>
                 <p>Subject: Privacy Policy Inquiry</p>
               </div>

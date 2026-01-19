@@ -37,13 +37,35 @@ import {
 } from '../../shared/forms.types';
 
 describe('Schema Contract Tests', () => {
+  // Helper to generate a valid job description (200+ words required)
+  const validJobDescription = `We are looking for an experienced Senior Developer to join our growing team.
+    The ideal candidate will have strong experience with modern web technologies and a passion for building
+    high-quality software. You will be responsible for designing, developing, and maintaining web applications
+    that serve millions of users. Our team values collaboration, innovation, and continuous learning.
+
+    Responsibilities include writing clean, maintainable code, participating in code reviews, mentoring junior
+    developers, and contributing to architectural decisions. You will work closely with product managers,
+    designers, and other engineers to deliver features that delight our users. Daily tasks include debugging
+    complex issues, optimizing application performance, and implementing new features based on user feedback.
+
+    Requirements: 5+ years of professional software development experience, strong proficiency in JavaScript
+    and TypeScript, experience with React or similar frontend frameworks, familiarity with Node.js and
+    backend development, excellent problem-solving skills, and strong communication abilities. Experience with
+    cloud platforms like AWS or GCP is a plus. Knowledge of CI/CD pipelines and automated testing is desirable.
+
+    We offer competitive compensation, flexible work arrangements, comprehensive health benefits, professional
+    development opportunities, stock options, and a supportive team environment. Our office is located in a
+    prime location with excellent amenities. Join us in building the future of recruitment technology.
+    Apply now to be part of our mission to transform how companies hire talent globally. We look forward to
+    reviewing your application and potentially welcoming you to our innovative and dynamic team.`;
+
   describe('Job Schema', () => {
     it('validates correct job data', () => {
       const validJob = {
         title: 'Senior Developer',
         location: 'Remote',
         type: 'full-time',
-        description: 'Looking for an experienced developer to join our team.',
+        description: validJobDescription,
         skills: ['React', 'TypeScript'],
       };
 
@@ -95,7 +117,7 @@ describe('Schema Contract Tests', () => {
           title: 'Test Job',
           location: 'Remote',
           type,
-          description: 'Valid job description here.',
+          description: validJobDescription,
         };
 
         const result = insertJobSchema.safeParse(job);
