@@ -37,15 +37,6 @@ export async function seedDefaultWhatsAppTemplates() {
       status: 'approved',
     },
     {
-      name: 'Status Update',
-      metaTemplateName: 'vantahire_status_update',
-      language: 'en',
-      templateType: 'status_update',
-      category: 'UTILITY',
-      bodyTemplate: 'Hello {{1}}, your application for {{2}} has been updated to: {{3}}. We will keep you informed of any further updates. Best regards, {{4}}',
-      status: 'approved',
-    },
-    {
       name: 'Offer Extended',
       metaTemplateName: 'Candidate Offer Extend',
       language: 'en',
