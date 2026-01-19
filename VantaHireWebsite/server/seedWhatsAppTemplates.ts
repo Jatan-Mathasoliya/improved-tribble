@@ -20,7 +20,7 @@ export async function seedDefaultWhatsAppTemplates() {
   const defaultTemplates = [
     {
       name: 'Application Received',
-      metaTemplateName: 'vantahire_application_received',
+      metaTemplateName: 'Candidate Application Received',
       language: 'en',
       templateType: 'application_received',
       category: 'UTILITY',
@@ -29,11 +29,11 @@ export async function seedDefaultWhatsAppTemplates() {
     },
     {
       name: 'Interview Invitation',
-      metaTemplateName: 'vantahire_interview_invite',
+      metaTemplateName: 'Candidate Interview Scheduled',
       language: 'en',
       templateType: 'interview_invite',
       category: 'UTILITY',
-      bodyTemplate: 'Hello {{1}}, we are pleased to invite you for an interview for the {{2}} position.\n\nDate: {{3}}\nTime: {{4}}\nLocation: {{5}}\n\nPlease confirm your availability. Best regards, {{6}}',
+      bodyTemplate: 'Hello {{1}}, we are pleased to invite you for an interview for the {{2}} position.\n\nDate: {{3}}\nTime: {{4}}\nLocation: {{5}\n\nPlease confirm your availability. Best regards, {{6}}',
       status: 'approved',
     },
     {
@@ -47,7 +47,7 @@ export async function seedDefaultWhatsAppTemplates() {
     },
     {
       name: 'Offer Extended',
-      metaTemplateName: 'vantahire_offer_extended',
+      metaTemplateName: 'Candidate Offer Extend',
       language: 'en',
       templateType: 'offer_extended',
       category: 'UTILITY',
@@ -56,7 +56,7 @@ export async function seedDefaultWhatsAppTemplates() {
     },
     {
       name: 'Application Update',
-      metaTemplateName: 'vantahire_rejection',
+      metaTemplateName: 'Candidate Rejection',
       language: 'en',
       templateType: 'rejection',
       category: 'UTILITY',
@@ -66,20 +66,22 @@ export async function seedDefaultWhatsAppTemplates() {
   ];
 
   for (const template of defaultTemplates) {
-    // Check if template already exists
+    // Check if template already exists by TYPE (constant), not name
     const existing = await db.query.whatsappTemplates.findFirst({
-      where: eq(whatsappTemplates.metaTemplateName, template.metaTemplateName)
+      where: eq(whatsappTemplates.templateType, template.templateType)
     });
 
     if (!existing) {
       await db.insert(whatsappTemplates).values(template);
       console.log(`  ✓ Created WhatsApp template: ${template.name}`);
     } else {
-      console.log(`  ⊘ WhatsApp template already exists: ${template.name}`);
+      // Update the existing template to match the new configuration (e.g. name change)
+      await db.update(whatsappTemplates)
+        .set(template)
+        .where(eq(whatsappTemplates.id, existing.id));
+      console.log(`  ↻ Updated WhatsApp template: ${template.name} (Campaign: ${template.metaTemplateName})`);
     }
   }
 
   console.log('✅ WhatsApp templates seeded\n');
 }
-
-
