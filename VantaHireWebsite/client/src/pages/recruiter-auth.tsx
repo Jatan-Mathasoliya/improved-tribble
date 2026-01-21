@@ -17,15 +17,16 @@ export default function RecruiterAuth() {
   const searchString = useSearch();
   const { toast } = useToast();
 
-  // Parse redirect URL from query params
-  const redirectUrl = useMemo(() => {
+  // Parse redirect URL and invite token from query params
+  const { redirectUrl, inviteToken } = useMemo(() => {
     const params = new URLSearchParams(searchString);
     const redirect = params.get('redirect');
-    // Only allow internal redirects (starting with /)
-    if (redirect && redirect.startsWith('/')) {
-      return redirect;
-    }
-    return null;
+    const invite = params.get('invite');
+    return {
+      // Only allow internal redirects (starting with /)
+      redirectUrl: redirect && redirect.startsWith('/') ? redirect : null,
+      inviteToken: invite || null,
+    };
   }, [searchString]);
 
   const [loginData, setLoginData] = useState({
@@ -51,6 +52,12 @@ export default function RecruiterAuth() {
   useEffect(() => {
     if (!user) return;
 
+    // If there's an invite token, redirect to org choice to accept the invite
+    if (inviteToken && user.role === "recruiter") {
+      setLocation(`/org/choice?invite=${inviteToken}`);
+      return;
+    }
+
     // If there's a redirect URL and user is recruiter/admin, use it
     if (redirectUrl && (user.role === "recruiter" || user.role === "super_admin")) {
       setLocation(redirectUrl);
@@ -65,7 +72,7 @@ export default function RecruiterAuth() {
     } else if (user.role === "hiring_manager") {
       setLocation("/hiring-manager");
     }
-  }, [user, setLocation, redirectUrl]);
+  }, [user, setLocation, redirectUrl, inviteToken]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

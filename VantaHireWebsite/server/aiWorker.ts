@@ -18,12 +18,13 @@ import { storage } from './storage';
 import { QUEUES, getIoRedisConnection, FitJobData, BatchFitJobData, SummaryBatchJobData } from './lib/aiQueue';
 import { computeFitScore, isFitStale, checkCircuitBreaker, trackBudgetSpending, calculateAiCost } from './lib/aiMatchingEngine';
 import { getUserLimits, canUseFitComputation } from './lib/aiLimits';
+import { hasEnoughCredits, useCredits, getCreditCostForOperation } from './lib/creditService';
 import { generateJDDigest, JDDigest } from './lib/jdDigest';
 import { extractResumeText, validateResumeText } from './lib/resumeExtractor';
 import { downloadFromGCS } from './gcs-storage';
 import { generateCandidateSummary } from './aiJobAnalyzer';
 import { db } from './db';
-import { candidateResumes, applications, jobs, userAiUsage } from '../shared/schema';
+import { candidateResumes, applications, jobs, userAiUsage, users } from '../shared/schema';
 import { eq, and } from 'drizzle-orm';
 import type { BatchFitResult, BatchFitResultItem } from '../shared/schema';
 
@@ -176,7 +177,13 @@ async function processOneApplication(
   }
 
   // Compute fit score
-  const result = await computeFitScore(resume.text, jdDigest, userId, applicationId);
+  const result = await computeFitScore(
+    resume.text,
+    jdDigest,
+    userId,
+    applicationId,
+    app.job.organizationId ?? undefined
+  );
 
   // Update application
   await db.update(applications).set({
@@ -471,6 +478,25 @@ async function processOneSummary(
     return { status: 'skipped', error: 'No resume available' };
   }
 
+  const user = await db.query.users.findFirst({
+    where: eq(users.id, recruiterId),
+    columns: { role: true },
+  });
+
+  if (!user) {
+    return { status: 'error', error: 'Recruiter not found' };
+  }
+
+  const creditCost = getCreditCostForOperation('summary');
+  const isSuperAdmin = user.role === 'super_admin';
+
+  if (!isSuperAdmin) {
+    const hasCredits = await hasEnoughCredits(recruiterId, creditCost);
+    if (!hasCredits) {
+      return { status: 'error', error: 'Insufficient AI credits' };
+    }
+  }
+
   // Generate summary
   const startTime = Date.now();
   const result = await generateCandidateSummary(
@@ -501,6 +527,7 @@ async function processOneSummary(
 
   // Log AI usage
   await db.insert(userAiUsage).values({
+    organizationId: app.job.organizationId ?? undefined,
     userId: recruiterId,
     kind: 'summary',
     tokensIn: result.tokensUsed.input,
@@ -512,6 +539,15 @@ async function processOneSummary(
       durationMs,
     },
   });
+
+  if (!isSuperAdmin) {
+    const creditResult = await useCredits(recruiterId, creditCost);
+    if (!creditResult.success) {
+      console.warn(
+        `[AI Worker] Failed to deduct credits for user ${recruiterId}: ${creditResult.message || 'unknown error'}`
+      );
+    }
+  }
 
   return { status: 'success' };
 }

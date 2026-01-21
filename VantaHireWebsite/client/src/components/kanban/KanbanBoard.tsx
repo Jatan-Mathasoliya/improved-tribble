@@ -139,6 +139,7 @@ export function KanbanBoard({
     isDefault: null,
     createdBy: null,
     createdAt: new Date(),
+    organizationId: null,
   };
 
   const allColumns = hasUnassigned

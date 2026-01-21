@@ -73,11 +73,13 @@ async function getHiredStageId(): Promise<number | null> {
  * For each job, calculates the average time from application submission
  * to reaching the "Hired" stage
  *
+ * @param organizationId - Required organization ID for data isolation
  * @param startDate - Optional start date filter
  * @param endDate - Optional end date filter
  * @param jobId - Optional filter by specific job
  */
 export async function calculateTimeToFill(
+  organizationId: number,
   startDate?: Date,
   endDate?: Date,
   jobId?: number
@@ -100,6 +102,11 @@ export async function calculateTimeToFill(
   }
 
   // Query to get all applications that reached "Hired" stage
+  // Filter by organization to ensure data isolation (0 = no filter for super_admin)
+  const orgConditions = organizationId > 0
+    ? [...conditions, eq(jobs.organizationId, organizationId)]
+    : conditions;
+
   const hiredApplications = await db
     .select({
       applicationId: applicationStageHistory.applicationId,
@@ -111,7 +118,7 @@ export async function calculateTimeToFill(
     .from(applicationStageHistory)
     .innerJoin(applications, eq(applicationStageHistory.applicationId, applications.id))
     .innerJoin(jobs, eq(applications.jobId, jobs.id))
-    .where(and(...conditions));
+    .where(and(...orgConditions));
 
   // Filter by jobId if specified
   const filteredApplications = jobId
@@ -172,11 +179,13 @@ export async function calculateTimeToFill(
  *
  * For each pipeline stage, calculates the average time applications spend in that stage
  *
+ * @param organizationId - Required organization ID for data isolation
  * @param startDate - Optional start date filter
  * @param endDate - Optional end date filter
  * @param jobId - Optional filter by specific job
  */
 export async function calculateTimeInStage(
+  organizationId: number,
   startDate?: Date,
   endDate?: Date,
   jobId?: number
@@ -188,6 +197,7 @@ export async function calculateTimeInStage(
     .orderBy(pipelineStages.order);
 
   // Get all stage history entries
+  // Filter by organization to ensure data isolation (0 = no filter for super_admin)
   let historyQuery = db
     .select({
       applicationId: applicationStageHistory.applicationId,
@@ -198,9 +208,13 @@ export async function calculateTimeInStage(
     })
     .from(applicationStageHistory)
     .innerJoin(applications, eq(applicationStageHistory.applicationId, applications.id))
-    .orderBy(applicationStageHistory.applicationId, applicationStageHistory.changedAt);
+    .innerJoin(jobs, eq(applications.jobId, jobs.id));
 
-  const historyEntries = await historyQuery;
+  if (organizationId > 0) {
+    historyQuery = historyQuery.where(eq(jobs.organizationId, organizationId)) as typeof historyQuery;
+  }
+
+  const historyEntries = await historyQuery.orderBy(applicationStageHistory.applicationId, applicationStageHistory.changedAt);
 
   // Filter by date range and jobId if specified
   let filteredHistory = historyEntries;
@@ -293,17 +307,19 @@ export async function calculateTimeInStage(
 /**
  * Get comprehensive hiring metrics
  *
+ * @param organizationId - Required organization ID for data isolation
  * @param startDate - Optional start date filter
  * @param endDate - Optional end date filter
  * @param jobId - Optional filter by specific job
  */
 export async function getHiringMetrics(
+  organizationId: number,
   startDate?: Date,
   endDate?: Date,
   jobId?: number
 ): Promise<HiringMetrics> {
   // Calculate time-to-fill metrics
-  const timeToFillByJob = await calculateTimeToFill(startDate, endDate, jobId);
+  const timeToFillByJob = await calculateTimeToFill(organizationId, startDate, endDate, jobId);
 
   // Calculate overall time-to-fill
   const totalHires = timeToFillByJob.reduce((sum, job) => sum + job.hiredCount, 0);
@@ -311,30 +327,34 @@ export async function getHiringMetrics(
   const overallTimeToFill = totalHires > 0 ? Math.round(totalDays / totalHires) : null;
 
   // Calculate time-in-stage metrics
-  const timeInStage = await calculateTimeInStage(startDate, endDate, jobId);
+  const timeInStage = await calculateTimeInStage(organizationId, startDate, endDate, jobId);
 
   // Get total application count
-  let applicationCountQuery = db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(applications);
-
+  // Build conditions array to combine all filters (0 = no org filter for super_admin)
+  const countConditions: ReturnType<typeof eq>[] = [];
+  if (organizationId > 0) {
+    countConditions.push(eq(jobs.organizationId, organizationId));
+  }
   if (startDate) {
-    applicationCountQuery = applicationCountQuery.where(
-      gte(applications.appliedAt, startDate)
-    ) as any;
+    countConditions.push(gte(applications.appliedAt, startDate));
   }
   if (endDate) {
-    applicationCountQuery = applicationCountQuery.where(
-      lte(applications.appliedAt, endDate)
-    ) as any;
+    countConditions.push(lte(applications.appliedAt, endDate));
   }
   if (jobId) {
-    applicationCountQuery = applicationCountQuery.where(
-      eq(applications.jobId, jobId)
-    ) as any;
+    countConditions.push(eq(applications.jobId, jobId));
   }
 
-  const [{ count: totalApplications }] = await applicationCountQuery;
+  let countQuery = db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(applications)
+    .innerJoin(jobs, eq(applications.jobId, jobs.id));
+
+  if (countConditions.length > 0) {
+    countQuery = countQuery.where(and(...countConditions)) as typeof countQuery;
+  }
+
+  const [{ count: totalApplications }] = await countQuery;
 
   // Calculate conversion rate
   const conversionRate = totalApplications > 0

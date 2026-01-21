@@ -65,7 +65,7 @@ import {
   type BatchFitResult,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, ilike, sql, or, inArray, count, gte, lte } from "drizzle-orm";
+import { eq, desc, and, ilike, sql, or, inArray, count, gte, lte, isNull } from "drizzle-orm";
 
 export type JobHealthStatus = 'green' | 'amber' | 'red';
 
@@ -116,7 +116,7 @@ export interface IStorage {
   getAllContactSubmissions(): Promise<ContactSubmission[]>;
   
   // Job operations
-  createJob(job: InsertJob & { postedBy: number }): Promise<Job>;
+  createJob(job: InsertJob & { postedBy: number; organizationId: number }): Promise<Job>;
   getJob(id: number): Promise<Job | undefined>;
   getJobWithRecruiter(id: number): Promise<(Job & { recruiter?: { firstName: string | null; lastName: string | null; isProfilePublic: boolean; publicId: string | null }; client?: { name: string; domain: string | null } | null }) | undefined>;
   getJobBySlug(slug: string): Promise<(Job & { recruiter?: { firstName: string | null; lastName: string | null; isProfilePublic: boolean; publicId: string | null }; client?: { name: string; domain: string | null } | null }) | undefined>;
@@ -134,7 +134,7 @@ export interface IStorage {
   updateJobStatus(id: number, isActive: boolean, reason?: string, performedBy?: number): Promise<Job | undefined>;
   updateJob(id: number, updates: Partial<Pick<Job, 'title' | 'description' | 'location' | 'type' | 'skills' | 'hiringManagerId' | 'clientId'>>): Promise<Job | undefined>;
   logJobAction(data: { jobId: number; action: string; performedBy: number; reason?: string; metadata?: any }): Promise<JobAuditLog>;
-  getJobsByUser(userId: number): Promise<(Job & { applicationCount: number; hiringManager?: { id: number; firstName: string | null; lastName: string | null; username: string } })[]>;
+  getJobsByUser(userId: number, organizationId?: number): Promise<(Job & { applicationCount: number; hiringManager?: { id: number; firstName: string | null; lastName: string | null; username: string } })[]>;
   reviewJob(id: number, status: string, reviewComments?: string, reviewedBy?: number): Promise<Job | undefined>;
   getJobsByStatus(status: string, page?: number, limit?: number): Promise<{ jobs: Job[]; total: number }>;
   getPublicJobsByRecruiter(recruiterId: number): Promise<Job[]>;
@@ -162,6 +162,7 @@ export interface IStorage {
     currentStage?: number;
     stageChangedAt?: Date;
     stageChangedBy?: number;
+    organizationId?: number;
   }): Promise<Application>;
   getApplicationsByJob(jobId: number): Promise<Application[]>;
   getApplicationsByUser(email: string): Promise<Application[]>;
@@ -209,9 +210,9 @@ export interface IStorage {
   updateUserRole(userId: number, role: string): Promise<User | undefined>;
   deleteJob(jobId: number): Promise<boolean>;
   // Client operations
-  getClients(): Promise<Client[]>;
+  getClients(organizationId?: number): Promise<Client[]>;
   getClient(id: number): Promise<Client | undefined>;
-  createClient(client: InsertClient & { createdBy: number }): Promise<Client>;
+  createClient(client: InsertClient & { createdBy: number; organizationId: number }): Promise<Client>;
   updateClient(id: number, client: Partial<InsertClient>): Promise<Client | undefined>;
   
   // Job analytics operations
@@ -221,13 +222,13 @@ export interface IStorage {
   incrementApplyClicks(jobId: number): Promise<JobAnalytics | undefined>;
   updateConversionRate(jobId: number): Promise<JobAnalytics | undefined>;
   updateJobAnalytics(jobId: number, updates: { aiScoreCache?: number; aiModelVersion?: string }): Promise<JobAnalytics | undefined>;
-  getJobsWithAnalytics(userId?: number): Promise<any[]>;
-  getJobHealthSummary(userId?: number): Promise<JobHealthSummary[]>;
-  getAnalyticsNudges(userId?: number): Promise<{
+  getJobsWithAnalytics(userId?: number, organizationId?: number): Promise<any[]>;
+  getJobHealthSummary(userId?: number, organizationId?: number): Promise<JobHealthSummary[]>;
+  getAnalyticsNudges(userId?: number, organizationId?: number): Promise<{
     jobsNeedingAttention: JobHealthSummary[];
     staleCandidates: StaleCandidatesSummary[];
   }>;
-  getClientAnalytics(userId?: number): Promise<Array<{
+  getClientAnalytics(userId?: number, organizationId?: number): Promise<Array<{
     clientId: number;
     clientName: string;
     rolesCount: number;
@@ -236,8 +237,8 @@ export interface IStorage {
   }>>;
   
   // ATS: pipeline & interview
-  getPipelineStages(): Promise<PipelineStage[]>;
-  createPipelineStage(stage: InsertPipelineStage & { createdBy?: number }): Promise<PipelineStage>;
+  getPipelineStages(organizationId?: number): Promise<PipelineStage[]>;
+  createPipelineStage(stage: InsertPipelineStage & { createdBy?: number; organizationId?: number }): Promise<PipelineStage>;
   updateApplicationStage(appId: number, newStageId: number, changedBy: number, notes?: string): Promise<void>;
   getApplicationStageHistory(appId: number): Promise<any[]>;
   scheduleInterview(appId: number, fields: { date?: Date; time?: string; location?: string; notes?: string }): Promise<Application | undefined>;
@@ -245,8 +246,8 @@ export interface IStorage {
   setApplicationRating(appId: number, rating: number): Promise<Application | undefined>;
   
   // ATS: email templates
-  getEmailTemplates(): Promise<EmailTemplate[]>;
-  createEmailTemplate(template: InsertEmailTemplate & { createdBy?: number }): Promise<EmailTemplate>;
+  getEmailTemplates(organizationId?: number): Promise<EmailTemplate[]>;
+  createEmailTemplate(template: InsertEmailTemplate & { createdBy?: number; organizationId?: number }): Promise<EmailTemplate>;
 
   // Consultant operations
   getConsultants(): Promise<Consultant[]>;
@@ -288,10 +289,10 @@ export interface IStorage {
   invalidateHiringManagerInvitation(id: number): Promise<boolean>;
 
   // Job Recruiters operations (co-recruiters)
-  addJobRecruiter(jobId: number, recruiterId: number, addedBy: number): Promise<JobRecruiter>;
+  addJobRecruiter(jobId: number, recruiterId: number, addedBy: number, organizationId?: number): Promise<JobRecruiter>;
   removeJobRecruiter(jobId: number, recruiterId: number): Promise<boolean>;
   getJobRecruiters(jobId: number): Promise<User[]>;
-  isRecruiterOnJob(jobId: number, userId: number): Promise<boolean>;
+  isRecruiterOnJob(jobId: number, userId: number, organizationId?: number): Promise<boolean>;
 
   // Co-Recruiter Invitation operations
   createCoRecruiterInvitation(data: {
@@ -302,6 +303,7 @@ export interface IStorage {
     inviterName: string;
     jobTitle: string;
     expiresAt: Date;
+    organizationId?: number;
   }): Promise<CoRecruiterInvitation>;
   getCoRecruiterInvitationByToken(tokenHash: string): Promise<CoRecruiterInvitation | undefined>;
   getCoRecruiterInvitationByEmail(email: string, jobId: number): Promise<CoRecruiterInvitation | undefined>;
@@ -443,7 +445,10 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Client methods
-  async getClients(): Promise<Client[]> {
+  async getClients(organizationId?: number): Promise<Client[]> {
+    if (organizationId) {
+      return db.select().from(clients).where(eq(clients.organizationId, organizationId)).orderBy(clients.name);
+    }
     return db.select().from(clients).orderBy(clients.name);
   }
 
@@ -452,7 +457,7 @@ export class DatabaseStorage implements IStorage {
     return client || undefined;
   }
 
-  async createClient(client: InsertClient & { createdBy: number }): Promise<Client> {
+  async createClient(client: InsertClient & { createdBy: number; organizationId: number }): Promise<Client> {
     const [created] = await db
       .insert(clients)
       .values({
@@ -462,6 +467,7 @@ export class DatabaseStorage implements IStorage {
         primaryContactEmail: client.primaryContactEmail ?? null,
         notes: client.notes ?? null,
         createdBy: client.createdBy,
+        organizationId: client.organizationId,
       })
       .returning();
     return created;
@@ -499,6 +505,7 @@ export class DatabaseStorage implements IStorage {
     message?: string;
     expiresAt?: Date;
     createdBy: number;
+    organizationId?: number;
   }): Promise<ClientShortlist> {
     // Generate secure random token (32 bytes = 64 hex chars)
     const { randomBytes } = await import('crypto');
@@ -508,6 +515,7 @@ export class DatabaseStorage implements IStorage {
     const [shortlist] = await db
       .insert(clientShortlists)
       .values({
+        organizationId: data.organizationId,
         clientId: data.clientId,
         jobId: data.jobId,
         token,
@@ -520,6 +528,7 @@ export class DatabaseStorage implements IStorage {
 
     // Create shortlist items
     const itemsToInsert = data.applicationIds.map((applicationId, index) => ({
+      organizationId: shortlist.organizationId ?? undefined,
       shortlistId: shortlist.id,
       applicationId,
       position: index,
@@ -604,10 +613,12 @@ export class DatabaseStorage implements IStorage {
   async addClientFeedback(data: InsertClientFeedback & {
     clientId: number;
     shortlistId?: number;
+    organizationId?: number;
   }): Promise<ClientFeedback> {
     const [feedback] = await db
       .insert(clientFeedback)
       .values({
+        organizationId: data.organizationId,
         applicationId: data.applicationId,
         clientId: data.clientId,
         shortlistId: data.shortlistId ?? null,
@@ -648,7 +659,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Job methods
-  async createJob(job: InsertJob & { postedBy: number }): Promise<Job> {
+  async createJob(job: InsertJob & { postedBy: number; organizationId: number }): Promise<Job> {
     // Generate SEO-friendly slug from title
     const slug = slugify(job.title, {
       lower: true,
@@ -671,6 +682,7 @@ export class DatabaseStorage implements IStorage {
       jobId: result.id,
       recruiterId: job.postedBy,
       addedBy: job.postedBy,
+      organizationId: job.organizationId,
     }).onConflictDoNothing();
 
     return result;
@@ -957,6 +969,8 @@ export class DatabaseStorage implements IStorage {
     reason?: string;
     metadata?: any;
   }): Promise<JobAuditLog> {
+    // Get job to inherit organizationId
+    const job = await this.getJob(data.jobId);
     const [log] = await db
       .insert(jobAuditLog)
       .values({
@@ -965,7 +979,8 @@ export class DatabaseStorage implements IStorage {
         performedBy: data.performedBy,
         reason: data.reason || null,
         metadata: data.metadata || null,
-        timestamp: new Date()
+        timestamp: new Date(),
+        ...(job?.organizationId != null && { organizationId: job.organizationId }),
       })
       .returning();
     return log;
@@ -995,8 +1010,22 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getJobsByUser(userId: number): Promise<(Job & { applicationCount: number; hiringManager?: { id: number; firstName: string | null; lastName: string | null; username: string }; clientName?: string | null })[]> {
+  async getJobsByUser(userId: number, organizationId?: number): Promise<(Job & { applicationCount: number; hiringManager?: { id: number; firstName: string | null; lastName: string | null; username: string }; clientName?: string | null })[]> {
     // Include jobs where user is primary (postedBy) OR co-recruiter (in job_recruiters)
+    // If organizationId is provided, filter to only jobs from that org (enforces data isolation after leaving)
+    const whereConditions = [
+      or(
+        eq(jobs.postedBy, userId),
+        eq(jobRecruiters.recruiterId, userId)
+      )
+    ];
+
+    // If user has an org, only show jobs from that org
+    // This prevents access to old jobs after leaving an organization
+    if (organizationId !== undefined) {
+      whereConditions.push(eq(jobs.organizationId, organizationId));
+    }
+
     const results = await db
       .select({
         job: jobs,
@@ -1014,12 +1043,7 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(users, eq(jobs.hiringManagerId, users.id))
       .leftJoin(clients, eq(jobs.clientId, clients.id))
       .leftJoin(jobRecruiters, eq(jobRecruiters.jobId, jobs.id))
-      .where(
-        or(
-          eq(jobs.postedBy, userId),
-          eq(jobRecruiters.recruiterId, userId)
-        )
-      )
+      .where(and(...whereConditions))
       .groupBy(jobs.id, users.id, users.firstName, users.lastName, users.username, clients.id, clients.name)
       .orderBy(desc(jobs.createdAt));
 
@@ -1245,6 +1269,7 @@ export class DatabaseStorage implements IStorage {
     currentStage?: number;
     stageChangedAt?: Date;
     stageChangedBy?: number;
+    organizationId?: number;
   }): Promise<Application> {
     const [result] = await db
       .insert(applications)
@@ -1898,10 +1923,18 @@ export class DatabaseStorage implements IStorage {
     return analytics || undefined;
   }
 
-  async createJobAnalytics(analytics: InsertJobAnalytics): Promise<JobAnalytics> {
+  async createJobAnalytics(analytics: InsertJobAnalytics & { organizationId?: number }): Promise<JobAnalytics> {
+    let insertData = analytics;
+    if (analytics.organizationId == null) {
+      const job = await this.getJob(analytics.jobId);
+      if (job?.organizationId != null) {
+        insertData = { ...analytics, organizationId: job.organizationId };
+      }
+    }
+
     const [result] = await db
       .insert(jobAnalytics)
-      .values(analytics)
+      .values(insertData)
       .returning();
     return result;
   }
@@ -2029,7 +2062,7 @@ export class DatabaseStorage implements IStorage {
     return updated || undefined;
   }
 
-  async getJobsWithAnalytics(userId?: number): Promise<any[]> {
+  async getJobsWithAnalytics(userId?: number, organizationId?: number): Promise<any[]> {
     let query = db
       .select({
         id: jobs.id,
@@ -2062,7 +2095,10 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(jobAnalytics, eq(jobs.id, jobAnalytics.jobId))
       .leftJoin(clients, eq(jobs.clientId, clients.id));
 
-    if (userId) {
+    // Filter by organization for org-wide analytics (owner/admin view)
+    if (organizationId) {
+      query = query.where(eq(jobs.organizationId, organizationId)) as any;
+    } else if (userId) {
       // Include jobs where user is primary (postedBy) OR co-recruiter (in job_recruiters)
       const coRecruiterJobIds = db.select({ id: jobRecruiters.jobId }).from(jobRecruiters).where(eq(jobRecruiters.recruiterId, userId));
       query = query.where(
@@ -2083,7 +2119,7 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getJobHealthSummary(userId?: number): Promise<JobHealthSummary[]> {
+  async getJobHealthSummary(userId?: number, organizationId?: number): Promise<JobHealthSummary[]> {
     const now = new Date();
 
     let query = db
@@ -2101,7 +2137,10 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(jobAnalytics, eq(jobs.id, jobAnalytics.jobId))
       .leftJoin(applications, eq(applications.jobId, jobs.id));
 
-    if (userId) {
+    // Filter by organization for org-wide analytics (owner/admin view)
+    if (organizationId) {
+      query = query.where(eq(jobs.organizationId, organizationId)) as any;
+    } else if (userId) {
       // Include jobs where user is primary (postedBy) OR co-recruiter (in job_recruiters)
       const coRecruiterJobIds = db.select({ id: jobRecruiters.jobId }).from(jobRecruiters).where(eq(jobRecruiters.recruiterId, userId));
       query = query.where(
@@ -2190,11 +2229,12 @@ export class DatabaseStorage implements IStorage {
 
   async getAnalyticsNudges(
     userId?: number,
+    organizationId?: number,
   ): Promise<{
     jobsNeedingAttention: JobHealthSummary[];
     staleCandidates: StaleCandidatesSummary[];
   }> {
-    const jobHealth = await this.getJobHealthSummary(userId);
+    const jobHealth = await this.getJobHealthSummary(userId, organizationId);
     const jobsNeedingAttention = jobHealth.filter((job) => job.status !== "green");
 
     const now = new Date();
@@ -2214,7 +2254,10 @@ export class DatabaseStorage implements IStorage {
       .from(applications)
       .innerJoin(jobs, eq(applications.jobId, jobs.id));
 
-    if (userId) {
+    // Filter by organization for org-wide analytics (owner/admin view)
+    if (organizationId) {
+      query = query.where(eq(jobs.organizationId, organizationId)) as any;
+    } else if (userId) {
       // Include jobs where user is primary (postedBy) OR co-recruiter (in job_recruiters)
       const coRecruiterJobIds = db.select({ id: jobRecruiters.jobId }).from(jobRecruiters).where(eq(jobRecruiters.recruiterId, userId));
       query = query.where(
@@ -2279,6 +2322,7 @@ export class DatabaseStorage implements IStorage {
 
   async getClientAnalytics(
     userId?: number,
+    organizationId?: number,
   ): Promise<
     Array<{
       clientId: number;
@@ -2299,7 +2343,10 @@ export class DatabaseStorage implements IStorage {
       .leftJoin(jobs, eq(jobs.clientId, clients.id))
       .leftJoin(applications, eq(applications.jobId, jobs.id));
 
-    if (userId) {
+    // Filter by organization for org-wide analytics (owner/admin view)
+    if (organizationId) {
+      query = query.where(eq(clients.organizationId, organizationId)) as any;
+    } else if (userId) {
       // Include jobs where user is primary (postedBy) OR co-recruiter (in job_recruiters)
       const coRecruiterJobIds = db.select({ id: jobRecruiters.jobId }).from(jobRecruiters).where(eq(jobRecruiters.recruiterId, userId));
       query = query.where(
@@ -2324,31 +2371,47 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ===== ATS: Pipeline and Interviews =====
-  async getPipelineStages(): Promise<PipelineStage[]> {
+  async getPipelineStages(organizationId?: number): Promise<PipelineStage[]> {
+    if (organizationId != null) {
+      return db.select().from(pipelineStages).where(eq(pipelineStages.organizationId, organizationId)).orderBy(pipelineStages.order);
+    }
     return db.select().from(pipelineStages).orderBy(pipelineStages.order);
   }
 
-  async createPipelineStage(stage: InsertPipelineStage & { createdBy?: number }): Promise<PipelineStage> {
+  async createPipelineStage(stage: InsertPipelineStage & { createdBy?: number; organizationId?: number }): Promise<PipelineStage> {
     const [result] = await db.insert(pipelineStages).values(stage).returning();
     return result;
   }
 
-  async getPipelineStage(id: number): Promise<PipelineStage | undefined> {
-    const [stage] = await db.select().from(pipelineStages).where(eq(pipelineStages.id, id));
+  async getPipelineStage(id: number, organizationId?: number): Promise<PipelineStage | undefined> {
+    const whereClause = organizationId != null
+      ? and(eq(pipelineStages.id, id), eq(pipelineStages.organizationId, organizationId))
+      : eq(pipelineStages.id, id);
+    const [stage] = await db.select().from(pipelineStages).where(whereClause);
     return stage || undefined;
   }
 
-  async updatePipelineStage(id: number, updates: Partial<Pick<PipelineStage, 'name' | 'color' | 'order'>>): Promise<PipelineStage | undefined> {
+  async updatePipelineStage(
+    id: number,
+    updates: Partial<Pick<PipelineStage, 'name' | 'color' | 'order'>>,
+    organizationId?: number
+  ): Promise<PipelineStage | undefined> {
+    const whereClause = organizationId != null
+      ? and(eq(pipelineStages.id, id), eq(pipelineStages.organizationId, organizationId))
+      : eq(pipelineStages.id, id);
     const [result] = await db
       .update(pipelineStages)
       .set(updates)
-      .where(eq(pipelineStages.id, id))
+      .where(whereClause)
       .returning();
     return result || undefined;
   }
 
-  async deletePipelineStage(id: number): Promise<boolean> {
-    const result = await db.delete(pipelineStages).where(eq(pipelineStages.id, id));
+  async deletePipelineStage(id: number, organizationId?: number): Promise<boolean> {
+    const whereClause = organizationId != null
+      ? and(eq(pipelineStages.id, id), eq(pipelineStages.organizationId, organizationId))
+      : eq(pipelineStages.id, id);
+    const result = await db.delete(pipelineStages).where(whereClause);
     return (result.rowCount || 0) > 0;
   }
 
@@ -2486,54 +2549,86 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ===== ATS: Email templates =====
-  async getEmailTemplates(): Promise<EmailTemplate[]> {
+  async getEmailTemplates(organizationId?: number): Promise<EmailTemplate[]> {
+    if (organizationId) {
+      return db.select().from(emailTemplates).where(eq(emailTemplates.organizationId, organizationId)).orderBy(desc(emailTemplates.createdAt));
+    }
     return db.select().from(emailTemplates).orderBy(desc(emailTemplates.createdAt));
   }
 
-  async createEmailTemplate(template: InsertEmailTemplate & { createdBy?: number }): Promise<EmailTemplate> {
+  async createEmailTemplate(template: InsertEmailTemplate & { createdBy?: number; organizationId?: number }): Promise<EmailTemplate> {
     const [result] = await db.insert(emailTemplates).values(template).returning();
     return result;
   }
 
   // ===== ATS: Automation settings =====
-  async getAutomationSettings(): Promise<AutomationSetting[]> {
+  async getAutomationSettings(organizationId?: number): Promise<AutomationSetting[]> {
+    if (organizationId) {
+      return db.select().from(automationSettings).where(eq(automationSettings.organizationId, organizationId)).orderBy(automationSettings.settingKey);
+    }
     return db.select().from(automationSettings).orderBy(automationSettings.settingKey);
   }
 
-  async getAutomationSetting(key: string): Promise<AutomationSetting | undefined> {
-    const [result] = await db.select().from(automationSettings).where(eq(automationSettings.settingKey, key));
+  async getAutomationSetting(key: string, organizationId?: number): Promise<AutomationSetting | undefined> {
+    const whereClause = organizationId != null
+      ? and(eq(automationSettings.settingKey, key), eq(automationSettings.organizationId, organizationId))
+      : and(eq(automationSettings.settingKey, key), isNull(automationSettings.organizationId));
+    const [result] = await db.select().from(automationSettings).where(whereClause);
     return result;
   }
 
-  async updateAutomationSetting(key: string, value: boolean, updatedBy: number): Promise<AutomationSetting> {
+  async updateAutomationSetting(
+    key: string,
+    value: boolean,
+    updatedBy: number,
+    organizationId?: number
+  ): Promise<AutomationSetting> {
     // Try to update existing setting
-    const existing = await this.getAutomationSetting(key);
+    const existing = await this.getAutomationSetting(key, organizationId);
 
     if (existing) {
       const [updated] = await db
         .update(automationSettings)
-        .set({ settingValue: value, updatedBy, updatedAt: new Date() })
-        .where(eq(automationSettings.settingKey, key))
+        .set({
+          settingValue: value,
+          updatedBy,
+          updatedAt: new Date(),
+        })
+        .where(and(
+          eq(automationSettings.settingKey, key),
+          organizationId != null
+            ? eq(automationSettings.organizationId, organizationId)
+            : isNull(automationSettings.organizationId)
+        ))
         .returning();
       return updated;
     } else {
       // Create new setting if it doesn't exist
       const [created] = await db
         .insert(automationSettings)
-        .values({ settingKey: key, settingValue: value, updatedBy })
+        .values({
+          settingKey: key,
+          settingValue: value,
+          updatedBy,
+          ...(organizationId != null && { organizationId }),
+        })
         .returning();
       return created;
     }
   }
 
-  async isAutomationEnabled(key: string): Promise<boolean> {
+  async isAutomationEnabled(key: string, organizationId?: number): Promise<boolean> {
     // First check environment variable for global override
     const globalEnabled = process.env.EMAIL_AUTOMATION_ENABLED === 'true' || process.env.EMAIL_AUTOMATION_ENABLED === '1';
     if (!globalEnabled) return false;
 
     // Then check specific setting in database
-    const setting = await this.getAutomationSetting(key);
-    return setting?.settingValue ?? true; // Default to enabled if not set
+    if (organizationId != null) {
+      const orgSetting = await this.getAutomationSetting(key, organizationId);
+      if (orgSetting) return orgSetting.settingValue;
+    }
+    const globalSetting = await this.getAutomationSetting(key);
+    return globalSetting?.settingValue ?? true; // Default to enabled if not set
   }
 
   // ===== Consultant methods =====
@@ -2707,7 +2802,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Get first pipeline stage for initial placement
-    const stages = await this.getPipelineStages();
+    const stages = await this.getPipelineStages(job.organizationId ?? undefined);
     const firstStage = stages.length > 0 ? stages[0] : null;
 
     // Create application from talent pool data
@@ -2720,6 +2815,7 @@ export class DatabaseStorage implements IStorage {
       currentStage: firstStage?.id || null,
       source: 'talent_pool',
       status: 'submitted',
+      organizationId: job.organizationId ?? undefined,
     }).returning();
 
     return { application, talentPool: candidate };
@@ -2756,6 +2852,7 @@ export class DatabaseStorage implements IStorage {
     sentBy: number;
     fieldSnapshot: string;
     customMessage?: string;
+    organizationId?: number;
   }): Promise<FormInvitation> {
     const [result] = await db.insert(formInvitations).values({
       formId: data.formId,
@@ -2769,6 +2866,7 @@ export class DatabaseStorage implements IStorage {
       fieldSnapshot: data.fieldSnapshot,
       customMessage: data.customMessage || null,
       status: 'pending',
+      organizationId: data.organizationId,
     }).returning();
     return result;
   }
@@ -2812,7 +2910,7 @@ export class DatabaseStorage implements IStorage {
       const job = await this.getJob(invitation.jobId);
       if (job) {
         // Get first pipeline stage
-        const stages = await this.getPipelineStages();
+        const stages = await this.getPipelineStages(job.organizationId ?? undefined);
         const firstStage = stages.length > 0 ? stages[0] : null;
 
         const [application] = await db.insert(applications).values({
@@ -2822,6 +2920,7 @@ export class DatabaseStorage implements IStorage {
           currentStage: firstStage?.id || null,
           source: 'external_form',
           status: 'submitted',
+          organizationId: job.organizationId ?? undefined,
         }).returning();
 
         return { type: 'application', id: application.id };
@@ -2835,6 +2934,7 @@ export class DatabaseStorage implements IStorage {
       recruiterId,
       source: 'external_form',
       formResponseId,
+      ...(invitation.organizationId != null && { organizationId: invitation.organizationId }),
     }).returning();
 
     return { type: 'talent_pool', id: talentPoolEntry.id };
@@ -2916,11 +3016,12 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ===== Job Recruiters (Co-Recruiters) =====
-  async addJobRecruiter(jobId: number, recruiterId: number, addedBy: number): Promise<JobRecruiter> {
+  async addJobRecruiter(jobId: number, recruiterId: number, addedBy: number, organizationId?: number): Promise<JobRecruiter> {
     const [recruiter] = await db.insert(jobRecruiters).values({
       jobId,
       recruiterId,
       addedBy,
+      organizationId,
     }).onConflictDoNothing().returning();
 
     // If conflict (already exists), fetch and return existing
@@ -2973,15 +3074,24 @@ export class DatabaseStorage implements IStorage {
     return results;
   }
 
-  async isRecruiterOnJob(jobId: number, userId: number): Promise<boolean> {
+  async isRecruiterOnJob(jobId: number, userId: number, organizationId?: number): Promise<boolean> {
     // Check both job_recruiters table AND jobs.postedBy for backward compatibility
     // Also allow super_admin
     const user = await this.getUser(userId);
     if (user?.role === 'super_admin') return true;
 
-    // Check primary recruiter (jobs.postedBy)
+    // Get the job first
     const job = await this.getJob(jobId);
-    if (job?.postedBy === userId) return true;
+    if (!job) return false;
+
+    // If organizationId provided, verify the job belongs to that org
+    // This enforces data isolation - users can't access jobs from orgs they've left
+    if (organizationId !== undefined && job.organizationId !== organizationId) {
+      return false;
+    }
+
+    // Check primary recruiter (jobs.postedBy)
+    if (job.postedBy === userId) return true;
 
     // Check job_recruiters table
     const [result] = await db.select({ count: count() })
@@ -3002,6 +3112,7 @@ export class DatabaseStorage implements IStorage {
     inviterName: string;
     jobTitle: string;
     expiresAt: Date;
+    organizationId?: number;
   }): Promise<CoRecruiterInvitation> {
     const [invitation] = await db.insert(coRecruiterInvitations).values({
       jobId: data.jobId,
@@ -3012,6 +3123,7 @@ export class DatabaseStorage implements IStorage {
       jobTitle: data.jobTitle,
       expiresAt: data.expiresAt,
       status: 'pending',
+      organizationId: data.organizationId,
     }).returning();
     return invitation;
   }

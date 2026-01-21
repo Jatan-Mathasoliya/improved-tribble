@@ -1,0 +1,754 @@
+import { z } from "zod";
+import type { Express, Request, Response, NextFunction } from "express";
+import { requireAuth } from "./auth";
+import {
+  createOrganization,
+  getOrganization,
+  updateOrganization,
+  deleteOrganization,
+  getUserOrganization,
+  isUserInOrganization,
+  createOrganizationInvite,
+  getOrganizationInviteByToken,
+  getPendingInvitesForOrganization,
+  acceptOrganizationInvite,
+  cancelOrganizationInvite,
+  createJoinRequest,
+  getPendingJoinRequests,
+  respondToJoinRequest,
+  createDomainClaimRequest,
+  findOrganizationByUserEmailDomain,
+  isPublicEmailDomain,
+  getEmailDomain,
+} from "./lib/organizationService";
+import {
+  getOrganizationMembers,
+  getOrganizationMember,
+  getMemberById,
+  updateMemberRole,
+  removeMember,
+  leaveOrganization,
+  canManageMembers,
+  canManageBilling,
+  reassignJobs,
+  getUserJobsInOrg,
+} from "./lib/membershipService";
+import { createFreeSubscription } from "./lib/subscriptionService";
+import { hasAvailableSeats } from "./lib/seatService";
+import { initializeMemberCredits } from "./lib/creditService";
+import { insertOrganizationSchema, organizationRoles } from "@shared/schema";
+import { getEmailService } from "./simpleEmailService";
+
+// Input validation schemas
+const createOrgSchema = z.object({
+  name: z.string().min(1).max(200),
+});
+
+const updateOrgSchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  logo: z.string().url().optional().nullable(),
+  billingName: z.string().max(200).optional().nullable(),
+  billingAddress: z.string().max(500).optional().nullable(),
+  billingCity: z.string().max(100).optional().nullable(),
+  billingState: z.string().max(100).optional().nullable(),
+  billingPincode: z.string().max(10).optional().nullable(),
+  billingContactEmail: z.string().email().optional().nullable(),
+  billingContactName: z.string().max(200).optional().nullable(),
+});
+
+const inviteMemberSchema = z.object({
+  email: z.string().email(),
+  role: z.enum(['admin', 'member']).default('member'),
+});
+
+const respondJoinRequestSchema = z.object({
+  status: z.enum(['approved', 'rejected']),
+  rejectionReason: z.string().max(500).optional(),
+});
+
+const changeRoleSchema = z.object({
+  role: z.enum(['admin', 'member']),
+});
+
+const reassignContentSchema = z.object({
+  toUserId: z.number().int().positive(),
+});
+
+const domainClaimSchema = z.object({
+  domain: z.string().min(1).max(255),
+});
+
+export function registerOrganizationRoutes(
+  app: Express,
+  csrfProtection: any
+) {
+  // ===== Organization CRUD =====
+
+  // Create organization
+  app.post("/api/organizations", requireAuth, csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+
+      // Check if user is already in an organization
+      if (await isUserInOrganization(user.id)) {
+        res.status(400).json({ error: "You are already a member of an organization" });
+        return;
+      }
+
+      const validatedData = createOrgSchema.parse(req.body);
+
+      const org = await createOrganization(validatedData, user.id);
+
+      // Create free subscription for new org
+      await createFreeSubscription(org.id);
+
+      // Initialize credits for owner
+      const orgResult = await getUserOrganization(user.id);
+      if (orgResult) {
+        await initializeMemberCredits(orgResult.membership.id, org.id);
+      }
+
+      res.status(201).json(org);
+    } catch (error: any) {
+      console.error("Error creating organization:", error);
+      if (error.name === "ZodError") {
+        res.status(400).json({ error: "Invalid input", details: error.errors });
+        return;
+      }
+      res.status(500).json({ error: error.message || "Failed to create organization" });
+    }
+  });
+
+  // Get current organization
+  app.get("/api/organizations/current", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      res.json({
+        organization: orgResult.organization,
+        membership: orgResult.membership,
+      });
+    } catch (error: any) {
+      console.error("Error getting current organization:", error);
+      res.status(500).json({ error: "Failed to get organization" });
+    }
+  });
+
+  // Update organization
+  app.patch("/api/organizations/current", requireAuth, csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      if (!canManageBilling(orgResult.membership.role as any)) {
+        res.status(403).json({ error: "Only organization owner can update settings" });
+        return;
+      }
+
+      const data = updateOrgSchema.parse(req.body);
+
+      // Build update data conditionally to handle exactOptionalPropertyTypes
+      const updateData: Parameters<typeof updateOrganization>[1] = {};
+      if (data.name !== undefined) updateData.name = data.name;
+      if (data.logo !== undefined && data.logo !== null) updateData.logo = data.logo;
+      if (data.billingName !== undefined && data.billingName !== null) updateData.billingName = data.billingName;
+      if (data.billingAddress !== undefined && data.billingAddress !== null) updateData.billingAddress = data.billingAddress;
+      if (data.billingCity !== undefined && data.billingCity !== null) updateData.billingCity = data.billingCity;
+      if (data.billingState !== undefined && data.billingState !== null) updateData.billingState = data.billingState;
+      if (data.billingPincode !== undefined && data.billingPincode !== null) updateData.billingPincode = data.billingPincode;
+      if (data.billingContactEmail !== undefined && data.billingContactEmail !== null) updateData.billingContactEmail = data.billingContactEmail;
+      if (data.billingContactName !== undefined && data.billingContactName !== null) updateData.billingContactName = data.billingContactName;
+
+      const updated = await updateOrganization(orgResult.organization.id, updateData);
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating organization:", error);
+      if (error.name === "ZodError") {
+        res.status(400).json({ error: "Invalid input", details: error.errors });
+        return;
+      }
+      res.status(500).json({ error: error.message || "Failed to update organization" });
+    }
+  });
+
+  // Delete organization
+  app.delete("/api/organizations/current", requireAuth, csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      if (orgResult.membership.role !== 'owner') {
+        res.status(403).json({ error: "Only organization owner can delete the organization" });
+        return;
+      }
+
+      await deleteOrganization(orgResult.organization.id);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error deleting organization:", error);
+      res.status(500).json({ error: error.message || "Failed to delete organization" });
+    }
+  });
+
+  // ===== Members =====
+
+  // List organization members
+  app.get("/api/organizations/members", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      const members = await getOrganizationMembers(orgResult.organization.id);
+
+      res.json(members);
+    } catch (error: any) {
+      console.error("Error listing members:", error);
+      res.status(500).json({ error: "Failed to list members" });
+    }
+  });
+
+  // Invite member
+  app.post("/api/organizations/members/invite", requireAuth, csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      if (!canManageMembers(orgResult.membership.role as any)) {
+        res.status(403).json({ error: "You don't have permission to invite members" });
+        return;
+      }
+
+      const { email, role } = inviteMemberSchema.parse(req.body);
+
+      // Check if seats are available
+      const seatsAvailable = await hasAvailableSeats(orgResult.organization.id);
+      if (!seatsAvailable) {
+        res.status(400).json({ error: "No seats available. Please purchase more seats first." });
+        return;
+      }
+
+      // Check if email is already in an organization
+      // This is handled by the createOrganizationInvite function
+
+      const invite = await createOrganizationInvite(
+        orgResult.organization.id,
+        email,
+        role,
+        user.id
+      );
+
+      const emailService = await getEmailService();
+      if (emailService) {
+        const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+        const inviteCode = invite.token;
+        const inviteUrl = `${baseUrl}/recruiter-auth?invite=${inviteCode}`;
+        const inviterName = user.firstName || user.username;
+        const orgName = orgResult.organization.name;
+
+        const subject = `You are invited to join ${orgName} on VantaHire`;
+        const html = `
+          <h2>You're invited to join ${orgName}</h2>
+          <p>Hello,</p>
+          <p>${inviterName} invited you to join <strong>${orgName}</strong> on VantaHire.</p>
+          <p style="margin: 24px 0;">
+            <a href="${inviteUrl}" style="background-color: #7B38FB; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; font-weight: 600;">
+              Accept Invitation
+            </a>
+          </p>
+          <p style="color: #666; font-size: 14px;">Or copy this link: <a href="${inviteUrl}">${inviteUrl}</a></p>
+          <p style="color: #666; font-size: 14px; margin-top: 16px;">Your invite code (if needed): <strong>${inviteCode}</strong></p>
+        `;
+        const text = `You're invited to join ${orgName} on VantaHire.\n\nClick to accept: ${inviteUrl}\n\nOr use invite code: ${inviteCode}`;
+
+        const sent = await emailService.sendEmail({
+          to: invite.email,
+          subject,
+          html,
+          text,
+        });
+
+        if (!sent) {
+          console.warn(`Failed to send org invite email to ${invite.email}`);
+        }
+      } else {
+        console.warn('Email service not available. Invite created but email not sent.');
+      }
+
+      res.status(201).json(invite);
+    } catch (error: any) {
+      console.error("Error inviting member:", error);
+      if (error.name === "ZodError") {
+        res.status(400).json({ error: "Invalid input", details: error.errors });
+        return;
+      }
+      res.status(500).json({ error: error.message || "Failed to invite member" });
+    }
+  });
+
+  // Remove member
+  app.delete("/api/organizations/members/:id", requireAuth, csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+      const memberId = parseInt(req.params.id ?? '0');
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      if (!canManageMembers(orgResult.membership.role as any)) {
+        res.status(403).json({ error: "You don't have permission to remove members" });
+        return;
+      }
+
+      const memberToRemove = await getMemberById(memberId);
+      if (!memberToRemove || memberToRemove.organizationId !== orgResult.organization.id) {
+        res.status(404).json({ error: "Member not found" });
+        return;
+      }
+
+      if (memberToRemove.role === 'owner') {
+        res.status(400).json({ error: "Cannot remove organization owner" });
+        return;
+      }
+
+      await removeMember(memberId);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error removing member:", error);
+      res.status(500).json({ error: error.message || "Failed to remove member" });
+    }
+  });
+
+  // Change member role
+  app.patch("/api/organizations/members/:id/role", requireAuth, csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+      const memberId = parseInt(req.params.id ?? '0');
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      if (orgResult.membership.role !== 'owner') {
+        res.status(403).json({ error: "Only organization owner can change roles" });
+        return;
+      }
+
+      const { role } = changeRoleSchema.parse(req.body);
+
+      const memberToUpdate = await getMemberById(memberId);
+      if (!memberToUpdate || memberToUpdate.organizationId !== orgResult.organization.id) {
+        res.status(404).json({ error: "Member not found" });
+        return;
+      }
+
+      if (memberToUpdate.role === 'owner') {
+        res.status(400).json({ error: "Cannot change owner's role" });
+        return;
+      }
+
+      const updated = await updateMemberRole(memberId, role);
+
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error changing member role:", error);
+      if (error.name === "ZodError") {
+        res.status(400).json({ error: "Invalid input", details: error.errors });
+        return;
+      }
+      res.status(500).json({ error: error.message || "Failed to change role" });
+    }
+  });
+
+  // Reassign member's content
+  app.post("/api/organizations/members/:id/reassign", requireAuth, csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+      const fromMemberId = parseInt(req.params.id ?? '0');
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      if (!canManageMembers(orgResult.membership.role as any)) {
+        res.status(403).json({ error: "You don't have permission to reassign content" });
+        return;
+      }
+
+      const { toUserId } = reassignContentSchema.parse(req.body);
+
+      const fromMember = await getMemberById(fromMemberId);
+      if (!fromMember || fromMember.organizationId !== orgResult.organization.id) {
+        res.status(404).json({ error: "Source member not found" });
+        return;
+      }
+
+      const toMember = await getOrganizationMember(orgResult.organization.id, toUserId);
+      if (!toMember) {
+        res.status(404).json({ error: "Target member not found in organization" });
+        return;
+      }
+
+      const reassignedCount = await reassignJobs(fromMember.userId, toUserId, orgResult.organization.id);
+
+      res.json({ success: true, reassignedCount });
+    } catch (error: any) {
+      console.error("Error reassigning content:", error);
+      if (error.name === "ZodError") {
+        res.status(400).json({ error: "Invalid input", details: error.errors });
+        return;
+      }
+      res.status(500).json({ error: error.message || "Failed to reassign content" });
+    }
+  });
+
+  // Leave organization
+  app.post("/api/organizations/members/leave", requireAuth, csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      await leaveOrganization(user.id);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error leaving organization:", error);
+      res.status(500).json({ error: error.message || "Failed to leave organization" });
+    }
+  });
+
+  // ===== Invites =====
+
+  // List pending invites
+  app.get("/api/organizations/invites", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      if (!canManageMembers(orgResult.membership.role as any)) {
+        res.status(403).json({ error: "You don't have permission to view invites" });
+        return;
+      }
+
+      const invites = await getPendingInvitesForOrganization(orgResult.organization.id);
+
+      res.json(invites);
+    } catch (error: any) {
+      console.error("Error listing invites:", error);
+      res.status(500).json({ error: "Failed to list invites" });
+    }
+  });
+
+  // Cancel invite
+  app.delete("/api/organizations/invites/:id", requireAuth, csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+      const inviteId = parseInt(req.params.id ?? '0');
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      if (!canManageMembers(orgResult.membership.role as any)) {
+        res.status(403).json({ error: "You don't have permission to cancel invites" });
+        return;
+      }
+
+      await cancelOrganizationInvite(inviteId);
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error canceling invite:", error);
+      res.status(500).json({ error: error.message || "Failed to cancel invite" });
+    }
+  });
+
+  // Get invite details (public)
+  app.get("/api/invites/:token", async (req, res) => {
+    try {
+      const token = req.params.token ?? '';
+      const invite = await getOrganizationInviteByToken(token);
+
+      if (!invite) {
+        res.status(404).json({ error: "Invite not found or expired" });
+        return;
+      }
+
+      res.json({
+        organizationName: invite.organization.name,
+        email: invite.email,
+        role: invite.role,
+        expiresAt: invite.expiresAt,
+      });
+    } catch (error: any) {
+      console.error("Error getting invite:", error);
+      res.status(500).json({ error: "Failed to get invite details" });
+    }
+  });
+
+  // Accept invite
+  app.post("/api/invites/:token/accept", requireAuth, csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+      const token = req.params.token ?? '';
+
+      // Check if user is already in an organization
+      if (await isUserInOrganization(user.id)) {
+        res.status(400).json({ error: "You are already a member of an organization. Leave your current organization first." });
+        return;
+      }
+
+      const membership = await acceptOrganizationInvite(token, user.id);
+
+      res.json({ success: true, membership });
+    } catch (error: any) {
+      console.error("Error accepting invite:", error);
+      res.status(500).json({ error: error.message || "Failed to accept invite" });
+    }
+  });
+
+  // ===== Join Requests =====
+
+  // Request to join organization
+  app.post("/api/organizations/request-join/:orgId", requireAuth, csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgId = parseInt(req.params.orgId ?? '0');
+
+      // Check if user is already in an organization
+      if (await isUserInOrganization(user.id)) {
+        res.status(400).json({ error: "You are already a member of an organization" });
+        return;
+      }
+
+      const request = await createJoinRequest(orgId, user.id);
+
+      res.status(201).json(request);
+    } catch (error: any) {
+      console.error("Error requesting to join:", error);
+      res.status(500).json({ error: error.message || "Failed to request to join" });
+    }
+  });
+
+  // List pending join requests
+  app.get("/api/organizations/join-requests", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      if (!canManageMembers(orgResult.membership.role as any)) {
+        res.status(403).json({ error: "You don't have permission to view join requests" });
+        return;
+      }
+
+      const requests = await getPendingJoinRequests(orgResult.organization.id);
+
+      res.json(requests);
+    } catch (error: any) {
+      console.error("Error listing join requests:", error);
+      res.status(500).json({ error: "Failed to list join requests" });
+    }
+  });
+
+  // Respond to join request
+  app.post("/api/organizations/join-requests/:id/respond", requireAuth, csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+      const requestId = parseInt(req.params.id ?? '0');
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      if (!canManageMembers(orgResult.membership.role as any)) {
+        res.status(403).json({ error: "You don't have permission to respond to join requests" });
+        return;
+      }
+
+      const { status, rejectionReason } = respondJoinRequestSchema.parse(req.body);
+
+      // Check if seats are available for approval
+      if (status === 'approved') {
+        const seatsAvailable = await hasAvailableSeats(orgResult.organization.id);
+        if (!seatsAvailable) {
+          res.status(400).json({ error: "No seats available. Please purchase more seats first." });
+          return;
+        }
+      }
+
+      const member = await respondToJoinRequest(
+        requestId,
+        status,
+        user.id,
+        rejectionReason
+      );
+
+      // Initialize credits for new member if approved
+      if (status === 'approved' && member) {
+        await initializeMemberCredits(member.id, orgResult.organization.id);
+      }
+
+      res.json({ success: true, member });
+    } catch (error: any) {
+      console.error("Error responding to join request:", error);
+      if (error.name === "ZodError") {
+        res.status(400).json({ error: "Invalid input", details: error.errors });
+        return;
+      }
+      res.status(500).json({ error: error.message || "Failed to respond to join request" });
+    }
+  });
+
+  // ===== Domain =====
+
+  // Request domain claim
+  app.post("/api/organizations/domain/request", requireAuth, csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      if (orgResult.membership.role !== 'owner') {
+        res.status(403).json({ error: "Only organization owner can claim a domain" });
+        return;
+      }
+
+      const { domain } = domainClaimSchema.parse(req.body);
+
+      // Check if it's a public email domain
+      if (isPublicEmailDomain(domain)) {
+        res.status(400).json({ error: "Cannot claim a public email domain" });
+        return;
+      }
+
+      const request = await createDomainClaimRequest(orgResult.organization.id, domain, user.id);
+
+      res.status(201).json(request);
+    } catch (error: any) {
+      console.error("Error requesting domain claim:", error);
+      if (error.name === "ZodError") {
+        res.status(400).json({ error: "Invalid input", details: error.errors });
+        return;
+      }
+      res.status(500).json({ error: error.message || "Failed to request domain claim" });
+    }
+  });
+
+  // Find organization by email domain (for join request UI)
+  app.get("/api/organizations/by-email-domain", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+
+      // Get domain from user's email
+      const domain = getEmailDomain(user.username);
+
+      if (!domain || isPublicEmailDomain(domain)) {
+        res.json({ organization: null });
+        return;
+      }
+
+      const org = await findOrganizationByUserEmailDomain(domain);
+
+      res.json({
+        organization: org ? {
+          id: org.id,
+          name: org.name,
+          domain: org.domain,
+        } : null,
+      });
+    } catch (error: any) {
+      console.error("Error finding organization by domain:", error);
+      res.status(500).json({ error: "Failed to find organization" });
+    }
+  });
+
+  // Get member's jobs in organization (for reassignment UI)
+  app.get("/api/organizations/members/:id/jobs", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const memberId = parseInt(req.params.id ?? '0');
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      if (!canManageMembers(orgResult.membership.role as any)) {
+        res.status(403).json({ error: "You don't have permission to view member's jobs" });
+        return;
+      }
+
+      const member = await getMemberById(memberId);
+      if (!member || member.organizationId !== orgResult.organization.id) {
+        res.status(404).json({ error: "Member not found" });
+        return;
+      }
+
+      const jobs = await getUserJobsInOrg(member.userId, orgResult.organization.id);
+
+      res.json(jobs);
+    } catch (error: any) {
+      console.error("Error getting member's jobs:", error);
+      res.status(500).json({ error: "Failed to get member's jobs" });
+    }
+  });
+}

@@ -407,7 +407,7 @@ describe('Clients API Integration Tests', () => {
 
     it('should include clientName in My Jobs endpoint', async () => {
       const response = await request(app)
-        .get('/api/jobs/my-jobs');
+        .get('/api/my-jobs');
 
       if (response.status === 200) {
         expect(Array.isArray(response.body)).toBe(true);

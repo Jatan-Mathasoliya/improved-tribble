@@ -13,7 +13,7 @@ import { sql, inArray, eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from './db';
 import { storage } from './storage';
-import { requireAuth, requireRole } from './auth';
+import { requireAuth, requireRole, requireSeat } from './auth';
 import {
   insertClientSchema,
   insertClientShortlistSchema,
@@ -24,6 +24,8 @@ import {
   type InsertClient,
 } from '@shared/schema';
 import type { CsrfMiddleware } from './types/routes';
+import { getUserOrganization } from './lib/organizationService';
+import { updateMemberActivity } from './lib/membershipService';
 
 // Validation schema for client updates
 const updateClientSchema = insertClientSchema.partial();
@@ -37,11 +39,23 @@ export function registerClientsRoutes(
 ): void {
   // ============= CLIENT MANAGEMENT ROUTES =============
 
-  // Get all clients (recruiter/admin)
-  app.get("/api/clients", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Get all clients (recruiter/admin) - filtered by organization
+  app.get("/api/clients", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      // Get user's organization for data isolation
+      const orgResult = await getUserOrganization(req.user!.id);
+      // Super admin without org can see all; recruiters must have org
+      const organizationId = req.user!.role === 'super_admin' && !orgResult
+        ? undefined  // super_admin sees all
+        : orgResult?.organization.id;
+
+      if (req.user!.role === 'recruiter' && !organizationId) {
+        res.status(403).json({ error: 'Organization required to view clients' });
+        return;
+      }
+
       const search = typeof req.query.q === 'string' ? req.query.q.trim() : '';
-      const clients = await storage.getClients();
+      const clients = await storage.getClients(organizationId);
 
       const filtered = search
         ? clients.filter((client) => {
@@ -58,12 +72,25 @@ export function registerClientsRoutes(
   });
 
   // Create a new client
-  app.post("/api/clients", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.post("/api/clients", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      // Get user's organization
+      const orgResult = await getUserOrganization(req.user!.id);
+      if (!orgResult && req.user!.role === 'recruiter') {
+        res.status(400).json({ error: 'You must be part of an organization to create clients' });
+        return;
+      }
+      const organizationId = orgResult?.organization.id ?? 0; // Super admins may not have org
+
+      if (req.user!.role === 'recruiter') {
+        await updateMemberActivity(req.user!.id);
+      }
+
       const body = insertClientSchema.parse(req.body as InsertClient);
       const client = await storage.createClient({
         ...body,
         createdBy: req.user!.id,
+        organizationId,
       });
       res.status(201).json(client);
       return;
@@ -82,8 +109,8 @@ export function registerClientsRoutes(
     }
   });
 
-  // Update an existing client
-  app.patch("/api/clients/:id", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Update an existing client - with organization verification
+  app.patch("/api/clients/:id", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -94,6 +121,22 @@ export function registerClientsRoutes(
       if (!Number.isFinite(clientId) || clientId <= 0 || !Number.isInteger(clientId)) {
         res.status(400).json({ error: 'Invalid ID parameter' });
         return;
+      }
+
+      // Verify client exists and belongs to user's organization
+      const client = await storage.getClient(clientId);
+      if (!client) {
+        res.status(404).json({ error: 'Client not found' });
+        return;
+      }
+
+      // Organization verification (super_admin can update any)
+      if (req.user!.role !== 'super_admin') {
+        const orgResult = await getUserOrganization(req.user!.id);
+        if (!orgResult || client.organizationId !== orgResult.organization.id) {
+          res.status(403).json({ error: 'Access denied: client belongs to another organization' });
+          return;
+        }
       }
 
       const parsed = updateClientSchema.safeParse(req.body);
@@ -129,7 +172,7 @@ export function registerClientsRoutes(
    * Create a new client shortlist for sharing candidates
    * Requires: recruiter or admin role
    */
-  app.post("/api/client-shortlists", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.post("/api/client-shortlists", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const body = insertClientShortlistSchema.parse(req.body);
 
@@ -160,6 +203,7 @@ export function registerClientsRoutes(
         ...(body.message ? { message: body.message } : {}),
         ...(body.expiresAt ? { expiresAt: new Date(body.expiresAt) } : {}),
         createdBy: req.user!.id,
+        ...(job.organizationId != null && { organizationId: job.organizationId }),
       });
 
       // Return shortlist with public URL
@@ -291,6 +335,7 @@ export function registerClientsRoutes(
           ...parsed,
           clientId: shortlistData.client.id,
           shortlistId: shortlistData.shortlist.id,
+          ...(shortlistData.shortlist.organizationId != null && { organizationId: shortlistData.shortlist.organizationId }),
         });
 
         savedFeedback.push(feedback);
@@ -422,7 +467,7 @@ export function registerClientsRoutes(
    * GET /api/jobs/:id/client-shortlists
    * Returns all client shortlists for a given job (recruiter/admin)
    */
-  app.get("/api/jobs/:id/client-shortlists", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/jobs/:id/client-shortlists", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -435,8 +480,12 @@ export function registerClientsRoutes(
         return;
       }
 
+      // Get user's organization for access control
+      const orgResult = await getUserOrganization(req.user!.id);
+      const userOrgId = orgResult?.organization.id;
+
       // Verify job access (use isRecruiterOnJob to include co-recruiters)
-      const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id);
+      const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id, userOrgId);
       if (!hasAccess) {
         res.status(403).json({ error: 'Access denied' });
         return;
@@ -488,7 +537,7 @@ export function registerClientsRoutes(
    * GET /api/jobs/:id/client-feedback-analytics
    * Get client feedback analytics for a job (recruiters only)
    */
-  app.get("/api/jobs/:id/client-feedback-analytics", requireAuth, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/jobs/:id/client-feedback-analytics", requireAuth, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -501,8 +550,12 @@ export function registerClientsRoutes(
         return;
       }
 
+      // Get user's organization for access control
+      const orgResult = await getUserOrganization(req.user!.id);
+      const userOrgId = orgResult?.organization.id;
+
       // Verify job access
-      const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id);
+      const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id, userOrgId);
       if (!hasAccess) {
         res.status(403).json({ error: 'Access denied' });
         return;

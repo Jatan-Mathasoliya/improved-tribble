@@ -100,12 +100,13 @@ app.use((req, res, next) => {
 
   // Bind to platform-provided PORT (e.g., Railway/Heroku), fallback to 5000
   const port = Number(process.env.PORT) || 5000;
+  const host = process.env.HOST || "0.0.0.0";
   // reusePort causes issues on macOS (darwin), so we disable it there
   const reusePort = process.platform !== 'darwin';
   
   server.listen({
     port,
-    host: "0.0.0.0",
+    host,
     reusePort,
   }, async () => {
     log(`serving on port ${port}`);

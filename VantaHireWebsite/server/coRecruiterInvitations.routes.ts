@@ -14,7 +14,8 @@ import type { Express, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { randomBytes, createHash } from 'crypto';
 import { storage } from './storage';
-import { requireAuth, requireRole } from './auth';
+import { requireAuth, requireRole, requireSeat } from './auth';
+import { getUserOrganization } from './lib/organizationService';
 import {
   sendCoRecruiterInvitationEmail,
   sendCoRecruiterAddedEmail,
@@ -66,6 +67,7 @@ export function registerCoRecruiterInvitationRoutes(
     csrfProtection,
     invitationRateLimit,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         const jobIdParam = req.params.jobId;
@@ -79,6 +81,10 @@ export function registerCoRecruiterInvitationRoutes(
           return;
         }
 
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
+
         // Verify job exists and user has access
         const job = await storage.getJob(jobId);
         if (!job) {
@@ -86,7 +92,7 @@ export function registerCoRecruiterInvitationRoutes(
           return;
         }
 
-        const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id);
+        const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id, userOrgId);
         if (!hasAccess) {
           res.status(403).json({ error: 'Access denied' });
           return;
@@ -110,7 +116,7 @@ export function registerCoRecruiterInvitationRoutes(
             }
 
             // Add them directly to the job
-            await storage.addJobRecruiter(jobId, existingUser.id, req.user!.id);
+            await storage.addJobRecruiter(jobId, existingUser.id, req.user!.id, job.organizationId ?? undefined);
 
             // Send notification email using template
             const inviter = await storage.getUser(req.user!.id);
@@ -123,6 +129,7 @@ export function registerCoRecruiterInvitationRoutes(
               recruiterFirstName: existingUser.firstName,
               jobTitle: job.title,
               dashboardUrl: `${BASE_URL}/recruiter-dashboard`,
+              organizationId: job.organizationId ?? undefined,
             }).catch(err => console.error('Failed to send co-recruiter added email:', err));
 
             console.log(`Co-recruiter ${existingUser.id} added directly to job ${jobId} by user ${req.user!.id}`);
@@ -203,6 +210,7 @@ export function registerCoRecruiterInvitationRoutes(
           inviterName,
           jobTitle: job.title,
           expiresAt,
+          ...(job.organizationId != null && { organizationId: job.organizationId }),
         });
 
         // Send invitation email using template
@@ -212,6 +220,7 @@ export function registerCoRecruiterInvitationRoutes(
           jobTitle: job.title,
           acceptUrl,
           expiryDays: INVITATION_EXPIRY_DAYS,
+          organizationId: job.organizationId ?? undefined,
         };
         if (body.name) {
           emailOpts.inviteeName = body.name;
@@ -254,6 +263,7 @@ export function registerCoRecruiterInvitationRoutes(
   app.get(
     "/api/jobs/:jobId/co-recruiters",
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         const jobIdParam = req.params.jobId;
@@ -267,6 +277,10 @@ export function registerCoRecruiterInvitationRoutes(
           return;
         }
 
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
+
         // Verify job exists and user has access
         const job = await storage.getJob(jobId);
         if (!job) {
@@ -274,7 +288,7 @@ export function registerCoRecruiterInvitationRoutes(
           return;
         }
 
-        const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id);
+        const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id, userOrgId);
         if (!hasAccess) {
           res.status(403).json({ error: 'Access denied' });
           return;
@@ -315,6 +329,7 @@ export function registerCoRecruiterInvitationRoutes(
     "/api/jobs/:jobId/co-recruiters/:recruiterId",
     csrfProtection,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         const jobIdParam = req.params.jobId;
@@ -333,6 +348,10 @@ export function registerCoRecruiterInvitationRoutes(
           return;
         }
 
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
+
         // Verify job exists and user has access
         const job = await storage.getJob(jobId);
         if (!job) {
@@ -340,7 +359,7 @@ export function registerCoRecruiterInvitationRoutes(
           return;
         }
 
-        const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id);
+        const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id, userOrgId);
         if (!hasAccess) {
           res.status(403).json({ error: 'Access denied' });
           return;
@@ -373,6 +392,7 @@ export function registerCoRecruiterInvitationRoutes(
     "/api/co-recruiter-invitations/:id",
     csrfProtection,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         const idParam = req.params.id;
@@ -386,6 +406,10 @@ export function registerCoRecruiterInvitationRoutes(
           return;
         }
 
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
+
         // Get invitation to check access
         const invitation = await storage.getCoRecruiterInvitation(id);
         if (!invitation) {
@@ -394,7 +418,7 @@ export function registerCoRecruiterInvitationRoutes(
         }
 
         // Verify user has access to the job
-        const hasAccess = await storage.isRecruiterOnJob(invitation.jobId, req.user!.id);
+        const hasAccess = await storage.isRecruiterOnJob(invitation.jobId, req.user!.id, userOrgId);
         if (!hasAccess) {
           res.status(403).json({ error: 'Access denied' });
           return;
@@ -509,7 +533,7 @@ export function registerCoRecruiterInvitationRoutes(
         }
 
         // Add user to job
-        await storage.addJobRecruiter(invitation.jobId, req.user!.id, invitation.invitedBy);
+        await storage.addJobRecruiter(invitation.jobId, req.user!.id, invitation.invitedBy, invitation.organizationId ?? undefined);
 
         // Mark invitation as accepted
         await storage.updateCoRecruiterInvitationStatus(invitation.id, 'accepted');

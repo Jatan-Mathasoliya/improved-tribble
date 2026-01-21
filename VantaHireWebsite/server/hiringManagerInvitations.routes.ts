@@ -12,7 +12,7 @@ import type { Express, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { randomBytes, createHash } from 'crypto';
 import { storage } from './storage';
-import { requireRole } from './auth';
+import { requireRole, requireSeat } from './auth';
 import { getEmailService } from './simpleEmailService';
 import { insertHiringManagerInvitationSchema } from '@shared/schema';
 import type { CsrfMiddleware } from './types/routes';
@@ -119,6 +119,7 @@ export function registerHiringManagerInvitationRoutes(
     csrfProtection,
     invitationRateLimit,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         // Validate request body
@@ -262,6 +263,7 @@ export function registerHiringManagerInvitationRoutes(
   app.get(
     "/api/hiring-manager-invitations",
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         // Super admins see all, recruiters see their own
@@ -292,6 +294,7 @@ export function registerHiringManagerInvitationRoutes(
     "/api/hiring-manager-invitations/:id",
     csrfProtection,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         const idParam = req.params.id;

@@ -103,7 +103,7 @@ async function hashPassword(password: string) {
   return `${buf.toString("hex")}.${salt}`;
 }
 
-async function comparePasswords(supplied: string, stored: string) {
+export async function comparePasswords(supplied: string, stored: string) {
   const parts = stored.split(".");
   if (parts.length !== 2 || !parts[0] || !parts[1]) {
     throw new Error("Invalid stored password format");
@@ -133,6 +133,80 @@ export function requireAuth(req: any, res: any, next: any) {
     return res.status(401).json({ error: 'Authentication required' });
   }
   next();
+}
+
+// Organization context middleware - attaches org info to request
+// Use after requireAuth for routes that need org context
+export function withOrgContext() {
+  return async (req: any, res: any, next: any) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Skip org check for non-recruiter roles
+    if (req.user.role !== 'recruiter') {
+      return next();
+    }
+
+    try {
+      // Lazy import to avoid circular dependency
+      const { getUserOrganization } = await import('./lib/organizationService');
+      const orgResult = await getUserOrganization(req.user.id);
+
+      if (orgResult) {
+        req.organization = orgResult.organization;
+        req.membership = orgResult.membership;
+      }
+
+      next();
+    } catch (error) {
+      console.error('Error loading org context:', error);
+      next();
+    }
+  };
+}
+
+// Middleware to require an active seat (blocks unseated members)
+export function requireSeat() {
+  return async (req: any, res: any, next: any) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Skip seat check for non-recruiter roles
+    if (req.user.role !== 'recruiter') {
+      return next();
+    }
+
+    try {
+      const { getUserOrganization } = await import('./lib/organizationService');
+      const orgResult = await getUserOrganization(req.user.id);
+
+      if (!orgResult) {
+        // User not in org - block access, require onboarding first
+        return res.status(403).json({
+          error: 'Organization required',
+          code: 'NO_ORGANIZATION',
+          message: 'You must create or join an organization to continue.',
+        });
+      }
+
+      if (!orgResult.membership.seatAssigned) {
+        return res.status(403).json({
+          error: 'Seat required',
+          code: 'NO_SEAT',
+          message: 'Your seat has been removed. Contact your organization owner.',
+        });
+      }
+
+      req.organization = orgResult.organization;
+      req.membership = orgResult.membership;
+      next();
+    } catch (error) {
+      console.error('Error checking seat:', error);
+      res.status(500).json({ error: 'Failed to verify seat status' });
+    }
+  };
 }
 
 export function setupAuth(app: Express) {
@@ -341,7 +415,7 @@ export function setupAuth(app: Express) {
         console.log(`Hiring manager invitation accepted: ${hiringManagerInvitation.email} registered as user ${user.id}`);
       } else if (coRecruiterInvitation) {
         // Add user to the job's recruiters and mark invitation as accepted
-        await storage.addJobRecruiter(coRecruiterInvitation.jobId, user.id, coRecruiterInvitation.invitedBy);
+        await storage.addJobRecruiter(coRecruiterInvitation.jobId, user.id, coRecruiterInvitation.invitedBy, coRecruiterInvitation.organizationId ?? undefined);
         await storage.updateCoRecruiterInvitationStatus(coRecruiterInvitation.id, 'accepted');
         console.log(`Co-recruiter invitation accepted: ${coRecruiterInvitation.email} registered as user ${user.id}, added to job ${coRecruiterInvitation.jobId}`);
       }

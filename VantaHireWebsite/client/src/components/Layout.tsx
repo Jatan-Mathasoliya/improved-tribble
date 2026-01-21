@@ -4,7 +4,7 @@ import { useAIFeatures } from "@/hooks/use-ai-features";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Menu, X, User, LogOut, Briefcase, Plus, ChevronDown, BarChart3, Shield, Sparkles, Settings } from "lucide-react";
+import { Menu, X, User, LogOut, Briefcase, Plus, ChevronDown, BarChart3, Shield, Sparkles, Settings, Building2, Users, CreditCard } from "lucide-react";
 import { useState, useEffect } from "react";
 import Footer from "@/components/Footer";
 import QuickAccessBar from "@/components/QuickAccessBar";
@@ -61,6 +61,12 @@ const Layout = ({ children }: LayoutProps) => {
       '/analytics',
       '/clients',
       '/profile/settings',
+      '/org/settings',
+      '/org/team',
+      '/org/billing',
+      '/org/domain',
+      '/org/choice',
+      '/blocked/seat-removed',
     ];
 
     // Check exact matches first
@@ -261,10 +267,28 @@ const Layout = ({ children }: LayoutProps) => {
                   )}
 
                   {(user?.role === 'recruiter' || user?.role === 'super_admin') && (
-                    <DropdownMenuItem onClick={() => setLocation("/profile/settings")} className="cursor-pointer">
-                      <Settings className="h-4 w-4 mr-2" />
-                      Profile Settings
-                    </DropdownMenuItem>
+                    <>
+                      <DropdownMenuItem onClick={() => setLocation("/profile/settings")} className="cursor-pointer">
+                        <Settings className="h-4 w-4 mr-2" />
+                        Profile Settings
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                        Organization
+                      </div>
+                      <DropdownMenuItem onClick={() => setLocation("/org/settings")} className="cursor-pointer">
+                        <Building2 className="h-4 w-4 mr-2" />
+                        Org Settings
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setLocation("/org/team")} className="cursor-pointer">
+                        <Users className="h-4 w-4 mr-2" />
+                        Team Members
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setLocation("/org/billing")} className="cursor-pointer">
+                        <CreditCard className="h-4 w-4 mr-2" />
+                        Billing
+                      </DropdownMenuItem>
+                    </>
                   )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive">

@@ -1,303 +1,423 @@
-import { useState, useEffect } from "react";
-import Layout from "@/components/Layout";
-import { Helmet } from "react-helmet-async";
+import { useState } from "react";
+import { useLocation } from "wouter";
+import { useAuth } from "@/hooks/use-auth";
+import { usePlans, useSubscription, useCreateCheckout, formatPriceINR } from "@/hooks/use-subscription";
 import { Button } from "@/components/ui/button";
-import { Check, X, ChevronDown } from "lucide-react";
-import { trackEvent } from "@/lib/analytics";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Check,
+  X,
+  Users,
+  Building2,
+  Zap,
+  Loader2,
+  ArrowRight,
+} from "lucide-react";
 
-const plans = [
-  {
-    name: "Free",
-    price: "₹0",
-    period: "/month",
-    description: "Perfect for trying out VantaHire",
-    cta: "Start Free",
-    highlighted: false,
-    features: [
-      { name: "1 active job posting", included: true },
-      { name: "Basic candidate management", included: true },
-      { name: "Email support", included: true },
-      { name: "AI candidate scoring", included: false },
-      { name: "Bulk actions", included: false },
-      { name: "Analytics dashboard", included: false },
-      { name: "Team collaboration", included: false }
-    ]
-  },
-  {
-    name: "Pro",
-    price: "₹999",
-    period: "/month",
-    description: "Everything you need to hire faster",
-    cta: "Start Free Trial",
-    highlighted: true,
-    features: [
-      { name: "Unlimited job postings", included: true },
-      { name: "AI candidate scoring", included: true },
-      { name: "Bulk actions & automation", included: true },
-      { name: "Analytics dashboard", included: true },
-      { name: "Team collaboration", included: true },
-      { name: "Priority support", included: true },
-      { name: "Custom pipeline stages", included: true }
-    ]
-  },
-  {
-    name: "Enterprise",
-    price: "Custom",
-    period: "",
-    description: "For large teams with custom needs",
-    cta: "Contact Sales",
-    highlighted: false,
-    features: [
-      { name: "Everything in Pro", included: true },
-      { name: "Volume discounts", included: true },
-      { name: "Dedicated account manager", included: true },
-      { name: "Custom integrations", included: true },
-      { name: "SLA guarantees", included: true },
-      { name: "On-premise deployment", included: true },
-      { name: "Custom training", included: true }
-    ]
-  }
-];
+interface PlanFeature {
+  name: string;
+  free: boolean | string;
+  pro: boolean | string;
+  business: boolean | string;
+}
 
-const faqs = [
-  {
-    question: "Can I try before I buy?",
-    answer: "Yes! Our Free plan lets you try VantaHire with one active job. When you're ready for more, upgrade to Pro and get a 14-day free trial."
-  },
-  {
-    question: "What payment methods do you accept?",
-    answer: "We accept all major credit cards, UPI, and bank transfers for annual plans. Enterprise customers can also pay via invoice."
-  },
-  {
-    question: "Can I cancel anytime?",
-    answer: "Absolutely. You can cancel your subscription at any time. Your access continues until the end of your billing period."
-  },
-  {
-    question: "Do you offer discounts for startups?",
-    answer: "Yes! Early-stage startups can get 50% off Pro for the first year. Contact us to learn more about our startup program."
-  },
-  {
-    question: "Is there a limit on team members?",
-    answer: "No per-seat pricing! Invite your entire team on Pro and Enterprise plans without paying extra per user."
-  }
+const features: PlanFeature[] = [
+  { name: "Active job postings", free: "5", pro: "Unlimited", business: "Unlimited" },
+  { name: "Team members", free: "1", pro: "Pay per seat", business: "Custom" },
+  { name: "AI credits per seat/month", free: "5", pro: "600", business: "Custom" },
+  { name: "Credit rollover", free: "15 max", pro: "1,800 max", business: "Custom" },
+  { name: "Candidate management", free: true, pro: true, business: true },
+  { name: "Application tracking", free: true, pro: true, business: true },
+  { name: "Email notifications", free: true, pro: true, business: true },
+  { name: "Co-recruiter sharing", free: true, pro: true, business: true },
+  { name: "Hiring manager access", free: true, pro: true, business: true },
+  { name: "Custom forms", free: true, pro: true, business: true },
+  { name: "Client shortlists", free: true, pro: true, business: true },
+  { name: "Advanced analytics", free: false, pro: true, business: true },
+  { name: "Priority support", free: false, pro: true, business: true },
+  { name: "Custom domain", free: false, pro: false, business: true },
+  { name: "Dedicated instance", free: false, pro: false, business: true },
+  { name: "SLA guarantee", free: false, pro: false, business: true },
 ];
 
 export default function PricingPage() {
-  const [isVisible, setIsVisible] = useState(false);
-  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const { user } = useAuth();
+  const { data: plans } = usePlans();
+  const { data: subscription } = useSubscription();
+  const createCheckout = useCreateCheckout();
+  const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
-  useEffect(() => {
-    const timer = setTimeout(() => setIsVisible(true), 200);
-    return () => clearTimeout(timer);
-  }, []);
+  const [checkoutDialogOpen, setCheckoutDialogOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<number | null>(null);
+  const [seats, setSeats] = useState(1);
+  const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
 
-  const handleCta = (plan: typeof plans[0]) => {
-    const planKey = plan.name.toLowerCase();
-    trackEvent("plan_cta_click", { plan: planKey, source: "pricing_page" });
-    if (plan.name === "Enterprise") {
-      window.open('https://cal.com/vantahire/quick-connect', '_blank');
-    } else {
-      window.location.href = '/recruiter-auth';
+  const proPlan = plans?.find(p => p.name === 'pro');
+  const isLoggedIn = !!user;
+  const currentPlan = subscription?.plan?.name || 'free';
+  const isPro = currentPlan === 'pro';
+
+  const handleSelectPro = () => {
+    if (!isLoggedIn) {
+      setLocation('/auth?redirect=/pricing');
+      return;
+    }
+
+    if (proPlan) {
+      setSelectedPlan(proPlan.id);
+      setCheckoutDialogOpen(true);
     }
   };
 
+  const handleCheckout = async () => {
+    if (!selectedPlan) return;
+
+    try {
+      const result = await createCheckout.mutateAsync({
+        planId: selectedPlan,
+        seats,
+        billingCycle,
+      });
+
+      if (result.checkoutUrl) {
+        window.location.href = result.checkoutUrl;
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to create checkout session",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to start checkout",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleContactSales = () => {
+    window.location.href = 'mailto:sales@vantahire.com?subject=VantaHire%20Business%20Plan%20Inquiry';
+  };
+
+  const renderFeatureValue = (value: boolean | string) => {
+    if (typeof value === 'boolean') {
+      return value ? (
+        <Check className="h-5 w-5 text-green-500 mx-auto" />
+      ) : (
+        <X className="h-5 w-5 text-slate-300 mx-auto" />
+      );
+    }
+    return <span className="text-center">{value}</span>;
+  };
+
   return (
-    <Layout>
-      <Helmet>
-        <title>Pricing | VantaHire - Simple Pricing, No Surprises</title>
-        <meta name="description" content="Start free, scale when you're ready. VantaHire pricing starts at ₹0/month with unlimited jobs on Pro at ₹999/month." />
-        <link rel="canonical" href="https://www.vantahire.com/pricing" />
-        <meta property="og:title" content="Pricing | VantaHire - Simple Pricing, No Surprises" />
-        <meta property="og:description" content="Simple, transparent pricing. No per-seat fees. Start free and upgrade when you're ready." />
-        <meta property="og:url" content="https://www.vantahire.com/pricing" />
-        <meta property="og:type" content="website" />
-        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
-        <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Pricing | VantaHire - Simple Pricing, No Surprises" />
-        <meta name="twitter:description" content="Simple, transparent pricing. No per-seat fees. Start free and upgrade when you're ready." />
-        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
-        <script type="application/ld+json">
-          {JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "BreadcrumbList",
-            "itemListElement": [
-              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" },
-              { "@type": "ListItem", "position": 2, "name": "Pricing", "item": "https://www.vantahire.com/pricing" }
-            ]
-          })}
-        </script>
-        <script type="application/ld+json">
-          {JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "FAQPage",
-            "mainEntity": [
-              {
-                "@type": "Question",
-                "name": "Can I try before I buy?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "Yes! Our Free plan lets you try VantaHire with one active job. When you're ready for more, upgrade to Pro and get a 14-day free trial."
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "What payment methods do you accept?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "We accept all major credit cards, UPI, and bank transfers for annual plans. Enterprise customers can also pay via invoice."
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "Can I cancel anytime?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "Absolutely. You can cancel your subscription at any time. Your access continues until the end of your billing period."
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "Do you offer discounts for startups?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "Yes! Early-stage startups can get 50% off Pro for the first year. Contact us to learn more about our startup program."
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "Is there a limit on team members?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "No per-seat pricing! Invite your entire team on Pro and Enterprise plans without paying extra per user."
-                }
-              }
-            ]
-          })}
-        </script>
-      </Helmet>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+      <div className="container max-w-6xl py-12 px-4">
+        <div className="text-center mb-12">
+          <h1 className="text-4xl font-bold mb-4">Simple, Transparent Pricing</h1>
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+            Start free and scale as you grow. No hidden fees, no surprises.
+          </p>
+        </div>
 
-      <div className="public-theme min-h-screen bg-background text-foreground">
-        {/* Background effects */}
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxIiBjeT0iMSIgcj0iMSIgZmlsbD0id2hpdGUiIGZpbGwtb3BhY2l0eT0iMC4wNSIvPjwvc3ZnPg==')] opacity-10"></div>
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-[100px] animate-pulse-slow"></div>
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/10 rounded-full blur-[100px] animate-pulse-slow" style={{ animationDelay: '1.2s' }}></div>
-
-        <div className={`container mx-auto px-4 py-16 relative z-10 transition-opacity duration-1000 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
-          {/* Hero Section */}
-          <div className="text-center mb-16 pt-8">
-            <div className="w-20 h-1.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] rounded-full mx-auto mb-6"></div>
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
-              <span className="text-white">Simple Pricing,</span>
-              <br />
-              <span className="gradient-text-purple">No Surprises</span>
-            </h1>
-            <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Start free. Scale when you're ready.
-            </p>
-          </div>
-
-          {/* Pricing Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto mb-20">
-            {plans.map((plan, index) => (
-              <div
-                key={index}
-                className={`relative rounded-2xl p-8 ${
-                  plan.highlighted
-                    ? 'bg-gradient-to-br from-primary/20 to-primary/5 border-2 border-primary'
-                    : 'bg-gradient-to-br from-[hsl(var(--vanta-dark))]/90 to-[hsl(var(--vanta-dark))]/70 border border-white/5'
-                }`}
-              >
-                {plan.highlighted && (
-                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                    <span className="bg-primary text-white text-sm font-semibold px-4 py-1 rounded-full">
-                      Most Popular
-                    </span>
-                  </div>
-                )}
-                <div className="text-center mb-6">
-                  <h3 className="text-xl font-semibold text-white mb-2">{plan.name}</h3>
-                  <div className="flex items-baseline justify-center gap-1">
-                    <span className="text-4xl font-bold text-white">{plan.price}</span>
-                    <span className="text-muted-foreground">{plan.period}</span>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-2">{plan.description}</p>
-                </div>
-                <ul className="space-y-3 mb-8">
-                  {plan.features.map((feature, featureIndex) => (
-                    <li key={featureIndex} className="flex items-center gap-3">
-                      {feature.included ? (
-                        <Check className="w-5 h-5 text-primary flex-shrink-0" />
-                      ) : (
-                        <X className="w-5 h-5 text-muted-foreground/50 flex-shrink-0" />
-                      )}
-                      <span className={feature.included ? 'text-white/80' : 'text-muted-foreground/50'}>
-                        {feature.name}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  variant={plan.highlighted ? 'gold' : 'outlinePurple'}
-                  className="w-full rounded-full py-6"
-                  onClick={() => handleCta(plan)}
-                >
-                  {plan.cta}
-                </Button>
+        <div className="grid md:grid-cols-3 gap-6 mb-16">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Users className="h-5 w-5" />
+                Free
+              </CardTitle>
+              <CardDescription>Perfect for solo recruiters</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-3xl font-bold">
+                {formatPriceINR(0)}
+                <span className="text-sm font-normal text-muted-foreground">/month</span>
               </div>
-            ))}
-          </div>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  1 team member
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  5 AI credits per month
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  Up to 5 active jobs
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  Basic ATS features
+                </li>
+              </ul>
+            </CardContent>
+            <CardFooter>
+              {currentPlan === 'free' ? (
+                <Button variant="outline" className="w-full" disabled>
+                  Current Plan
+                </Button>
+              ) : (
+                <Button variant="outline" className="w-full" onClick={() => setLocation('/auth')}>
+                  Get Started
+                </Button>
+              )}
+            </CardFooter>
+          </Card>
 
-          {/* FAQ Section */}
-          <div className="max-w-3xl mx-auto mb-20">
-            <h2 className="text-3xl font-bold text-white text-center mb-12">
-              Frequently Asked Questions
-            </h2>
-            <div className="space-y-4">
-              {faqs.map((faq, index) => (
-                <div
-                  key={index}
-                  className="bg-gradient-to-br from-[hsl(var(--vanta-dark))]/90 to-[hsl(var(--vanta-dark))]/70 rounded-xl border border-white/5 overflow-hidden"
-                >
-                  <button
-                    className="w-full px-6 py-4 flex items-center justify-between text-left"
-                    onClick={() => setOpenFaq(openFaq === index ? null : index)}
-                  >
-                    <span className="text-white font-medium">{faq.question}</span>
-                    <ChevronDown
-                      className={`w-5 h-5 text-muted-foreground transition-transform ${
-                        openFaq === index ? 'rotate-180' : ''
-                      }`}
-                    />
-                  </button>
-                  {openFaq === index && (
-                    <div className="px-6 pb-4">
-                      <p className="text-white/70">{faq.answer}</p>
-                    </div>
-                  )}
-                </div>
-              ))}
+          <Card className="border-2 border-primary relative">
+            <Badge className="absolute -top-3 left-1/2 -translate-x-1/2">
+              Most Popular
+            </Badge>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Zap className="h-5 w-5 text-primary" />
+                Pro
+              </CardTitle>
+              <CardDescription>For growing teams</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-3xl font-bold">
+                {proPlan ? formatPriceINR(proPlan.pricePerSeatMonthly) : '...'}
+                <span className="text-sm font-normal text-muted-foreground">/seat/month</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Save 17% with annual billing
+              </p>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  Unlimited team members
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  600 AI credits per seat/month
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  Unlimited active jobs
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  Advanced analytics
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  Priority support
+                </li>
+              </ul>
+            </CardContent>
+            <CardFooter>
+              {isPro ? (
+                <Button className="w-full" disabled>
+                  Current Plan
+                </Button>
+              ) : (
+                <Button className="w-full" onClick={handleSelectPro}>
+                  Upgrade to Pro
+                  <ArrowRight className="h-4 w-4 ml-2" />
+                </Button>
+              )}
+            </CardFooter>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5" />
+                Business
+              </CardTitle>
+              <CardDescription>For large organizations</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-3xl font-bold">
+                Custom
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Tailored to your needs
+              </p>
+              <ul className="space-y-2 text-sm">
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  Dedicated instance
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  Custom AI credit allocation
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  Custom domain
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  SLA guarantee
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-4 w-4 text-green-500" />
+                  Dedicated support
+                </li>
+              </ul>
+            </CardContent>
+            <CardFooter>
+              <Button variant="outline" className="w-full" onClick={handleContactSales}>
+                Contact Sales
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+
+        <div className="mb-12">
+          <h2 className="text-2xl font-bold text-center mb-8">Feature Comparison</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left py-4 px-4 font-medium">Feature</th>
+                  <th className="py-4 px-4 font-medium text-center w-32">Free</th>
+                  <th className="py-4 px-4 font-medium text-center w-32 bg-primary/5">Pro</th>
+                  <th className="py-4 px-4 font-medium text-center w-32">Business</th>
+                </tr>
+              </thead>
+              <tbody>
+                {features.map((feature, index) => (
+                  <tr key={feature.name} className={index % 2 === 0 ? 'bg-slate-50' : ''}>
+                    <td className="py-3 px-4">{feature.name}</td>
+                    <td className="py-3 px-4 text-center">{renderFeatureValue(feature.free)}</td>
+                    <td className="py-3 px-4 text-center bg-primary/5">{renderFeatureValue(feature.pro)}</td>
+                    <td className="py-3 px-4 text-center">{renderFeatureValue(feature.business)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="max-w-3xl mx-auto">
+          <h2 className="text-2xl font-bold text-center mb-8">Frequently Asked Questions</h2>
+          <div className="space-y-6">
+            <div>
+              <h3 className="font-semibold mb-2">What are AI credits?</h3>
+              <p className="text-muted-foreground">
+                AI credits are used for AI-powered features like job description generation,
+                resume analysis, and candidate matching. Each AI operation consumes credits.
+              </p>
             </div>
-          </div>
-
-          {/* CTA Section */}
-          <div className="text-center py-12">
-            <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
-              Still Have Questions?
-            </h2>
-            <p className="text-lg text-muted-foreground mb-8">
-              Our team is happy to help you find the right plan.
-            </p>
-            <Button
-              variant="outlinePurple"
-              size="lg"
-              onClick={() => window.open('https://cal.com/vantahire/quick-connect', '_blank')}
-              className="rounded-full px-8 py-6 text-lg"
-            >
-              Talk to Sales
-            </Button>
+            <div>
+              <h3 className="font-semibold mb-2">Can I change my plan anytime?</h3>
+              <p className="text-muted-foreground">
+                Yes! You can upgrade at any time and the change takes effect immediately with prorated billing.
+                Downgrades take effect at the end of your current billing period.
+              </p>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-2">What payment methods do you accept?</h3>
+              <p className="text-muted-foreground">
+                We accept UPI, credit/debit cards, and net banking through our secure payment partner Cashfree.
+              </p>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-2">Do you offer refunds?</h3>
+              <p className="text-muted-foreground">
+                We offer a 7-day money-back guarantee for new Pro subscriptions.
+                Contact support within 7 days of your first payment for a full refund.
+              </p>
+            </div>
           </div>
         </div>
       </div>
-    </Layout>
+
+      <Dialog open={checkoutDialogOpen} onOpenChange={setCheckoutDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upgrade to Pro</DialogTitle>
+            <DialogDescription>
+              Choose your seat count and billing cycle.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Number of Seats</Label>
+              <Input
+                type="number"
+                min={1}
+                max={1000}
+                value={seats}
+                onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
+              />
+              <p className="text-sm text-muted-foreground">
+                Each seat gets 600 AI credits per month.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label>Billing Cycle</Label>
+              <Select value={billingCycle} onValueChange={(v: 'monthly' | 'annual') => setBillingCycle(v)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="monthly">Monthly</SelectItem>
+                  <SelectItem value="annual">Annual (Save 17%)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {proPlan && (
+              <div className="p-4 bg-slate-50 rounded-lg">
+                <div className="flex justify-between">
+                  <span>Total</span>
+                  <span className="font-bold">
+                    {formatPriceINR(
+                      billingCycle === 'monthly'
+                        ? proPlan.pricePerSeatMonthly * seats
+                        : proPlan.pricePerSeatAnnual * seats
+                    )}
+                    <span className="text-sm font-normal text-muted-foreground">
+                      /{billingCycle === 'monthly' ? 'month' : 'year'}
+                    </span>
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  + 18% GST applicable
+                </p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCheckoutDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCheckout} disabled={createCheckout.isPending}>
+              {createCheckout.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              Continue to Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

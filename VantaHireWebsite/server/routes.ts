@@ -26,6 +26,11 @@ import { registerTalentPoolRoutes } from "./talent-pool.routes";
 import { registerHiringManagerInvitationRoutes } from "./hiringManagerInvitations.routes";
 import { registerCoRecruiterInvitationRoutes } from "./coRecruiterInvitations.routes";
 import { doubleCsrfProtection as csrfProtectionModule, generateToken as generateTokenModule } from "./csrf";
+import { registerOrganizationRoutes } from "./organization.routes";
+import { registerSubscriptionRoutes } from "./subscription.routes";
+import { registerBillingRoutes } from "./billing.routes";
+import { registerAdminSubscriptionRoutes } from "./admin-subscription.routes";
+import { registerCashfreeWebhook } from "./webhooks/cashfree.webhook";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup security middleware with environment-aware CSP
@@ -399,6 +404,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Register co-recruiter invitation routes
   registerCoRecruiterInvitationRoutes(app, doubleCsrfProtection);
+
+  // Register organization routes (org management, members, invites, join requests)
+  registerOrganizationRoutes(app, doubleCsrfProtection);
+
+  // Register subscription routes (plans, subscriptions, seats, AI credits)
+  registerSubscriptionRoutes(app, doubleCsrfProtection);
+
+  // Register billing routes (GSTIN, billing info)
+  registerBillingRoutes(app, doubleCsrfProtection);
+
+  // Register admin subscription routes (super_admin only)
+  registerAdminSubscriptionRoutes(app, doubleCsrfProtection);
+
+  // Register Cashfree webhook (payment callbacks)
+  registerCashfreeWebhook(app);
 
   // Register AI matching routes (resume library + fit scoring)
   registerAIRoutes(app);

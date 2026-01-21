@@ -1,0 +1,371 @@
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+
+// Types
+export interface SubscriptionPlan {
+  id: number;
+  name: string;
+  displayName: string;
+  description?: string | null;
+  pricePerSeatMonthly: number;
+  pricePerSeatAnnual: number;
+  aiCreditsPerSeatMonthly: number;
+  maxCreditRolloverMonths: number;
+  features: Record<string, any>;
+  isActive: boolean;
+}
+
+export interface Subscription {
+  id: number;
+  organizationId: number;
+  planId: number;
+  seats: number;
+  billingCycle: 'monthly' | 'annual';
+  status: 'active' | 'past_due' | 'cancelled' | 'trialing';
+  startDate: string;
+  currentPeriodStart: string;
+  currentPeriodEnd: string;
+  cancelledAt?: string | null;
+  cancelAtPeriodEnd: boolean;
+  gracePeriodEndDate?: string | null;
+  paymentFailureCount: number;
+  plan: SubscriptionPlan;
+}
+
+export interface SeatUsage {
+  purchased: number;
+  assigned: number;
+  available: number;
+}
+
+export interface Invoice {
+  id: number;
+  invoiceNumber?: string;
+  amount: number;
+  taxAmount: number;
+  totalAmount: number;
+  status: string;
+  type: string;
+  createdAt: string;
+  completedAt?: string | null;
+  invoiceUrl?: string | null;
+}
+
+// API functions
+async function fetchPlans() {
+  const res = await fetch('/api/subscription/plans', {
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch plans');
+  }
+  return res.json();
+}
+
+async function fetchSubscription() {
+  const res = await fetch('/api/subscription', {
+    credentials: 'include',
+  });
+  if (res.status === 404) {
+    return null;
+  }
+  if (!res.ok) {
+    throw new Error('Failed to fetch subscription');
+  }
+  return res.json();
+}
+
+async function fetchSeatUsage() {
+  const res = await fetch('/api/subscription/seats/usage', {
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch seat usage');
+  }
+  return res.json();
+}
+
+async function fetchInvoices() {
+  const res = await fetch('/api/subscription/invoices', {
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch invoices');
+  }
+  return res.json();
+}
+
+// Hooks
+export function usePlans() {
+  return useQuery<SubscriptionPlan[]>({
+    queryKey: ['subscription', 'plans'],
+    queryFn: fetchPlans,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+}
+
+export function useSubscription() {
+  return useQuery<Subscription | null>({
+    queryKey: ['subscription', 'current'],
+    queryFn: fetchSubscription,
+    staleTime: 1000 * 60, // 1 minute
+  });
+}
+
+export function useSeatUsage() {
+  return useQuery<SeatUsage>({
+    queryKey: ['subscription', 'seats'],
+    queryFn: fetchSeatUsage,
+    staleTime: 1000 * 30, // 30 seconds
+  });
+}
+
+export function useInvoices() {
+  return useQuery<Invoice[]>({
+    queryKey: ['subscription', 'invoices'],
+    queryFn: fetchInvoices,
+    staleTime: 1000 * 60, // 1 minute
+  });
+}
+
+export function useCreateCheckout() {
+  return useMutation({
+    mutationFn: async (data: { planId: number; seats: number; billingCycle: 'monthly' | 'annual' }) => {
+      const csrfRes = await fetch('/api/csrf-token', { credentials: 'include' });
+      const { token } = await csrfRes.json();
+
+      const res = await fetch('/api/subscription/checkout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': token,
+        },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to create checkout');
+      }
+      return res.json();
+    },
+  });
+}
+
+export function useAddSeats() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (additionalSeats: number) => {
+      const csrfRes = await fetch('/api/csrf-token', { credentials: 'include' });
+      const { token } = await csrfRes.json();
+
+      const res = await fetch('/api/subscription/seats', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': token,
+        },
+        body: JSON.stringify({ additionalSeats }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to add seats');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subscription'] });
+    },
+  });
+}
+
+export function useReduceSeats() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (data: { newSeatCount: number; memberIdsToKeep: number[] }) => {
+      const csrfRes = await fetch('/api/csrf-token', { credentials: 'include' });
+      const { token } = await csrfRes.json();
+
+      const res = await fetch('/api/subscription/seats/reduce', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': token,
+        },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to reduce seats');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subscription'] });
+      queryClient.invalidateQueries({ queryKey: ['organization', 'members'] });
+    },
+  });
+}
+
+export function useCancelSubscription() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const csrfRes = await fetch('/api/csrf-token', { credentials: 'include' });
+      const { token } = await csrfRes.json();
+
+      const res = await fetch('/api/subscription/cancel', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'x-csrf-token': token,
+        },
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to cancel subscription');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subscription'] });
+    },
+  });
+}
+
+export function useReactivateSubscription() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const csrfRes = await fetch('/api/csrf-token', { credentials: 'include' });
+      const { token } = await csrfRes.json();
+
+      const res = await fetch('/api/subscription/reactivate', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'x-csrf-token': token,
+        },
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to reactivate subscription');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subscription'] });
+    },
+  });
+}
+
+/**
+ * Change billing cycle (takes effect at next renewal)
+ */
+export function useChangeBillingCycle() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (billingCycle: 'monthly' | 'annual') => {
+      const csrfRes = await fetch('/api/csrf-token', { credentials: 'include' });
+      const { token } = await csrfRes.json();
+
+      const res = await fetch('/api/subscription/billing-cycle', {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': token,
+        },
+        body: JSON.stringify({ billingCycle }),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to change billing cycle');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subscription'] });
+    },
+  });
+}
+
+/**
+ * Cancel pending billing cycle change
+ */
+export function useCancelBillingCycleChange() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const csrfRes = await fetch('/api/csrf-token', { credentials: 'include' });
+      const { token } = await csrfRes.json();
+
+      const res = await fetch('/api/subscription/billing-cycle', {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: {
+          'x-csrf-token': token,
+        },
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to cancel billing cycle change');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['subscription'] });
+    },
+  });
+}
+
+/**
+ * Download invoice PDF
+ */
+export function useDownloadInvoice() {
+  return useMutation({
+    mutationFn: async (transactionId: number) => {
+      const res = await fetch(`/api/subscription/invoices/${transactionId}/pdf`, {
+        credentials: 'include',
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to download invoice');
+      }
+      // Handle the PDF download
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const contentDisposition = res.headers.get('content-disposition');
+      const fileName = contentDisposition
+        ?.split('filename=')[1]
+        ?.replace(/"/g, '') || `invoice-${transactionId}.pdf`;
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      return { success: true };
+    },
+  });
+}
+
+// Helper function to format price in INR
+export function formatPriceINR(paise: number): string {
+  const rupees = paise / 100;
+  return new Intl.NumberFormat('en-IN', {
+    style: 'currency',
+    currency: 'INR',
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(rupees);
+}
