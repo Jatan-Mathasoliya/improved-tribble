@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { Express, Request, Response, NextFunction } from "express";
-import { requireAuth, requireRole } from "./auth";
+import type { Express } from "express";
+import { requireAuth } from "./auth";
 import { db } from "./db";
 import {
   organizations,
@@ -8,6 +8,7 @@ import {
   subscriptionPlans,
   organizationMembers,
   domainClaimRequests,
+  subscriptionAuditLog,
 } from "@shared/schema";
 import { eq, and, desc, sql, count } from "drizzle-orm";
 import {
@@ -20,9 +21,18 @@ import {
   getPlanById,
   adminOverrideSubscription,
   createPaidSubscription,
+  getSubscriptionAuditLog,
 } from "./lib/subscriptionService";
 import { calculateMRR } from "./lib/invoiceService";
-import { isSuperAdminEnabled } from "./lib/featureGating";
+import {
+  FEATURES,
+  FEATURE_METADATA,
+  getFeatureDefaultsByPlan,
+  getOrganizationFeatures,
+  getSubscriptionLimits,
+  isValidFeatureKey,
+} from "./lib/featureGating";
+import { requireSuperAdmin } from "./lib/adminAuth";
 import { getEmailService } from "./simpleEmailService";
 import { users } from "@shared/schema";
 
@@ -53,27 +63,16 @@ const overrideSubscriptionSchema = z.object({
   reason: z.string().min(1).max(500),
 });
 
-// Super admin middleware
-function requireSuperAdmin() {
-  return (req: Request, res: Response, next: NextFunction): void => {
-    if (!req.user) {
-      res.status(401).json({ error: 'Authentication required' });
-      return;
-    }
+// Feature overrides schema with key validation
+const featureOverridesSchema = z.record(z.boolean().nullable()).refine(
+  (obj) => Object.keys(obj).every(isValidFeatureKey),
+  { message: "Invalid feature key" }
+);
 
-    if (req.user.role !== 'super_admin') {
-      res.status(403).json({ error: 'Super admin access required' });
-      return;
-    }
-
-    if (!isSuperAdminEnabled()) {
-      res.status(403).json({ error: 'Super admin features are disabled' });
-      return;
-    }
-
-    next();
-  };
-}
+const updateFeaturesSchema = z.object({
+  overrides: featureOverridesSchema,
+  reason: z.string().min(1).max(500),
+});
 
 export function registerAdminSubscriptionRoutes(
   app: Express,
@@ -174,7 +173,30 @@ export function registerAdminSubscriptionRoutes(
         return;
       }
 
-      res.json(org);
+      // Get jobs and applications count for this organization
+      const statsResult = await db.execute(sql`
+        SELECT
+          (SELECT COUNT(*) FROM jobs WHERE organization_id = ${orgId}) as jobs_count,
+          (SELECT COUNT(*) FROM jobs WHERE organization_id = ${orgId} AND status = 'open') as active_jobs_count,
+          (SELECT COUNT(*) FROM applications a
+           INNER JOIN jobs j ON a.job_id = j.id
+           WHERE j.organization_id = ${orgId}) as applications_count,
+          (SELECT COUNT(DISTINCT a.candidate_id) FROM applications a
+           INNER JOIN jobs j ON a.job_id = j.id
+           WHERE j.organization_id = ${orgId}) as candidates_count
+      `);
+
+      const stats = statsResult.rows[0] || {};
+
+      res.json({
+        ...org,
+        stats: {
+          jobsCount: Number(stats.jobs_count || 0),
+          activeJobsCount: Number(stats.active_jobs_count || 0),
+          applicationsCount: Number(stats.applications_count || 0),
+          candidatesCount: Number(stats.candidates_count || 0),
+        },
+      });
     } catch (error: any) {
       console.error("Error getting organization:", error);
       res.status(500).json({ error: "Failed to get organization" });
@@ -541,6 +563,169 @@ export function registerAdminSubscriptionRoutes(
     } catch (error: any) {
       console.error("Error getting AI usage analytics:", error);
       res.status(500).json({ error: "Failed to get AI usage analytics" });
+    }
+  });
+
+  // ===== Feature Management =====
+
+  // List all features with metadata and DB-computed defaults
+  app.get("/api/admin/features", requireAuth, requireSuperAdmin(), async (req, res) => {
+    try {
+      const defaultsByPlan = await getFeatureDefaultsByPlan();
+
+      const features = Object.entries(FEATURE_METADATA).map(([key, meta]) => ({
+        key,
+        ...meta,
+        defaultByPlan: Object.fromEntries(
+          Object.entries(defaultsByPlan).map(([plan, planFeatures]) => [
+            plan,
+            planFeatures[key as keyof typeof planFeatures],
+          ])
+        ),
+      }));
+
+      res.json({ features });
+    } catch (error: any) {
+      console.error("Error listing features:", error);
+      res.status(500).json({ error: "Failed to list features" });
+    }
+  });
+
+  // Get organization's resolved features
+  app.get("/api/admin/organizations/:id/features", requireAuth, requireSuperAdmin(), async (req, res) => {
+    try {
+      const orgId = parseInt(req.params.id ?? '0');
+
+      const org = await db.query.organizations.findFirst({
+        where: eq(organizations.id, orgId),
+        columns: { id: true, name: true },
+      });
+
+      if (!org) {
+        res.status(404).json({ error: "Organization not found" });
+        return;
+      }
+
+      const subscription = await getOrganizationSubscription(orgId);
+      const resolvedFeatures = await getOrganizationFeatures(orgId);
+      const limits = await getSubscriptionLimits(orgId);
+      const overrides = (subscription?.featureOverrides || {}) as Record<string, boolean>;
+
+      // Build response with source tracking
+      const features: Record<string, { enabled: boolean; source: 'plan' | 'override' }> = {};
+      for (const [key, enabled] of Object.entries(resolvedFeatures)) {
+        features[key] = {
+          enabled,
+          source: key in overrides ? 'override' : 'plan',
+        };
+      }
+
+      res.json({
+        organizationId: orgId,
+        organizationName: org.name,
+        planName: subscription?.plan.name || 'free',
+        planDisplayName: subscription?.plan.displayName || 'Free',
+        features,
+        overrides,
+        limits: {
+          maxSeats: limits.maxSeats,
+          maxJobsActive: limits.maxJobsActive,
+          maxApplicationsPerJob: limits.maxApplicationsPerJob,
+          maxAiCreditsPerMonth: limits.maxAiCreditsPerMonth,
+        },
+      });
+    } catch (error: any) {
+      console.error("Error getting organization features:", error);
+      res.status(500).json({ error: "Failed to get organization features" });
+    }
+  });
+
+  // Update organization's feature overrides
+  app.post("/api/admin/organizations/:id/features", requireAuth, requireSuperAdmin(), csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgId = parseInt(req.params.id ?? '0');
+
+      const { overrides, reason } = updateFeaturesSchema.parse(req.body);
+
+      const subscription = await getOrganizationSubscription(orgId);
+      if (!subscription) {
+        res.status(400).json({ error: "Organization has no subscription to override. Create a subscription first." });
+        return;
+      }
+
+      // Merge with existing overrides
+      const currentOverrides = (subscription.featureOverrides || {}) as Record<string, any>;
+      const newOverrides = { ...currentOverrides };
+
+      // Apply new overrides, remove nulls to clear
+      for (const [key, value] of Object.entries(overrides)) {
+        if (value === null) {
+          delete newOverrides[key];
+        } else {
+          newOverrides[key] = value;
+        }
+      }
+
+      await adminOverrideSubscription(
+        subscription.id,
+        { featureOverrides: Object.keys(newOverrides).length > 0 ? newOverrides : {} },
+        user.id,
+        `Feature override: ${reason}`
+      );
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error("Error updating organization features:", error);
+      if (error.name === "ZodError") {
+        res.status(400).json({ error: "Invalid input", details: error.errors });
+        return;
+      }
+      res.status(500).json({ error: error.message || "Failed to update organization features" });
+    }
+  });
+
+  // Get feature audit log (org-scoped or global recent)
+  app.get("/api/admin/features/audit-log", requireAuth, requireSuperAdmin(), async (req, res) => {
+    try {
+      const orgId = req.query.orgId ? parseInt(req.query.orgId as string) : undefined;
+
+      if (orgId) {
+        // Reuse existing org-scoped function
+        const logs = await getSubscriptionAuditLog(orgId);
+        // Filter to feature-related changes
+        const featureLogs = logs.filter((log: any) =>
+          log.action === 'admin_override' &&
+          (log.newValue?.featureOverrides || log.previousValue?.featureOverrides)
+        );
+        res.json(featureLogs);
+        return;
+      }
+
+      // Global: get recent admin_override actions with org info via join
+      const logs = await db
+        .select({
+          id: subscriptionAuditLog.id,
+          organizationId: subscriptionAuditLog.organizationId,
+          subscriptionId: subscriptionAuditLog.subscriptionId,
+          action: subscriptionAuditLog.action,
+          previousValue: subscriptionAuditLog.previousValue,
+          newValue: subscriptionAuditLog.newValue,
+          performedBy: subscriptionAuditLog.performedBy,
+          performedAt: subscriptionAuditLog.performedAt,
+          reason: subscriptionAuditLog.reason,
+          orgName: organizations.name,
+        })
+        .from(subscriptionAuditLog)
+        .innerJoin(organizations, eq(subscriptionAuditLog.organizationId, organizations.id))
+        .where(eq(subscriptionAuditLog.action, 'admin_override'))
+        .orderBy(desc(subscriptionAuditLog.performedAt))
+        .limit(50);
+
+      res.json(logs);
+    } catch (error: any) {
+      console.error("Error getting feature audit log:", error);
+      res.status(500).json({ error: "Failed to get feature audit log" });
     }
   });
 }

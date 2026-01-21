@@ -202,7 +202,7 @@ export default function AdminSubscriptionsPage() {
 
   return (
     <Layout>
-      <div className="container max-w-6xl py-8 space-y-6">
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <CreditCard className="h-6 w-6" />

@@ -883,6 +883,38 @@ export const subscriptionAuditLog = pgTable("subscription_audit_log", {
   performedAtIdx: index("subscription_audit_log_performed_at_idx").on(table.performedAt),
 }));
 
+// Checkout intents - for public checkout flow before org/user creation
+export const checkoutIntents = pgTable("checkout_intents", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  orgName: text("org_name").notNull(),
+  userId: integer("user_id").references(() => users.id), // nullable - set if user already exists
+  organizationId: integer("organization_id").references(() => organizations.id), // nullable - set if org already exists
+  planId: integer("plan_id").notNull().references(() => subscriptionPlans.id),
+  seats: integer("seats").notNull().default(1),
+  billingCycle: text("billing_cycle").notNull().default('monthly'), // 'monthly' | 'annual'
+  gstin: text("gstin"),
+  billingName: text("billing_name"),
+  billingAddress: text("billing_address"),
+  billingCity: text("billing_city"),
+  billingState: text("billing_state"),
+  billingPincode: text("billing_pincode"),
+  status: text("status").notNull().default('pending'), // 'pending', 'paid', 'claimed', 'expired'
+  cashfreeOrderId: text("cashfree_order_id").unique(),
+  claimToken: text("claim_token").unique(), // for claiming after payment
+  claimedAt: timestamp("claimed_at"),
+  claimedBy: integer("claimed_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  paidAt: timestamp("paid_at"),
+}, (table) => ({
+  emailIdx: index("checkout_intents_email_idx").on(table.email),
+  statusIdx: index("checkout_intents_status_idx").on(table.status),
+  claimTokenIdx: uniqueIndex("checkout_intents_claim_token_idx").on(table.claimToken),
+  cashfreeOrderIdx: uniqueIndex("checkout_intents_cashfree_order_idx").on(table.cashfreeOrderId),
+  expiresAtIdx: index("checkout_intents_expires_at_idx").on(table.expiresAt),
+}));
+
 // =====================================================
 // END ORGANIZATION & SUBSCRIPTION TABLES
 // =====================================================
@@ -1373,6 +1405,26 @@ export const subscriptionAuditLogRelations = relations(subscriptionAuditLog, ({ 
   performedByUser: one(users, {
     fields: [subscriptionAuditLog.performedBy],
     references: [users.id],
+  }),
+}));
+
+export const checkoutIntentsRelations = relations(checkoutIntents, ({ one }) => ({
+  user: one(users, {
+    fields: [checkoutIntents.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [checkoutIntents.organizationId],
+    references: [organizations.id],
+  }),
+  plan: one(subscriptionPlans, {
+    fields: [checkoutIntents.planId],
+    references: [subscriptionPlans.id],
+  }),
+  claimedByUser: one(users, {
+    fields: [checkoutIntents.claimedBy],
+    references: [users.id],
+    relationName: "claimedByUser",
   }),
 }));
 
@@ -2012,6 +2064,28 @@ export const insertSubscriptionAuditLogSchema = z.object({
   reason: z.string().max(500).optional(),
 });
 
+export const checkoutIntentStatuses = ['pending', 'paid', 'claimed', 'expired'] as const;
+
+export const insertCheckoutIntentSchema = z.object({
+  email: z.string().email(),
+  orgName: z.string().min(2).max(100),
+  userId: z.number().int().positive().optional(),
+  organizationId: z.number().int().positive().optional(),
+  planId: z.number().int().positive(),
+  seats: z.number().int().min(1).default(1),
+  billingCycle: z.enum(['monthly', 'annual']).default('monthly'),
+  gstin: z.string().max(20).optional(),
+  billingName: z.string().max(200).optional(),
+  billingAddress: z.string().max(500).optional(),
+  billingCity: z.string().max(100).optional(),
+  billingState: z.string().max(100).optional(),
+  billingPincode: z.string().max(10).optional(),
+  status: z.enum(checkoutIntentStatuses).default('pending'),
+  cashfreeOrderId: z.string().optional(),
+  claimToken: z.string().optional(),
+  expiresAt: z.date(),
+});
+
 // Types
 export type Organization = typeof organizations.$inferSelect;
 export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
@@ -2045,6 +2119,9 @@ export type InsertSubscriptionAlert = z.infer<typeof insertSubscriptionAlertSche
 
 export type SubscriptionAuditLog = typeof subscriptionAuditLog.$inferSelect;
 export type InsertSubscriptionAuditLog = z.infer<typeof insertSubscriptionAuditLogSchema>;
+
+export type CheckoutIntent = typeof checkoutIntents.$inferSelect;
+export type InsertCheckoutIntent = z.infer<typeof insertCheckoutIntentSchema>;
 
 // =====================================================
 // END ORGANIZATION & SUBSCRIPTION INSERT SCHEMAS & TYPES

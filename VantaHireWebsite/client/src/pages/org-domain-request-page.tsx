@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import Layout from "@/components/Layout";
 import { useOrganization } from "@/hooks/use-organization";
 import { useAuth } from "@/hooks/use-auth";
 import { Button } from "@/components/ui/button";
@@ -114,44 +115,50 @@ export default function OrgDomainRequestPage() {
 
   if (isLoading) {
     return (
-      <div className="container max-w-2xl py-8 flex justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
+      <Layout>
+        <div className="max-w-7xl mx-auto p-6 flex justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </Layout>
     );
   }
 
   if (!orgData) {
     return (
-      <div className="container max-w-2xl py-8">
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-center text-muted-foreground">
-              You are not part of any organization.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <Layout>
+        <div className="max-w-7xl mx-auto p-6">
+          <Card>
+            <CardContent className="pt-6">
+              <p className="text-center text-muted-foreground">
+                You are not part of any organization.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </Layout>
     );
   }
 
   if (!isOwner) {
     return (
-      <div className="container max-w-2xl py-8">
-        <Card>
-          <CardContent className="pt-6">
-            <div className="text-center">
-              <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
-              <p className="text-muted-foreground">
-                Only organization owners can request domain verification.
-              </p>
-              <Button variant="outline" className="mt-4" onClick={() => setLocation('/org/settings')}>
-                <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Settings
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <Layout>
+        <div className="max-w-7xl mx-auto p-6">
+          <Card>
+            <CardContent className="pt-6">
+              <div className="text-center">
+                <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
+                <p className="text-muted-foreground">
+                  Only organization owners can request domain verification.
+                </p>
+                <Button variant="outline" className="mt-4" onClick={() => setLocation('/org/settings')}>
+                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  Back to Settings
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </Layout>
     );
   }
 
@@ -160,37 +167,40 @@ export default function OrgDomainRequestPage() {
   // If domain is already verified
   if (org.domain && org.domainVerified) {
     return (
-      <div className="container max-w-2xl py-8">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle className="h-5 w-5 text-green-500" />
-              Domain Verified
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-              <p className="font-medium text-green-800">@{org.domain}</p>
-              <p className="text-sm text-green-700 mt-1">
-                Users with this email domain can now request to join your organization.
-              </p>
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button variant="outline" onClick={() => setLocation('/org/settings')}>
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Settings
-            </Button>
-          </CardFooter>
-        </Card>
-      </div>
+      <Layout>
+        <div className="max-w-7xl mx-auto p-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CheckCircle className="h-5 w-5 text-green-500" />
+                Domain Verified
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                <p className="font-medium text-green-800">@{org.domain}</p>
+                <p className="text-sm text-green-700 mt-1">
+                  Users with this email domain can now request to join your organization.
+                </p>
+              </div>
+            </CardContent>
+            <CardFooter>
+              <Button variant="outline" onClick={() => setLocation('/org/settings')}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Settings
+              </Button>
+            </CardFooter>
+          </Card>
+        </div>
+      </Layout>
     );
   }
 
   // If there's a pending domain request
   if (org.domain && !org.domainVerified) {
     return (
-      <div className="container max-w-2xl py-8">
+      <Layout>
+        <div className="max-w-7xl mx-auto p-6">
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -221,12 +231,14 @@ export default function OrgDomainRequestPage() {
             </Button>
           </CardFooter>
         </Card>
-      </div>
+        </div>
+      </Layout>
     );
   }
 
   return (
-    <div className="container max-w-2xl py-8 space-y-6">
+    <Layout>
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
       <Button variant="ghost" onClick={() => setLocation('/org/settings')}>
         <ArrowLeft className="h-4 w-4 mr-2" />
         Back to Settings
@@ -304,6 +316,7 @@ export default function OrgDomainRequestPage() {
           </CardFooter>
         </form>
       </Card>
-    </div>
+      </div>
+    </Layout>
   );
 }

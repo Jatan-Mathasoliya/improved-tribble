@@ -1192,6 +1192,41 @@ export async function ensureAtsSchema(): Promise<void> {
     );
   `);
 
+  // Checkout Intents table (for public checkout flow)
+  console.log('  Creating checkout_intents table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS checkout_intents (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL,
+      org_name TEXT NOT NULL,
+      user_id INTEGER REFERENCES users(id),
+      organization_id INTEGER REFERENCES organizations(id),
+      plan_id INTEGER NOT NULL REFERENCES subscription_plans(id),
+      seats INTEGER NOT NULL DEFAULT 1,
+      billing_cycle TEXT NOT NULL DEFAULT 'monthly',
+      gstin TEXT,
+      billing_name TEXT,
+      billing_address TEXT,
+      billing_city TEXT,
+      billing_state TEXT,
+      billing_pincode TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      cashfree_order_id TEXT UNIQUE,
+      claim_token TEXT UNIQUE,
+      claimed_at TIMESTAMP,
+      claimed_by INTEGER REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      paid_at TIMESTAMP
+    );
+  `);
+  console.log('  Creating checkout_intents indexes...');
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS checkout_intents_email_idx ON checkout_intents(email);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS checkout_intents_status_idx ON checkout_intents(status);`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS checkout_intents_claim_token_idx ON checkout_intents(claim_token) WHERE claim_token IS NOT NULL;`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS checkout_intents_cashfree_order_idx ON checkout_intents(cashfree_order_id) WHERE cashfree_order_id IS NOT NULL;`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS checkout_intents_expires_at_idx ON checkout_intents(expires_at);`);
+
   // Add organizationId to existing tables
   console.log('  Adding organization_id to existing tables...');
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);

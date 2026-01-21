@@ -3,6 +3,7 @@ import {
   useOrganization,
   useUpdateOrganization,
 } from "@/hooks/use-organization";
+import Layout from "@/components/Layout";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -110,30 +111,35 @@ export default function OrgSettingsPage() {
 
   if (isLoading) {
     return (
-      <div className="container max-w-4xl py-8 flex justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
+      <Layout>
+        <div className="max-w-7xl mx-auto p-6 flex justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      </Layout>
     );
   }
 
   if (!orgData) {
     return (
-      <div className="container max-w-4xl py-8">
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-center text-muted-foreground">
-              You are not part of any organization.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <Layout>
+        <div className="max-w-7xl mx-auto p-6">
+          <Card>
+            <CardContent className="pt-6">
+              <p className="text-center text-muted-foreground">
+                You are not part of any organization.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </Layout>
     );
   }
 
   const org = orgData.organization;
 
   return (
-    <div className="container max-w-4xl py-8 space-y-6">
+    <Layout>
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
       <div>
         <h1 className="text-2xl font-bold">Organization Settings</h1>
         <p className="text-muted-foreground">
@@ -243,7 +249,7 @@ export default function OrgSettingsPage() {
               </p>
               {isOwner && (
                 <Button variant="outline" asChild>
-                  <a href="/org/domain-request">Request Domain Verification</a>
+                  <a href="/org/domain">Request Domain Verification</a>
                 </Button>
               )}
             </div>
@@ -370,6 +376,7 @@ export default function OrgSettingsPage() {
           )}
         </form>
       </Card>
-    </div>
+      </div>
+    </Layout>
   );
 }

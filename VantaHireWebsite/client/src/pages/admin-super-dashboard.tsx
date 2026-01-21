@@ -42,6 +42,7 @@ import {
   Send,
   Zap,
   Building2,
+  Globe,
   TrendingUp,
   AlertTriangle,
   Loader2,
@@ -642,6 +643,34 @@ export default function AdminSuperDashboard() {
 
           {/* Quick Actions */}
           <div className="flex flex-wrap gap-4 mt-6">
+            <Button
+              onClick={() => window.location.href = '/admin/organizations'}
+              variant="outline"
+            >
+              <Building2 className="h-4 w-4 mr-2" />
+              Organizations
+            </Button>
+            <Button
+              onClick={() => window.location.href = '/admin/subscriptions'}
+              variant="outline"
+            >
+              <Crown className="h-4 w-4 mr-2" />
+              Subscriptions
+            </Button>
+            <Button
+              onClick={() => window.location.href = '/admin/features'}
+              variant="outline"
+            >
+              <Settings className="h-4 w-4 mr-2" />
+              Features
+            </Button>
+            <Button
+              onClick={() => window.location.href = '/admin/domain-claims'}
+              variant="outline"
+            >
+              <Globe className="h-4 w-4 mr-2" />
+              Domain Claims
+            </Button>
             <Button
               onClick={() => window.location.href = '/admin/ai-jobs'}
               variant="outline"

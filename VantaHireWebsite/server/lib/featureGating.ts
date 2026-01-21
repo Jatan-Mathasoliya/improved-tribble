@@ -49,6 +49,76 @@ export const FEATURES = {
 
 export type FeatureName = typeof FEATURES[keyof typeof FEATURES];
 
+// Feature metadata for admin UI
+export const FEATURE_METADATA: Record<FeatureName, {
+  name: string;
+  description: string;
+  category: 'core' | 'ai' | 'advanced' | 'enterprise';
+}> = {
+  // Core ATS
+  basicAts: { name: "Basic ATS", description: "Core applicant tracking functionality", category: "core" },
+  jobPosting: { name: "Job Posting", description: "Create and publish job listings", category: "core" },
+  applicationManagement: { name: "Application Management", description: "Manage and review applications", category: "core" },
+
+  // AI Features
+  aiMatching: { name: "AI Matching", description: "AI-powered candidate matching and scoring", category: "ai" },
+  aiContent: { name: "AI Content", description: "AI-generated job descriptions and summaries", category: "ai" },
+
+  // Advanced Features
+  advancedAnalytics: { name: "Advanced Analytics", description: "Detailed hiring metrics and reports", category: "advanced" },
+  customPipeline: { name: "Custom Pipeline", description: "Customizable hiring stages and workflows", category: "advanced" },
+  teamCollaboration: { name: "Team Collaboration", description: "Multi-user collaboration features", category: "advanced" },
+  clientPortal: { name: "Client Portal", description: "Client shortlist sharing and feedback", category: "advanced" },
+
+  // Enterprise Features
+  apiAccess: { name: "API Access", description: "REST API access for integrations", category: "enterprise" },
+  sso: { name: "Single Sign-On", description: "SSO authentication support", category: "enterprise" },
+  customBranding: { name: "Custom Branding", description: "White-label branding options", category: "enterprise" },
+  dedicatedSupport: { name: "Dedicated Support", description: "Priority support channel", category: "enterprise" },
+  sla: { name: "SLA Guarantee", description: "Service level agreement with uptime guarantees", category: "enterprise" },
+};
+
+// Validate if a string is a valid feature key
+export function isValidFeatureKey(key: string): key is FeatureName {
+  return Object.values(FEATURES).includes(key as FeatureName);
+}
+
+// Get feature defaults by plan (computed from DB, not hardcoded)
+export async function getFeatureDefaultsByPlan(): Promise<Record<string, Record<FeatureName, boolean>>> {
+  const plans = await db.query.subscriptionPlans.findMany();
+  const result: Record<string, Record<FeatureName, boolean>> = {};
+
+  for (const plan of plans) {
+    const planFeatures = (plan.features || {}) as Record<string, boolean>;
+    const planResult = {} as Record<FeatureName, boolean>;
+
+    for (const featureKey of Object.values(FEATURES)) {
+      // Match existing fallback logic: aiContent defaults true unless explicitly false
+      if (featureKey === FEATURES.AI_CONTENT) {
+        planResult[featureKey] = planFeatures[featureKey] !== false;
+      } else {
+        planResult[featureKey] = planFeatures[featureKey] === true;
+      }
+    }
+    result[plan.name] = planResult;
+  }
+
+  // Add implicit "free" tier only if no free plan was found in DB
+  if (!result['free']) {
+    const implicitFree = {} as Record<FeatureName, boolean>;
+    for (const featureKey of Object.values(FEATURES)) {
+      implicitFree[featureKey] =
+        featureKey === FEATURES.BASIC_ATS ||
+        featureKey === FEATURES.JOB_POSTING ||
+        featureKey === FEATURES.APPLICATION_MANAGEMENT ||
+        featureKey === FEATURES.AI_CONTENT;
+    }
+    result['free'] = implicitFree;
+  }
+
+  return result;
+}
+
 // Check if a specific feature is enabled for an organization
 export async function isFeatureEnabled(
   orgId: number,

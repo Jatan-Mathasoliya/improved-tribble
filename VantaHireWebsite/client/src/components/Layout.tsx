@@ -1,6 +1,7 @@
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useAIFeatures } from "@/hooks/use-ai-features";
+import { useOrganization } from "@/hooks/use-organization";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -26,12 +27,19 @@ const Layout = ({ children }: LayoutProps) => {
   const [location, setLocation] = useLocation();
   const { user, logoutMutation } = useAuth();
   const { resumeAdvisor, fitScoring } = useAIFeatures();
+  const { data: orgData } = useOrganization();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [scrollPosition, setScrollPosition] = useState(0);
 
   // Type guard to help TypeScript narrow the user type
   const isRecruiter = user?.role === 'recruiter';
   const isAdmin = user?.role === 'super_admin';
+
+  // Organization role checks
+  const orgRole = orgData?.membership?.role;
+  const isOrgOwner = orgRole === 'owner';
+  const isOrgAdmin = orgRole === 'admin';
+  const isOrgOwnerOrAdmin = isOrgOwner || isOrgAdmin;
   const isCandidate = user?.role === 'candidate';
   const isHiringManager = user?.role === 'hiring_manager';
   const displayName = user?.firstName || user?.username || 'User';
@@ -65,6 +73,7 @@ const Layout = ({ children }: LayoutProps) => {
       '/org/team',
       '/org/billing',
       '/org/domain',
+      '/org/analytics',
       '/org/choice',
       '/blocked/seat-removed',
     ];
@@ -247,7 +256,7 @@ const Layout = ({ children }: LayoutProps) => {
                       </Badge>
                     )}
                     <Badge variant="secondary" className="text-xs bg-muted text-muted-foreground">
-                      v1.2
+                      v1.8
                     </Badge>
                   </div>
                   <DropdownMenuSeparator />
@@ -272,22 +281,34 @@ const Layout = ({ children }: LayoutProps) => {
                         <Settings className="h-4 w-4 mr-2" />
                         Profile Settings
                       </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                      <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                        Organization
-                      </div>
-                      <DropdownMenuItem onClick={() => setLocation("/org/settings")} className="cursor-pointer">
-                        <Building2 className="h-4 w-4 mr-2" />
-                        Org Settings
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setLocation("/org/team")} className="cursor-pointer">
-                        <Users className="h-4 w-4 mr-2" />
-                        Team Members
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setLocation("/org/billing")} className="cursor-pointer">
-                        <CreditCard className="h-4 w-4 mr-2" />
-                        Billing
-                      </DropdownMenuItem>
+                      {/* Organization section - only show if user is part of an org and has appropriate role */}
+                      {orgData && isOrgOwnerOrAdmin && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                            Organization
+                          </div>
+                          <DropdownMenuItem onClick={() => setLocation("/org/settings")} className="cursor-pointer">
+                            <Building2 className="h-4 w-4 mr-2" />
+                            Org Settings
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => setLocation("/org/team")} className="cursor-pointer">
+                            <Users className="h-4 w-4 mr-2" />
+                            Team Members
+                          </DropdownMenuItem>
+                          {/* Billing - only for org owners */}
+                          {isOrgOwner && (
+                            <DropdownMenuItem onClick={() => setLocation("/org/billing")} className="cursor-pointer">
+                              <CreditCard className="h-4 w-4 mr-2" />
+                              Billing
+                            </DropdownMenuItem>
+                          )}
+                          <DropdownMenuItem onClick={() => setLocation("/org/analytics")} className="cursor-pointer">
+                            <BarChart3 className="h-4 w-4 mr-2" />
+                            Analytics
+                          </DropdownMenuItem>
+                        </>
+                      )}
                     </>
                   )}
                   <DropdownMenuSeparator />

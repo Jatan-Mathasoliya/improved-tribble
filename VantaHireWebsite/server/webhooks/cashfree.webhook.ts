@@ -1,8 +1,9 @@
 import { Router } from "express";
 import type { Express, Request, Response } from "express";
 import { db } from "../db";
-import { webhookEvents, organizationSubscriptions, organizations, organizationMembers, users, type WebhookStatus } from "@shared/schema";
+import { webhookEvents, organizationSubscriptions, organizations, organizationMembers, users, checkoutIntents, type WebhookStatus } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
+import { randomBytes } from "crypto";
 import {
   verifyWebhookSignature,
   parseWebhookEvent,
@@ -112,7 +113,20 @@ async function handlePaymentSuccess(
 ): Promise<void> {
   // Get transaction
   const transaction = await getTransactionByCashfreeOrder(orderId);
+
+  // If no transaction, check if this is a public checkout intent (no transaction created)
   if (!transaction) {
+    // Check for checkout intent by orderId
+    const intent = await db.query.checkoutIntents.findFirst({
+      where: eq(checkoutIntents.cashfreeOrderId, orderId),
+    });
+
+    if (intent) {
+      console.log(`No transaction for order ${orderId}, but found checkout intent ${intent.id}`);
+      await handleCheckoutIntentPayment(intent.id, paymentId, paymentAmount);
+      return;
+    }
+
     console.error(`Transaction not found for order ${orderId}`);
     return;
   }
@@ -144,7 +158,14 @@ async function handlePaymentSuccess(
       planId: number;
       seats: number;
       billingCycle: 'monthly' | 'annual';
+      checkoutIntentId?: number;
     };
+
+    // Handle checkout intent flow (public checkout)
+    if (metadata?.checkoutIntentId) {
+      await handleCheckoutIntentPayment(metadata.checkoutIntentId, paymentId, paymentAmount);
+      return;
+    }
 
     if (metadata?.planId && metadata?.seats) {
       // Create paid subscription
@@ -239,6 +260,103 @@ async function handlePaymentSuccess(
   }
 
   console.log(`Payment success processed for order ${orderId}`);
+}
+
+// Handle checkout intent payment (public checkout flow)
+async function handleCheckoutIntentPayment(
+  intentId: number,
+  paymentId: string,
+  paymentAmount: number
+): Promise<void> {
+  // Get checkout intent
+  const intent = await db.query.checkoutIntents.findFirst({
+    where: eq(checkoutIntents.id, intentId),
+    with: {
+      plan: true,
+    },
+  });
+
+  if (!intent) {
+    console.error(`Checkout intent not found: ${intentId}`);
+    return;
+  }
+
+  if (intent.status === 'paid' || intent.status === 'claimed') {
+    console.log(`Checkout intent ${intentId} already processed, skipping`);
+    return;
+  }
+
+  // Update intent to paid
+  await db.update(checkoutIntents)
+    .set({
+      status: 'paid',
+      paidAt: new Date(),
+    })
+    .where(eq(checkoutIntents.id, intentId));
+
+  // If org already exists (checkout-create-org flow), create subscription
+  if (intent.organizationId) {
+    await createPaidSubscription(
+      intent.organizationId,
+      intent.planId,
+      intent.seats,
+      intent.billingCycle as 'monthly' | 'annual'
+    );
+
+    // Allocate credits
+    const subscription = await getOrganizationSubscription(intent.organizationId);
+    if (subscription) {
+      const creditsPerSeat = subscription.plan.aiCreditsPerSeatMonthly;
+      const maxRollover = subscription.plan.maxCreditRolloverMonths || 3;
+      const cap = creditsPerSeat * maxRollover;
+
+      await bulkAllocateCreditsForUpgrade(
+        intent.organizationId,
+        creditsPerSeat,
+        cap
+      );
+    }
+
+    console.log(`Checkout intent ${intentId} completed for existing org ${intent.organizationId}`);
+    return;
+  }
+
+  // For public checkout (no org yet), send claim email
+  const emailService = await getEmailService();
+  if (emailService && intent.claimToken) {
+    const baseUrl = process.env.BASE_URL || process.env.APP_URL || 'http://localhost:5000';
+    const claimUrl = `${baseUrl}/claim/${intent.claimToken}`;
+    const subject = `Complete your VantaHire subscription`;
+    const html = `
+      <h2>Payment Successful!</h2>
+      <p>Thank you for subscribing to VantaHire!</p>
+      <p>Your payment of ₹${(paymentAmount / 100).toFixed(2)} has been received.</p>
+      <p><strong>Organization Name:</strong> ${intent.orgName}</p>
+      <p><strong>Plan:</strong> ${intent.plan?.displayName || 'Pro'}</p>
+      <p><strong>Seats:</strong> ${intent.seats}</p>
+      <h3>Next Steps</h3>
+      <p>Click the button below to set up your account and access your organization:</p>
+      <p style="margin: 20px 0;">
+        <a href="${claimUrl}" style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+          Complete Setup
+        </a>
+      </p>
+      <p>Or copy this link: ${claimUrl}</p>
+      <p><em>This link will expire in 7 days.</em></p>
+    `;
+    const text = `Payment Successful!\n\nThank you for subscribing to VantaHire.\nYour payment of ₹${(paymentAmount / 100).toFixed(2)} has been received.\n\nOrganization: ${intent.orgName}\nPlan: ${intent.plan?.displayName || 'Pro'}\nSeats: ${intent.seats}\n\nComplete your setup: ${claimUrl}\n\nThis link will expire in 7 days.`;
+
+    await emailService.sendEmail({
+      to: intent.email,
+      subject,
+      html,
+      text,
+    });
+
+    console.log(`Claim email sent to ${intent.email} for checkout intent ${intentId}`);
+  }
+
+  console.log(`Checkout intent ${intentId} paid, awaiting claim`);
 }
 
 // Handle payment failure

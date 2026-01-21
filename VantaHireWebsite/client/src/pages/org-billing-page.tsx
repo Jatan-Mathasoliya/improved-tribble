@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Layout from "@/components/Layout";
 import {
   useSubscription,
   usePlans,
@@ -139,9 +140,10 @@ export default function OrgBillingPage() {
   const creditUsagePercent = credits ? Math.min(100, Math.round((credits.used / credits.allocated) * 100)) : 0;
 
   return (
-    <div className="container max-w-4xl py-8 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold">Billing & Subscription</h1>
+    <Layout>
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold">Billing & Subscription</h1>
         <p className="text-muted-foreground">
           Manage your subscription, seats, and billing
         </p>
@@ -442,6 +444,7 @@ export default function OrgBillingPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </Layout>
   );
 }

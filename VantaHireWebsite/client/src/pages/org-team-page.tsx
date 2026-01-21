@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Layout from "@/components/Layout";
 import {
   useOrganization,
   useOrganizationMembers,
@@ -222,10 +223,11 @@ export default function OrgTeamPage() {
   const pendingJoinRequests = joinRequests?.filter(r => r.status === 'pending') || [];
 
   return (
-    <div className="container max-w-4xl py-8 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Team Members</h1>
+    <Layout>
+      <div className="max-w-7xl mx-auto p-6 space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Team Members</h1>
           <p className="text-muted-foreground">
             Manage your organization's team members
           </p>
@@ -622,6 +624,7 @@ export default function OrgTeamPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+      </div>
+    </Layout>
   );
 }

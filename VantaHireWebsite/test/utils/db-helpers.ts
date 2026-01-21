@@ -52,7 +52,7 @@ export async function ensurePlan(name: string, overrides?: Partial<SubscriptionP
     pricePerSeatAnnual: overrides?.pricePerSeatAnnual ?? 99900 * 10,
     aiCreditsPerSeatMonthly: overrides?.aiCreditsPerSeatMonthly ?? 100,
     maxCreditRolloverMonths: overrides?.maxCreditRolloverMonths ?? 3,
-    features: overrides?.features ?? { ai_matching: true },
+    features: overrides?.features ?? { aiMatching: true },
     isActive: overrides?.isActive ?? true,
     sortOrder: overrides?.sortOrder ?? 0,
     createdAt: new Date(),

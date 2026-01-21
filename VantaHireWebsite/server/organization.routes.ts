@@ -751,4 +751,215 @@ export function registerOrganizationRoutes(
       res.status(500).json({ error: "Failed to get member's jobs" });
     }
   });
+
+  // ===== Organization Analytics =====
+
+  // Get organization analytics overview
+  app.get("/api/organizations/analytics", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      const { getOrgAnalyticsOverview } = await import("./lib/orgAnalyticsService");
+      const analytics = await getOrgAnalyticsOverview(orgResult.organization.id);
+
+      res.json(analytics);
+    } catch (error: any) {
+      console.error("Error getting organization analytics:", error);
+      res.status(500).json({ error: "Failed to get organization analytics" });
+    }
+  });
+
+  // Get time to fill by job
+  app.get("/api/organizations/analytics/time-to-fill", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      const { getTimeToFillByJob } = await import("./lib/orgAnalyticsService");
+      const data = await getTimeToFillByJob(orgResult.organization.id);
+
+      res.json(data);
+    } catch (error: any) {
+      console.error("Error getting time to fill:", error);
+      res.status(500).json({ error: "Failed to get time to fill data" });
+    }
+  });
+
+  // Get time in stage breakdown
+  app.get("/api/organizations/analytics/stage-breakdown", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      const { getTimeInStageBreakdown } = await import("./lib/orgAnalyticsService");
+      const data = await getTimeInStageBreakdown(orgResult.organization.id);
+
+      res.json(data);
+    } catch (error: any) {
+      console.error("Error getting stage breakdown:", error);
+      res.status(500).json({ error: "Failed to get stage breakdown" });
+    }
+  });
+
+  // Get source performance
+  app.get("/api/organizations/analytics/sources", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      const { getSourcePerformance } = await import("./lib/orgAnalyticsService");
+      const data = await getSourcePerformance(orgResult.organization.id);
+
+      res.json(data);
+    } catch (error: any) {
+      console.error("Error getting source performance:", error);
+      res.status(500).json({ error: "Failed to get source performance" });
+    }
+  });
+
+  // Get recruiter performance
+  app.get("/api/organizations/analytics/recruiters", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      if (!canManageMembers(orgResult.membership.role as any)) {
+        res.status(403).json({ error: "You don't have permission to view recruiter performance" });
+        return;
+      }
+
+      const { getRecruiterPerformance } = await import("./lib/orgAnalyticsService");
+      const data = await getRecruiterPerformance(orgResult.organization.id);
+
+      res.json(data);
+    } catch (error: any) {
+      console.error("Error getting recruiter performance:", error);
+      res.status(500).json({ error: "Failed to get recruiter performance" });
+    }
+  });
+
+  // Get hiring manager performance
+  app.get("/api/organizations/analytics/hiring-managers", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      if (!canManageMembers(orgResult.membership.role as any)) {
+        res.status(403).json({ error: "You don't have permission to view hiring manager performance" });
+        return;
+      }
+
+      const { getHiringManagerPerformance } = await import("./lib/orgAnalyticsService");
+      const data = await getHiringManagerPerformance(orgResult.organization.id);
+
+      res.json(data);
+    } catch (error: any) {
+      console.error("Error getting hiring manager performance:", error);
+      res.status(500).json({ error: "Failed to get hiring manager performance" });
+    }
+  });
+
+  // Get team activity
+  app.get("/api/organizations/analytics/team", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      if (!canManageMembers(orgResult.membership.role as any)) {
+        res.status(403).json({ error: "You don't have permission to view team analytics" });
+        return;
+      }
+
+      const { getTeamActivity } = await import("./lib/orgAnalyticsService");
+      const activity = await getTeamActivity(orgResult.organization.id);
+
+      res.json(activity);
+    } catch (error: any) {
+      console.error("Error getting team activity:", error);
+      res.status(500).json({ error: "Failed to get team activity" });
+    }
+  });
+
+  // Get AI credit usage
+  app.get("/api/organizations/analytics/ai-usage", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      if (!canManageMembers(orgResult.membership.role as any)) {
+        res.status(403).json({ error: "You don't have permission to view AI usage" });
+        return;
+      }
+
+      const { getAiCreditUsage } = await import("./lib/orgAnalyticsService");
+      const usage = await getAiCreditUsage(orgResult.organization.id);
+
+      res.json(usage);
+    } catch (error: any) {
+      console.error("Error getting AI usage:", error);
+      res.status(500).json({ error: "Failed to get AI usage" });
+    }
+  });
+
+  // Get hiring funnel stats
+  app.get("/api/organizations/analytics/funnel", requireAuth, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      const { getHiringFunnel } = await import("./lib/orgAnalyticsService");
+      const funnel = await getHiringFunnel(orgResult.organization.id);
+
+      res.json(funnel);
+    } catch (error: any) {
+      console.error("Error getting hiring funnel:", error);
+      res.status(500).json({ error: "Failed to get hiring funnel" });
+    }
+  });
 }

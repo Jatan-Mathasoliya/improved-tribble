@@ -15,7 +15,8 @@ import {
   calculateProratedAmount,
 } from "./lib/subscriptionService";
 import type { BillingCycle } from "@shared/schema";
-import { organizationSubscriptions } from "@shared/schema";
+import { organizationSubscriptions, checkoutIntents, organizations } from "@shared/schema";
+import { randomBytes } from "crypto";
 import {
   getSeatUsage,
   getMembersForSeatSelection,
@@ -68,6 +69,30 @@ const reduceSeatsSchema = z.object({
 
 const seatAssignSchema = z.object({
   memberId: z.number().int().positive(),
+});
+
+// Public checkout schema (no auth required)
+const publicCheckoutSchema = z.object({
+  email: z.string().email(),
+  orgName: z.string().min(2).max(100),
+  planId: z.number().int().positive(),
+  seats: z.number().int().min(1).max(1000).default(1),
+  billingCycle: z.enum(['monthly', 'annual']).default('monthly'),
+  gstin: z.string().max(20).optional(),
+  billingName: z.string().max(200).optional(),
+  billingAddress: z.string().max(500).optional(),
+  billingCity: z.string().max(100).optional(),
+  billingState: z.string().max(100).optional(),
+  billingPincode: z.string().max(10).optional(),
+});
+
+// Checkout-create-org schema (auth required, no org yet)
+const checkoutCreateOrgSchema = z.object({
+  orgName: z.string().min(2).max(100),
+  planId: z.number().int().positive(),
+  seats: z.number().int().min(1).max(1000).default(1),
+  billingCycle: z.enum(['monthly', 'annual']).default('monthly'),
+  gstin: z.string().max(20).optional(),
 });
 
 export function registerSubscriptionRoutes(
@@ -165,7 +190,7 @@ export function registerSubscriptionRoutes(
         return;
       }
 
-      const returnUrl = `${process.env.APP_URL || 'http://localhost:5001'}/settings/billing?order_id={order_id}`;
+      const returnUrl = `${process.env.APP_URL || 'http://localhost:5001'}/org/billing?order_id={order_id}`;
 
       const checkout = await createCheckoutOrder(
         orgResult.organization,
@@ -200,6 +225,233 @@ export function registerSubscriptionRoutes(
       });
     } catch (error: any) {
       console.error("Error creating checkout:", error);
+      if (error.name === "ZodError") {
+        res.status(400).json({ error: "Invalid input", details: error.errors });
+        return;
+      }
+      res.status(500).json({ error: error.message || "Failed to create checkout" });
+    }
+  });
+
+  // ===== Public Checkout (Case 1: User not logged in) =====
+
+  // Public checkout - creates checkout intent without requiring login
+  // NOTE: No CSRF protection - this is a public endpoint that doesn't require a session
+  app.post("/api/subscription/checkout-public", async (req, res) => {
+    try {
+      if (!isCashfreeConfigured()) {
+        res.status(500).json({ error: "Payment system not configured" });
+        return;
+      }
+
+      const data = publicCheckoutSchema.parse(req.body);
+
+      const plan = await getPlanById(data.planId);
+      if (!plan || plan.name === 'free') {
+        res.status(400).json({ error: "Invalid plan" });
+        return;
+      }
+
+      // Check if email belongs to existing user
+      const existingUser = await db.query.users.findFirst({
+        where: eq(users.username, data.email),
+      });
+
+      let userId: number | undefined;
+      let organizationId: number | undefined;
+
+      if (existingUser) {
+        // Check if user already has an org
+        const existingMembership = await db.query.organizationMembers.findFirst({
+          where: eq(organizationMembers.userId, existingUser.id),
+        });
+
+        if (existingMembership) {
+          // User already has org - they need to login to manage billing
+          res.json({
+            requiresLogin: true,
+            message: "You already have an organization. Please log in to manage your subscription.",
+          });
+          return;
+        }
+
+        // User exists but no org - link checkout intent to user
+        userId = existingUser.id;
+      }
+
+      // Generate claim token
+      const claimToken = randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+      // Create checkout intent for public/temporary org placeholder
+      const tempOrg = {
+        id: 0,
+        name: data.orgName,
+        slug: data.orgName.toLowerCase().replace(/[^a-z0-9]/g, '-'),
+        billingContactEmail: data.email,
+        gstin: data.gstin || null,
+        billingName: data.billingName || null,
+        billingAddress: data.billingAddress || null,
+        billingCity: data.billingCity || null,
+        billingState: data.billingState || null,
+        billingPincode: data.billingPincode || null,
+      };
+
+      const returnUrl = `${process.env.APP_URL || 'http://localhost:5001'}/claim/${claimToken}?order_id={order_id}`;
+
+      const checkout = await createCheckoutOrder(
+        tempOrg as any,
+        plan,
+        data.seats,
+        data.billingCycle,
+        data.email,
+        undefined,
+        returnUrl
+      );
+
+      // Create checkout intent record
+      // NOTE: We don't create a payment_transaction here because organizationId is required (NOT NULL FK).
+      // The webhook will create the transaction after payment is confirmed and org is created via claim flow.
+      const [intent] = await db.insert(checkoutIntents).values({
+        email: data.email,
+        orgName: data.orgName,
+        userId: userId || null,
+        organizationId: null,
+        planId: data.planId,
+        seats: data.seats,
+        billingCycle: data.billingCycle,
+        gstin: data.gstin || null,
+        billingName: data.billingName || null,
+        billingAddress: data.billingAddress || null,
+        billingCity: data.billingCity || null,
+        billingState: data.billingState || null,
+        billingPincode: data.billingPincode || null,
+        status: 'pending',
+        cashfreeOrderId: checkout.orderId,
+        claimToken,
+        expiresAt,
+      }).returning();
+
+      res.json({
+        orderId: checkout.orderId,
+        sessionId: checkout.sessionId,
+        paymentLink: checkout.paymentLink,
+        amount: checkout.amount,
+        taxAmount: checkout.taxAmount,
+        totalAmount: checkout.totalAmount,
+        claimToken,
+      });
+    } catch (error: any) {
+      console.error("Error creating public checkout:", error);
+      if (error.name === "ZodError") {
+        res.status(400).json({ error: "Invalid input", details: error.errors });
+        return;
+      }
+      res.status(500).json({ error: error.message || "Failed to create checkout" });
+    }
+  });
+
+  // ===== Checkout Create Org (Case 3: Logged in but no org) =====
+
+  // Create org + checkout in one flow
+  app.post("/api/subscription/checkout-create-org", requireAuth, csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+
+      // Check if user already has an org
+      const existingOrg = await getUserOrganization(user.id);
+      if (existingOrg) {
+        res.status(400).json({ error: "You already belong to an organization. Use the regular checkout." });
+        return;
+      }
+
+      if (!isCashfreeConfigured()) {
+        res.status(500).json({ error: "Payment system not configured" });
+        return;
+      }
+
+      const data = checkoutCreateOrgSchema.parse(req.body);
+
+      const plan = await getPlanById(data.planId);
+      if (!plan || plan.name === 'free') {
+        res.status(400).json({ error: "Invalid plan" });
+        return;
+      }
+
+      // Create the organization with user as owner
+      const slug = data.orgName.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Date.now().toString(36);
+      const [org] = await db.insert(organizations).values({
+        name: data.orgName,
+        slug,
+        gstin: data.gstin || null,
+        billingContactEmail: user.username,
+        isActive: true,
+      }).returning();
+
+      // Add user as owner
+      await db.insert(organizationMembers).values({
+        organizationId: org.id,
+        userId: user.id,
+        role: 'owner',
+        seatAssigned: true,
+      });
+
+      // Create checkout intent linked to org
+      const claimToken = randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+      const returnUrl = `${process.env.APP_URL || 'http://localhost:5001'}/org/billing?order_id={order_id}`;
+
+      const checkout = await createCheckoutOrder(
+        org,
+        plan,
+        data.seats,
+        data.billingCycle,
+        user.username,
+        undefined,
+        returnUrl
+      );
+
+      // Create checkout intent
+      const [intent] = await db.insert(checkoutIntents).values({
+        email: user.username,
+        orgName: data.orgName,
+        userId: user.id,
+        organizationId: org.id,
+        planId: data.planId,
+        seats: data.seats,
+        billingCycle: data.billingCycle,
+        gstin: data.gstin || null,
+        status: 'pending',
+        cashfreeOrderId: checkout.orderId,
+        claimToken,
+        expiresAt,
+      }).returning();
+
+      // Create pending transaction
+      await createPaymentTransaction(
+        org.id,
+        null,
+        'subscription',
+        checkout.amount,
+        checkout.taxAmount,
+        checkout.totalAmount,
+        'pending',
+        checkout.orderId,
+        { checkoutIntentId: intent.id, planId: data.planId, seats: data.seats, billingCycle: data.billingCycle }
+      );
+
+      res.json({
+        orderId: checkout.orderId,
+        sessionId: checkout.sessionId,
+        paymentLink: checkout.paymentLink,
+        amount: checkout.amount,
+        taxAmount: checkout.taxAmount,
+        totalAmount: checkout.totalAmount,
+        organizationId: org.id,
+      });
+    } catch (error: any) {
+      console.error("Error creating checkout with org:", error);
       if (error.name === "ZodError") {
         res.status(400).json({ error: "Invalid input", details: error.errors });
         return;
@@ -292,7 +544,7 @@ export function registerSubscriptionRoutes(
         return;
       }
 
-      const returnUrl = `${process.env.APP_URL || 'http://localhost:5001'}/settings/billing?order_id={order_id}&type=seat_add`;
+      const returnUrl = `${process.env.APP_URL || 'http://localhost:5001'}/org/billing?order_id={order_id}&type=seat_add`;
 
       const checkout = await createSeatAddCheckout(
         orgResult.organization,
@@ -912,6 +1164,197 @@ export function registerSubscriptionRoutes(
     } catch (error: any) {
       console.error("Error getting order status:", error);
       res.status(500).json({ error: "Failed to get order status" });
+    }
+  });
+
+  // ===== Claim Flow (for public checkout) =====
+
+  // Get claim intent details (public - no auth required)
+  app.get("/api/claim/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+
+      const intent = await db.query.checkoutIntents.findFirst({
+        where: eq(checkoutIntents.claimToken, token),
+        with: {
+          plan: true,
+        },
+      });
+
+      if (!intent) {
+        res.status(404).json({ error: "Claim token not found or expired" });
+        return;
+      }
+
+      if (intent.status === 'claimed') {
+        res.status(400).json({ error: "This subscription has already been claimed" });
+        return;
+      }
+
+      if (intent.status !== 'paid') {
+        res.status(400).json({ error: "Payment not yet confirmed for this subscription" });
+        return;
+      }
+
+      if (new Date() > intent.expiresAt) {
+        res.status(400).json({ error: "Claim token has expired" });
+        return;
+      }
+
+      // Check if user already exists for this email
+      const existingUser = await db.query.users.findFirst({
+        where: eq(users.username, intent.email),
+      });
+
+      res.json({
+        email: intent.email,
+        orgName: intent.orgName,
+        planName: intent.plan?.displayName || 'Pro',
+        seats: intent.seats,
+        billingCycle: intent.billingCycle,
+        hasExistingAccount: !!existingUser,
+        expiresAt: intent.expiresAt,
+      });
+    } catch (error: any) {
+      console.error("Error getting claim details:", error);
+      res.status(500).json({ error: "Failed to get claim details" });
+    }
+  });
+
+  // Accept claim (complete the org setup)
+  // NOTE: No CSRF protection - this is accessed via email link token (the token itself acts as verification)
+  app.post("/api/claim/:token/accept", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const { password } = req.body; // Only needed if creating new user
+
+      const intent = await db.query.checkoutIntents.findFirst({
+        where: eq(checkoutIntents.claimToken, token),
+        with: {
+          plan: true,
+        },
+      });
+
+      if (!intent) {
+        res.status(404).json({ error: "Claim token not found or expired" });
+        return;
+      }
+
+      if (intent.status === 'claimed') {
+        res.status(400).json({ error: "This subscription has already been claimed" });
+        return;
+      }
+
+      if (intent.status !== 'paid') {
+        res.status(400).json({ error: "Payment not yet confirmed" });
+        return;
+      }
+
+      if (new Date() > intent.expiresAt) {
+        res.status(400).json({ error: "Claim token has expired" });
+        return;
+      }
+
+      // Check if user exists
+      let user = await db.query.users.findFirst({
+        where: eq(users.username, intent.email),
+      });
+
+      // Create user if doesn't exist
+      if (!user) {
+        if (!password || password.length < 8) {
+          res.status(400).json({ error: "Password is required and must be at least 8 characters" });
+          return;
+        }
+
+        // Import crypto for password hashing (format: hash.salt to match auth.ts)
+        const crypto = await import("crypto");
+        const salt = crypto.randomBytes(16).toString("hex");
+        const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+
+        const [newUser] = await db.insert(users).values({
+          username: intent.email,
+          password: `${hash}.${salt}`,
+          role: 'recruiter',
+          isActive: true,
+          emailVerified: true, // They verified by paying
+        }).returning();
+        user = newUser;
+      }
+
+      // Create organization
+      const slug = intent.orgName.toLowerCase().replace(/[^a-z0-9]/g, '-') + '-' + Date.now().toString(36);
+      const [org] = await db.insert(organizations).values({
+        name: intent.orgName,
+        slug,
+        gstin: intent.gstin || null,
+        billingName: intent.billingName || null,
+        billingAddress: intent.billingAddress || null,
+        billingCity: intent.billingCity || null,
+        billingState: intent.billingState || null,
+        billingPincode: intent.billingPincode || null,
+        billingContactEmail: intent.email,
+        isActive: true,
+      }).returning();
+
+      // Add user as owner
+      await db.insert(organizationMembers).values({
+        organizationId: org.id,
+        userId: user.id,
+        role: 'owner',
+        seatAssigned: true,
+      });
+
+      // Create paid subscription
+      const { createPaidSubscription } = await import("./lib/subscriptionService");
+      await createPaidSubscription(
+        org.id,
+        intent.planId,
+        intent.seats,
+        intent.billingCycle as 'monthly' | 'annual'
+      );
+
+      // Allocate credits
+      const { getOrganizationSubscription } = await import("./lib/subscriptionService");
+      const { bulkAllocateCreditsForUpgrade } = await import("./lib/creditService");
+      const subscription = await getOrganizationSubscription(org.id);
+      if (subscription) {
+        const creditsPerSeat = subscription.plan.aiCreditsPerSeatMonthly;
+        const maxRollover = subscription.plan.maxCreditRolloverMonths || 3;
+        const cap = creditsPerSeat * maxRollover;
+
+        await bulkAllocateCreditsForUpgrade(org.id, creditsPerSeat, cap);
+      }
+
+      // Update checkout intent as claimed
+      await db.update(checkoutIntents)
+        .set({
+          status: 'claimed',
+          claimedAt: new Date(),
+          claimedBy: user.id,
+          organizationId: org.id,
+        })
+        .where(eq(checkoutIntents.id, intent.id));
+
+      // Log in the user by setting session
+      if (req.login) {
+        await new Promise<void>((resolve, reject) => {
+          req.login!(user!, (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+      }
+
+      res.json({
+        success: true,
+        organizationId: org.id,
+        organizationSlug: org.slug,
+        redirectUrl: '/recruiter-dashboard',
+      });
+    } catch (error: any) {
+      console.error("Error accepting claim:", error);
+      res.status(500).json({ error: error.message || "Failed to complete claim" });
     }
   });
 }

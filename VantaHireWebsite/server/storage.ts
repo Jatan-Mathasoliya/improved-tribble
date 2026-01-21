@@ -771,6 +771,7 @@ export class DatabaseStorage implements IStorage {
     salaryPeriod?: string;
     search?: string;
     status?: string;
+    skills?: string[];
   }): Promise<{ jobs: (Job & { postedByName?: string; postedById?: number | string; isRecruiterProfilePublic?: boolean })[]; total: number }> {
     const page = filters.page || 1;
     const limit = filters.limit || 10;
@@ -842,7 +843,7 @@ export class DatabaseStorage implements IStorage {
       // Check if job skills array contains any of the filter skills
       // Using OR conditions to check each skill individually
       // Also ensure skills column is not null
-      const skillConditions = filters.skills.map(skill =>
+      const skillConditions = filters.skills.map((skill: string) =>
         sql`${jobs.skills} IS NOT NULL AND ${skill} = ANY(${jobs.skills})`
       );
       const skillsOr = or(...skillConditions);
