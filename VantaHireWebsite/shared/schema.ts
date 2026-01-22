@@ -23,6 +23,9 @@ export const users = pgTable("users", {
   // Profile completion
   profilePromptSnoozeUntil: timestamp("profile_prompt_snooze_until"),
   profileCompletedAt: timestamp("profile_completed_at"),
+  // Onboarding tracking
+  onboardingCompletedAt: timestamp("onboarding_completed_at"),
+  profileSkippedAt: timestamp("profile_skipped_at"),
 });
 
 export const contactSubmissions = pgTable("contact_submissions", {

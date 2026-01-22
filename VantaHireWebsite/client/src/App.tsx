@@ -66,6 +66,9 @@ const OrgDomainRequestPage = lazy(() => import("@/pages/org-domain-request-page"
 const OrgAnalyticsPage = lazy(() => import("@/pages/org-analytics-page"));
 const SeatRemovedPage = lazy(() => import("@/pages/seat-removed-page"));
 
+// Onboarding
+const OnboardingPage = lazy(() => import("@/pages/onboarding-page"));
+
 // Marketing pages
 const ProductPage = lazy(() => import("@/pages/product-page"));
 const FeaturesPage = lazy(() => import("@/pages/features-page"));
@@ -98,6 +101,7 @@ function Router() {
       <Route path="/auth" component={AuthPage} />
       <Route path="/recruiter-auth" component={RecruiterAuth} />
       <Route path="/candidate-auth" component={CandidateAuth} />
+      <ProtectedRoute path="/onboarding" component={OnboardingPage} requiredRole={['recruiter']} />
       <Route path="/form/:token" component={PublicFormPage} />
       <Route path="/client-shortlist/:token" component={ClientShortlistPage} />
       <Route path="/privacy-policy" component={PrivacyPolicyPage} />

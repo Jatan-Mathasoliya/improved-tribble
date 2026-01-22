@@ -40,27 +40,54 @@ export interface CashfreePaymentLink {
 }
 
 export interface CashfreeWebhookPayload {
-  type: string;
-  data: {
+  // Standard format (2023-08-01 and 2025-01-01)
+  type?: string;
+  event_time?: string;
+  data?: {
     order?: {
       order_id: string;
       order_amount: number;
       order_currency: string;
-      order_status: string;
+      order_status?: string;
+      order_tags?: Record<string, string> | null;
     };
     payment?: {
       cf_payment_id: string;
       payment_status: string;
       payment_amount: number;
-      payment_method: {
-        payment_method_type: string;
+      payment_currency?: string;
+      payment_message?: string;
+      payment_time?: string;
+      bank_reference?: string;
+      payment_group?: string; // "upi", "card", "netbanking", etc.
+      payment_method?: {
+        payment_method_type?: string;
+        upi?: { channel?: string; upi_id?: string };
+        card?: { card_number?: string; card_network?: string };
+        netbanking?: { channel?: string; netbanking_bank_name?: string };
       };
+    };
+    customer_details?: {
+      customer_id?: string;
+      customer_name?: string;
+      customer_email?: string;
+      customer_phone?: string;
+    };
+    error_details?: {
+      error_code?: string;
+      error_description?: string;
+      error_reason?: string;
+      error_source?: string;
     };
     subscription?: {
       subscription_id: string;
       status: string;
     };
   };
+  // Legacy format fields (fallback)
+  event_type?: string;
+  order_id?: string;
+  cf_order_id?: string;
 }
 
 // Helper: Make API request to Cashfree
@@ -273,7 +300,7 @@ export function verifyWebhookSignature(
   );
 }
 
-// Parse webhook event
+// Parse webhook event - handles both v2023-08-01 format and 2025-01-01 formats
 export function parseWebhookEvent(payload: CashfreeWebhookPayload): {
   eventType: string;
   eventId: string;
@@ -284,8 +311,10 @@ export function parseWebhookEvent(payload: CashfreeWebhookPayload): {
   paymentMethod?: string;
   subscriptionId?: string;
   subscriptionStatus?: string;
+  errorReason?: string;
 } {
-  const eventType = payload.type;
+  // Handle different event type field names
+  const eventType = payload.type || payload.event_type || 'UNKNOWN';
   const eventId = `${eventType}_${Date.now()}`;
 
   const result: {
@@ -298,31 +327,59 @@ export function parseWebhookEvent(payload: CashfreeWebhookPayload): {
     paymentMethod?: string;
     subscriptionId?: string;
     subscriptionStatus?: string;
+    errorReason?: string;
   } = {
     eventType,
     eventId,
   };
 
-  if (payload.data.order?.order_id) {
-    result.orderId = payload.data.order.order_id;
+  // Try data.order/payment first, then top-level fields
+  const order = payload.data?.order;
+  const payment = payload.data?.payment;
+  const subscription = payload.data?.subscription;
+  const errorDetails = payload.data?.error_details;
+
+  if (order?.order_id) {
+    result.orderId = order.order_id;
+  } else if (payload.order_id) {
+    result.orderId = payload.order_id;
+  } else if (payload.cf_order_id) {
+    result.orderId = payload.cf_order_id;
   }
-  if (payload.data.payment?.cf_payment_id) {
-    result.paymentId = payload.data.payment.cf_payment_id;
+
+  if (payment?.cf_payment_id) {
+    result.paymentId = payment.cf_payment_id;
   }
-  if (payload.data.payment?.payment_status) {
-    result.paymentStatus = payload.data.payment.payment_status;
+  if (payment?.payment_status) {
+    result.paymentStatus = payment.payment_status;
   }
-  if (payload.data.payment?.payment_amount !== undefined) {
-    result.paymentAmount = payload.data.payment.payment_amount;
+  if (payment?.payment_amount !== undefined) {
+    // Convert to paise if it's in rupees (Cashfree sends in rupees)
+    result.paymentAmount = payment.payment_amount * 100;
   }
-  if (payload.data.payment?.payment_method?.payment_method_type) {
-    result.paymentMethod = payload.data.payment.payment_method.payment_method_type;
+  // Payment method: prefer payment_group, fallback to payment_method_type
+  if (payment?.payment_group) {
+    result.paymentMethod = payment.payment_group;
+  } else if (payment?.payment_method?.payment_method_type) {
+    result.paymentMethod = payment.payment_method.payment_method_type;
   }
-  if (payload.data.subscription?.subscription_id) {
-    result.subscriptionId = payload.data.subscription.subscription_id;
+  if (subscription?.subscription_id) {
+    result.subscriptionId = subscription.subscription_id;
   }
-  if (payload.data.subscription?.status) {
-    result.subscriptionStatus = payload.data.subscription.status;
+  if (subscription?.status) {
+    result.subscriptionStatus = subscription.status;
+  }
+
+  // Extract error details for failed payments
+  if (errorDetails) {
+    const parts = [
+      errorDetails.error_reason,
+      errorDetails.error_description,
+      errorDetails.error_code,
+    ].filter(Boolean);
+    if (parts.length > 0) {
+      result.errorReason = parts.join(' - ');
+    }
   }
 
   return result;

@@ -520,6 +520,10 @@ export function registerCashfreeWebhook(app: Express) {
       }
 
       const payload = req.body as CashfreeWebhookPayload;
+
+      // Log the raw payload for debugging
+      console.log('Cashfree webhook raw payload:', JSON.stringify(payload, null, 2));
+
       const event = parseWebhookEvent(payload);
 
       console.log(`Received Cashfree webhook: ${event.eventType}`, {
@@ -555,8 +559,9 @@ export function registerCashfreeWebhook(app: Express) {
 
           case 'PAYMENT_FAILED_WEBHOOK':
           case 'PAYMENT_DECLINED':
+          case 'PAYMENT_USER_DROPPED':
             if (event.orderId) {
-              await handlePaymentFailure(event.orderId, event.paymentStatus);
+              await handlePaymentFailure(event.orderId, event.errorReason || event.paymentStatus);
             }
             break;
 

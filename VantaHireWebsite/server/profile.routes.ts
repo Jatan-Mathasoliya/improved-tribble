@@ -12,14 +12,20 @@ import type { Express, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { storage } from './storage';
 import { db } from './db';
-import { users } from '@shared/schema';
+import { users, organizationMembers } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import { requireAuth, requireRole } from './auth';
 import type { CsrfMiddleware } from './types/routes';
-import { syncProfileCompletionStatus } from './lib/profileCompletion';
+import { syncProfileCompletionStatus, computeProfileCompletion } from './lib/profileCompletion';
 import { generatePublicId, isValidPublicId, isNumericId } from './lib/publicId';
 import { getEmailService } from './simpleEmailService';
 import crypto from 'crypto';
+
+// Validation schema for user updates (firstName, lastName)
+const updateUserSchema = z.object({
+  firstName: z.string().max(100).optional(),
+  lastName: z.string().max(100).optional(),
+});
 
 // Validation schema for profile updates
 const updateProfileSchema = z.object({
@@ -106,6 +112,71 @@ export function registerProfileRoutes(
           location: profile.location,
           isPublic: profile.isPublic,
           publicId: profile.publicId,
+        },
+      });
+      return;
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * PATCH /api/user
+   * Update the current user's basic info (firstName, lastName)
+   */
+  app.patch("/api/user", csrfProtection, requireAuth, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user!.id;
+
+      // Validate input
+      const parseResult = updateUserSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        res.status(400).json({
+          error: 'Validation error',
+          details: parseResult.error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message,
+          })),
+        });
+        return;
+      }
+
+      const updates = parseResult.data;
+
+      // Build update object
+      const updateData: Partial<{ firstName: string | null; lastName: string | null }> = {};
+      if (updates.firstName !== undefined) {
+        updateData.firstName = updates.firstName.trim() || null;
+      }
+      if (updates.lastName !== undefined) {
+        updateData.lastName = updates.lastName.trim() || null;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        res.status(400).json({ error: 'No valid fields to update' });
+        return;
+      }
+
+      // Update user
+      const [updatedUser] = await db
+        .update(users)
+        .set(updateData)
+        .where(eq(users.id, userId))
+        .returning();
+
+      if (!updatedUser) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+
+      res.json({
+        message: 'User updated successfully',
+        user: {
+          id: updatedUser.id,
+          username: updatedUser.username,
+          firstName: updatedUser.firstName,
+          lastName: updatedUser.lastName,
+          role: updatedUser.role,
         },
       });
       return;
@@ -551,6 +622,159 @@ export function registerProfileRoutes(
       }
 
       res.json({ message: 'Pending email change cancelled' });
+      return;
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // ============= ONBOARDING STATUS =============
+
+  /**
+   * GET /api/onboarding-status
+   * Get the current user's onboarding status (for recruiters only)
+   * Returns which step they should be on and whether they need onboarding
+   */
+  app.get("/api/onboarding-status", requireAuth, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const user = req.user!;
+
+      // Only recruiters go through onboarding
+      if (user.role !== 'recruiter') {
+        res.json({
+          needsOnboarding: false,
+          currentStep: 'complete',
+          hasOrganization: false,
+          profileComplete: true,
+        });
+        return;
+      }
+
+      // Check if onboarding already completed
+      if (user.onboardingCompletedAt) {
+        res.json({
+          needsOnboarding: false,
+          currentStep: 'complete',
+          hasOrganization: true,
+          profileComplete: true,
+        });
+        return;
+      }
+
+      // Check if user has an organization
+      const membership = await db.query.organizationMembers.findFirst({
+        where: eq(organizationMembers.userId, user.id),
+      });
+      const hasOrganization = !!membership;
+
+      // Check profile completion
+      const profile = await storage.getUserProfile(user.id);
+      const profileStatus = await computeProfileCompletion(user, { profile: profile || null });
+      const profileComplete = profileStatus.complete;
+
+      // Determine current step
+      // Profile can be skipped - if skipped, move to plan even if incomplete
+      const profileSkipped = !!user.profileSkippedAt;
+      let currentStep: 'org' | 'profile' | 'plan';
+
+      if (!hasOrganization) {
+        currentStep = 'org';
+      } else if (!profileComplete && !profileSkipped) {
+        currentStep = 'profile';
+      } else {
+        currentStep = 'plan';
+      }
+
+      // For existing users with org + complete profile, check if they should skip onboarding
+      // (i.e., they're existing users who predate the onboarding feature)
+      // We consider onboarding complete if they've been a member for more than 24 hours (established users)
+      let needsOnboarding = true;
+      if (hasOrganization && profileComplete && membership) {
+        // Check if user joined more than 24 hours ago (established user, skip onboarding)
+        const joinedAt = new Date(membership.joinedAt);
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        if (joinedAt < oneDayAgo) {
+          // This is an established user who predates onboarding
+          // Persist onboardingCompletedAt so we don't need to check again on future logins
+          needsOnboarding = false;
+
+          // Mark onboarding as complete in the database (fire-and-forget, don't block response)
+          db.update(users)
+            .set({ onboardingCompletedAt: new Date() })
+            .where(eq(users.id, user.id))
+            .catch((err: unknown) => {
+              console.error('Failed to auto-complete onboarding for established user:', err);
+            });
+        }
+      }
+
+      res.json({
+        needsOnboarding,
+        currentStep: needsOnboarding ? currentStep : 'complete',
+        hasOrganization,
+        profileComplete,
+      });
+      return;
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/onboarding/complete
+   * Mark onboarding as complete for the current user
+   */
+  app.post("/api/onboarding/complete", csrfProtection, requireAuth, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const user = req.user!;
+
+      // Only allow recruiters to complete onboarding
+      if (user.role !== 'recruiter') {
+        res.status(403).json({ error: 'Onboarding is only for recruiters' });
+        return;
+      }
+
+      // Mark onboarding as complete
+      await db
+        .update(users)
+        .set({ onboardingCompletedAt: new Date() })
+        .where(eq(users.id, user.id));
+
+      res.json({
+        message: 'Onboarding completed',
+        onboardingCompletedAt: new Date().toISOString(),
+      });
+      return;
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/onboarding/skip-profile
+   * Skip the profile step during onboarding (user acknowledged the warning)
+   * This doesn't mark onboarding complete, just advances to the plan step
+   */
+  app.post("/api/onboarding/skip-profile", csrfProtection, requireAuth, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const user = req.user!;
+
+      // Only allow recruiters
+      if (user.role !== 'recruiter') {
+        res.status(403).json({ error: 'Onboarding is only for recruiters' });
+        return;
+      }
+
+      // Persist the skip so the server knows to advance to plan step on next status check
+      await db
+        .update(users)
+        .set({ profileSkippedAt: new Date() })
+        .where(eq(users.id, user.id));
+
+      res.json({
+        message: 'Profile step skipped',
+        nextStep: 'plan',
+      });
       return;
     } catch (error) {
       next(error);

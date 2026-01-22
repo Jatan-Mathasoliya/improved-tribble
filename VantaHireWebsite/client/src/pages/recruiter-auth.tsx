@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Briefcase, Users, TrendingUp, Shield, Mail, CheckCircle } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import type { OnboardingStatus } from "@/hooks/use-onboarding-status";
 
 export default function RecruiterAuth() {
   const { user, loginMutation, registerMutation } = useAuth();
@@ -48,6 +49,22 @@ export default function RecruiterAuth() {
   const [registrationSuccess, setRegistrationSuccess] = useState(false);
   const [resendLoading, setResendLoading] = useState(false);
 
+  // Check onboarding status for recruiters
+  const checkOnboardingAndRedirect = useCallback(async () => {
+    if (!user || user.role !== "recruiter") return null;
+
+    try {
+      const res = await fetch("/api/onboarding-status", { credentials: "include" });
+      if (res.ok) {
+        const status: OnboardingStatus = await res.json();
+        return status;
+      }
+    } catch {
+      // If onboarding status check fails, continue with normal redirect
+    }
+    return null;
+  }, [user]);
+
   // Redirect if already logged in as recruiter, admin, or hiring manager (shared portal)
   useEffect(() => {
     if (!user) return;
@@ -64,15 +81,25 @@ export default function RecruiterAuth() {
       return;
     }
 
-    // Otherwise use default redirects
+    // For recruiters, check onboarding status before redirecting
     if (user.role === "recruiter") {
-      setLocation("/recruiter-dashboard");
-    } else if (user.role === "super_admin") {
+      checkOnboardingAndRedirect().then((status) => {
+        if (status?.needsOnboarding) {
+          setLocation(`/onboarding?step=${status.currentStep}`);
+        } else {
+          setLocation("/recruiter-dashboard");
+        }
+      });
+      return;
+    }
+
+    // Other role redirects
+    if (user.role === "super_admin") {
       setLocation("/admin");
     } else if (user.role === "hiring_manager") {
       setLocation("/hiring-manager");
     }
-  }, [user, setLocation, redirectUrl, inviteToken]);
+  }, [user, setLocation, redirectUrl, inviteToken, checkOnboardingAndRedirect]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

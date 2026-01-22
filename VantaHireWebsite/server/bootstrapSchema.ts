@@ -443,6 +443,11 @@ export async function ensureAtsSchema(): Promise<void> {
   await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_prompt_snooze_until TIMESTAMP;`);
   await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_completed_at TIMESTAMP;`);
 
+  // Users table: Onboarding tracking
+  console.log('  Adding onboarding tracking column to users table...');
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed_at TIMESTAMP;`);
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_skipped_at TIMESTAMP;`);
+
   // Jobs table: JD digest caching
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS jd_digest JSONB;`);
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS jd_digest_version INTEGER DEFAULT 1;`);
@@ -1268,7 +1273,18 @@ export async function ensureAtsSchema(): Promise<void> {
       sort_order = EXCLUDED.sort_order;
   `);
 
+  // Fix duplicate job slugs by prepending job ID (e.g., "123-relationship-manager")
+  // ID-first format allows the router to extract ID for direct lookup
+  console.log('  Fixing duplicate job slugs...');
+  await db.execute(sql`
+    UPDATE jobs
+    SET slug = CONCAT(id::text, '-', slug)
+    WHERE slug IS NOT NULL
+    AND slug !~ ('^' || id::text || '-');
+  `);
+
   });
+
 
   console.log('✅ ATS schema ready');
 }

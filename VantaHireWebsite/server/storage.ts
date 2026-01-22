@@ -660,22 +660,31 @@ export class DatabaseStorage implements IStorage {
 
   // Job methods
   async createJob(job: InsertJob & { postedBy: number; organizationId: number }): Promise<Job> {
-    // Generate SEO-friendly slug from title
-    const slug = slugify(job.title, {
+    // Generate base slug from title
+    const baseSlug = slugify(job.title, {
       lower: true,
       strict: true, // Remove special characters
       trim: true
     });
 
+    // Insert with temporary slug, then update with unique slug using job ID
     const jobData = {
       ...job,
-      slug,
+      slug: baseSlug, // Temporary, will be updated
       deadline: job.deadline ? job.deadline.toISOString().split('T')[0] : null
     };
     const [result] = await db
       .insert(jobs)
       .values(jobData)
       .returning();
+
+    // Update slug to include job ID for uniqueness (e.g., "123-relationship-manager")
+    // ID-first format allows the router to extract ID for direct lookup
+    const uniqueSlug = `${result.id}-${baseSlug}`;
+    await db
+      .update(jobs)
+      .set({ slug: uniqueSlug })
+      .where(eq(jobs.id, result.id));
 
     // Auto-insert primary recruiter into job_recruiters for easy querying
     await db.insert(jobRecruiters).values({
@@ -685,7 +694,7 @@ export class DatabaseStorage implements IStorage {
       organizationId: job.organizationId,
     }).onConflictDoNothing();
 
-    return result;
+    return { ...result, slug: uniqueSlug };
   }
   
   async getJob(id: number): Promise<Job | undefined> {
