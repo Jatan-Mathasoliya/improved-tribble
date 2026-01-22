@@ -181,7 +181,7 @@ export function registerAdminSubscriptionRoutes(
           (SELECT COUNT(*) FROM applications a
            INNER JOIN jobs j ON a.job_id = j.id
            WHERE j.organization_id = ${orgId}) as applications_count,
-          (SELECT COUNT(DISTINCT a.candidate_id) FROM applications a
+          (SELECT COUNT(DISTINCT a.email) FROM applications a
            INNER JOIN jobs j ON a.job_id = j.id
            WHERE j.organization_id = ${orgId}) as candidates_count
       `);

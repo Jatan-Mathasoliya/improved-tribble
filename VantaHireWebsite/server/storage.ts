@@ -1625,6 +1625,7 @@ export class DatabaseStorage implements IStorage {
     allTags: string[];
   }>> {
     // Build the SQL query with aggregation
+    // Note: We collect tag arrays and flatten in JS since PostgreSQL can't use unnest() inside ARRAY_AGG()
     let query = sql`
       SELECT
         a.email,
@@ -1632,7 +1633,7 @@ export class DatabaseStorage implements IStorage {
         COUNT(DISTINCT a.job_id)::int as jobs_applied_count,
         MAX(a.applied_at) as last_application_date,
         MAX(a.rating)::int as highest_rating,
-        ARRAY_AGG(DISTINCT unnest(a.tags)) FILTER (WHERE a.tags IS NOT NULL AND array_length(a.tags, 1) > 0) as all_tags
+        array_agg(a.tags) FILTER (WHERE a.tags IS NOT NULL AND array_length(a.tags, 1) > 0) as all_tags_arrays
       FROM applications a
       INNER JOIN jobs j ON a.job_id = j.id
       WHERE j.posted_by = ${recruiterId}
@@ -1662,20 +1663,28 @@ export class DatabaseStorage implements IStorage {
 
     if (filters?.hasTags && filters.hasTags.length > 0) {
       candidates = candidates.filter((candidate: any) => {
-        if (!candidate.all_tags) return false;
-        const candidateTags = candidate.all_tags || [];
+        const tagArrays: string[][] = candidate.all_tags_arrays || [];
+        const candidateTags = tagArrays.flat().filter(Boolean);
+        if (candidateTags.length === 0) return false;
         return filters.hasTags!.some(tag => candidateTags.includes(tag));
       });
     }
 
-    return candidates.map((row: any) => ({
-      email: row.email,
-      name: row.name,
-      jobsAppliedCount: row.jobs_applied_count || 0,
-      lastApplicationDate: new Date(row.last_application_date),
-      highestRating: row.highest_rating,
-      allTags: row.all_tags || []
-    }));
+    return candidates.map((row: any) => {
+      // Flatten array of tag arrays and deduplicate
+      const tagArrays: string[][] = row.all_tags_arrays || [];
+      const flatTags = tagArrays.flat().filter(Boolean);
+      const uniqueTags = [...new Set(flatTags)];
+
+      return {
+        email: row.email,
+        name: row.name,
+        jobsAppliedCount: row.jobs_applied_count || 0,
+        lastApplicationDate: new Date(row.last_application_date),
+        highestRating: row.highest_rating,
+        allTags: uniqueTags
+      };
+    });
   }
 
   // ============= PHASE 5: ADMIN SUPER DASHBOARD METHODS =============
