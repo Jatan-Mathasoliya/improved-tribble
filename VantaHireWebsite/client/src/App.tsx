@@ -29,6 +29,7 @@ const AdminDomainClaimsPage = lazy(() => import("@/pages/admin-domain-claims-pag
 const AdminOrganizationsPage = lazy(() => import("@/pages/admin-organizations-page"));
 const AdminOrganizationDetailPage = lazy(() => import("@/pages/admin-organization-detail-page"));
 const AdminFeaturesPage = lazy(() => import("@/pages/admin-features-page"));
+const AdminOrgControlsPage = lazy(() => import("@/pages/admin-org-controls-page"));
 const AdminSubscriptionsPage = lazy(() => import("@/pages/admin-subscriptions-page"));
 const ApplicationManagementPage = lazy(() => import("@/pages/application-management-page"));
 const JobEditPage = lazy(() => import("@/pages/job-edit-page"));
@@ -146,7 +147,8 @@ function Router() {
       <ProtectedRoute path="/admin/organizations/:id" component={AdminOrganizationDetailPage} requiredRole={['super_admin']} />
       <ProtectedRoute path="/admin/organizations" component={AdminOrganizationsPage} requiredRole={['super_admin']} />
       <ProtectedRoute path="/admin/subscriptions" component={AdminSubscriptionsPage} requiredRole={['super_admin']} />
-      <ProtectedRoute path="/admin/features" component={AdminFeaturesPage} requiredRole={['super_admin']} />
+      <ProtectedRoute path="/admin/org-controls" component={AdminOrgControlsPage} requiredRole={['super_admin']} />
+      <Route path="/admin/features">{() => <Redirect to="/admin/org-controls" />}</Route>
       <ProtectedRoute path="/analytics" component={JobAnalyticsDashboard} requiredRole={['recruiter', 'super_admin']} />
       {/* Organization management routes */}
       <ProtectedRoute path="/org/choice" component={OrgChoicePage} requiredRole={['recruiter']} />

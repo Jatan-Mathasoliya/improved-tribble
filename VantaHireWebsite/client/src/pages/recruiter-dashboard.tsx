@@ -320,12 +320,13 @@ type HmFeedbackResponse = {
   }, [filteredJobs, filteredApplications, hiringMetrics, pipelineStages, hmFeedback, dropoffData]);
 
   const pipelineHealthScore = useMemo(() => {
-    if (!jobHealth.length) return { score: 72, tag: "Stable" };
+    // No jobs = no data to show, indicate empty state
+    if (!jobHealth.length) return { score: 0, tag: "No data", isEmpty: true };
     const weight = { green: 95, amber: 68, red: 40 };
     const avg =
       jobHealth.reduce((sum, j) => sum + (weight[j.status] ?? 70), 0) / jobHealth.length;
     const tag = avg >= 80 ? "Healthy" : avg >= 60 ? "Stable" : "At risk";
-    return { score: Math.round(avg), tag };
+    return { score: Math.round(avg), tag, isEmpty: false };
   }, [jobHealth]);
 
   const timeSeriesData = useMemo(() => {
@@ -475,9 +476,9 @@ type HmFeedbackResponse = {
     () => [
       {
         label: "Pipeline Health",
-        value: `${pipelineHealthScore.score}%`,
-        hint: pipelineHealthScore.tag,
-        trend: pipelineHealthScore.score >= 70 ? "up" as const : pipelineHealthScore.score >= 50 ? "flat" as const : "down" as const,
+        value: pipelineHealthScore.isEmpty ? "—" : `${pipelineHealthScore.score}%`,
+        hint: pipelineHealthScore.isEmpty ? "Post a job to get started" : pipelineHealthScore.tag,
+        trend: pipelineHealthScore.isEmpty ? "flat" as const : pipelineHealthScore.score >= 70 ? "up" as const : pipelineHealthScore.score >= 50 ? "flat" as const : "down" as const,
       },
       {
         label: "Active Roles",

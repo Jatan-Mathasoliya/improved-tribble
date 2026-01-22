@@ -1283,6 +1283,18 @@ export async function ensureAtsSchema(): Promise<void> {
     AND slug !~ ('^' || id::text || '-');
   `);
 
+  // Admin Org Controls: Add bonus credits fields to organization_subscriptions
+  console.log('  Adding bonus credits columns to organization_subscriptions...');
+  await db.execute(sql`ALTER TABLE organization_subscriptions ADD COLUMN IF NOT EXISTS bonus_credits INTEGER DEFAULT 0;`);
+  await db.execute(sql`ALTER TABLE organization_subscriptions ADD COLUMN IF NOT EXISTS bonus_credits_granted_at TIMESTAMP;`);
+  await db.execute(sql`ALTER TABLE organization_subscriptions ADD COLUMN IF NOT EXISTS bonus_credits_reason TEXT;`);
+  await db.execute(sql`ALTER TABLE organization_subscriptions ADD COLUMN IF NOT EXISTS bonus_credits_granted_by INTEGER REFERENCES users(id);`);
+  await db.execute(sql`ALTER TABLE organization_subscriptions ADD COLUMN IF NOT EXISTS custom_credit_limit INTEGER;`);
+
+  // Add paid_seats column for accurate MRR calculation (tracks seats actually paid for)
+  console.log('  Adding paid_seats column to organization_subscriptions...');
+  await db.execute(sql`ALTER TABLE organization_subscriptions ADD COLUMN IF NOT EXISTS paid_seats INTEGER NOT NULL DEFAULT 0;`);
+
   });
 
 

@@ -5,7 +5,7 @@ import { useOnboardingStatus } from "@/hooks/use-onboarding-status";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Loader2, AlertCircle, RefreshCw } from "lucide-react";
-import Header from "@/components/Header";
+import Layout from "@/components/Layout";
 import OrgSetupStep from "@/components/onboarding/OrgSetupStep";
 import ProfileStep from "@/components/onboarding/ProfileStep";
 import PlanSelectionStep from "@/components/onboarding/PlanSelectionStep";
@@ -90,21 +90,19 @@ export default function OnboardingPage() {
   // Loading state
   if (authLoading || statusLoading) {
     return (
-      <div className="public-theme min-h-screen bg-background">
-        <Header />
-        <div className="flex items-center justify-center h-[calc(100vh-80px)]">
+      <Layout>
+        <div className="flex items-center justify-center min-h-[60vh]">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
         </div>
-      </div>
+      </Layout>
     );
   }
 
   // Error state - show error with retry option
   if (statusError && user?.role === 'recruiter') {
     return (
-      <div className="public-theme min-h-screen bg-background">
-        <Header />
-        <div className="flex items-center justify-center h-[calc(100vh-80px)]">
+      <Layout>
+        <div className="flex items-center justify-center min-h-[60vh]">
           <div className="text-center max-w-md mx-auto px-4">
             <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-foreground mb-2">
@@ -124,7 +122,7 @@ export default function OnboardingPage() {
             </div>
           </div>
         </div>
-      </div>
+      </Layout>
     );
   }
 
@@ -137,9 +135,8 @@ export default function OnboardingPage() {
   const progressPercent = ((stepIndex + 1) / STEP_ORDER.length) * 100;
 
   return (
-    <div className="public-theme min-h-screen bg-background">
-      <Header />
-      <div className="container mx-auto px-4 py-8 pt-24">
+    <Layout>
+      <div className="container mx-auto px-4 py-8">
         <div className="max-w-2xl mx-auto">
           {/* Header */}
           <div className="text-center mb-8">
@@ -190,6 +187,6 @@ export default function OnboardingPage() {
           </div>
         </div>
       </div>
-    </div>
+    </Layout>
   );
 }

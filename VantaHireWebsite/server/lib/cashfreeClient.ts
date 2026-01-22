@@ -213,11 +213,20 @@ export async function createCheckoutOrder(
     order_status: string;
   }>('/pg/orders', 'POST', orderRequest);
 
+  console.log('Cashfree order created:', {
+    orderId: response.order_id,
+    cfOrderId: response.cf_order_id,
+    sessionId: response.payment_session_id,
+    sessionIdLength: response.payment_session_id?.length,
+  });
+
   // Get payment link - use Cashfree's hosted checkout page
   // Note: payment_session_id is used for SDK integration, cf_order_id for hosted checkout
   const paymentLink = CASHFREE_ENV === 'PRODUCTION'
     ? `https://payments.cashfree.com/order/#${response.payment_session_id}`
     : `https://sandbox.cashfree.com/checkout/order/#${response.payment_session_id}`;
+
+  console.log('Payment link generated:', paymentLink);
 
   return {
     orderId: response.order_id,

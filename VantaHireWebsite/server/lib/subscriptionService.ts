@@ -90,6 +90,7 @@ export async function createFreeSubscription(orgId: number): Promise<Organizatio
     organizationId: orgId,
     planId: freePlan.id,
     seats: 1, // Free plan is fixed at 1 seat
+    paidSeats: 0, // Free plan has no paid seats
     billingCycle: 'monthly',
     status: 'active',
     startDate: now,
@@ -135,6 +136,7 @@ export async function createPaidSubscription(
     organizationId: orgId,
     planId,
     seats,
+    paidSeats: seats, // All seats are paid for in a paid subscription
     billingCycle,
     status: 'active',
     startDate: now,
@@ -157,7 +159,9 @@ export async function createPaidSubscription(
   return subscription;
 }
 
-// Update subscription seats
+// Update subscription seats (for paid seat changes via payment flow)
+// Also updates paidSeats since this is called for paid seat additions/removals
+// Admin overrides use adminOverrideSubscription() which doesn't update paidSeats
 export async function updateSubscriptionSeats(
   subscriptionId: number,
   newSeats: number,
@@ -176,6 +180,7 @@ export async function updateSubscriptionSeats(
   const [updated] = await db.update(organizationSubscriptions)
     .set({
       seats: newSeats,
+      paidSeats: newSeats, // Also update paidSeats since this is a paid change
       updatedAt: new Date(),
     })
     .where(eq(organizationSubscriptions.id, subscriptionId))
@@ -409,6 +414,8 @@ export async function adminOverrideSubscription(
     status: SubscriptionStatus;
     currentPeriodEnd: Date;
     featureOverrides: Record<string, any>;
+    bonusCredits: number;
+    customCreditLimit: number | null;
   }>,
   adminUserId: number,
   reason: string

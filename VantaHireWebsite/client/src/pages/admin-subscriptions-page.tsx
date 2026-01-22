@@ -81,6 +81,7 @@ interface SubscriptionAnalytics {
   mrr: number;
   activeSubscriptions: number;
   totalSeats: number;
+  totalPaidSeats: number;
   planDistribution: Array<{ planName: string; count: number }>;
   statusDistribution: Array<{ status: string; count: number }>;
 }
@@ -252,8 +253,13 @@ export default function AdminSubscriptionsPage() {
                   <Users className="h-5 w-5 text-purple-600" />
                 </div>
                 <div>
-                  <p className="text-2xl font-bold">{analytics?.totalSeats || 0}</p>
-                  <p className="text-sm text-muted-foreground">Total Paid Seats</p>
+                  <p className="text-2xl font-bold">
+                    {analytics?.totalPaidSeats || 0}
+                    <span className="text-sm font-normal text-muted-foreground ml-1">
+                      / {analytics?.totalSeats || 0}
+                    </span>
+                  </p>
+                  <p className="text-sm text-muted-foreground">Paid / Total Seats</p>
                 </div>
               </div>
             </CardContent>

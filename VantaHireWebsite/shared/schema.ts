@@ -776,6 +776,7 @@ export const organizationSubscriptions = pgTable("organization_subscriptions", {
   planId: integer("plan_id").notNull().references(() => subscriptionPlans.id),
 
   seats: integer("seats").notNull().default(1),
+  paidSeats: integer("paid_seats").notNull().default(0), // Seats actually paid for (for MRR calculation)
   billingCycle: text("billing_cycle").notNull(), // 'monthly', 'annual'
   status: text("status").notNull().default('active'), // 'active', 'past_due', 'cancelled', 'trialing'
 
@@ -797,6 +798,15 @@ export const organizationSubscriptions = pgTable("organization_subscriptions", {
   adminOverrideBy: integer("admin_override_by").references(() => users.id),
 
   featureOverrides: jsonb("feature_overrides"),
+
+  // Bonus credits (admin-granted pool shared by org)
+  bonusCredits: integer("bonus_credits").default(0),
+  bonusCreditsGrantedAt: timestamp("bonus_credits_granted_at"),
+  bonusCreditsReason: text("bonus_credits_reason"),
+  bonusCreditsGrantedBy: integer("bonus_credits_granted_by").references(() => users.id),
+
+  // Custom credit limit override (for Business plan customization)
+  customCreditLimit: integer("custom_credit_limit"),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

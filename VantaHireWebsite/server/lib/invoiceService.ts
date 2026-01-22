@@ -281,10 +281,12 @@ export function calculateProratedAmount(
 }
 
 // Get monthly recurring revenue (MRR) for admin analytics
+// Uses paidSeats (not seats) to exclude admin-granted free seats
 export async function calculateMRR(): Promise<{
   mrr: number;
   activeSubscriptions: number;
   totalSeats: number;
+  totalPaidSeats: number;
 }> {
   const subscriptions = await db.query.organizationSubscriptions.findMany({
     where: eq(organizationSubscriptions.status, 'active'),
@@ -295,6 +297,7 @@ export async function calculateMRR(): Promise<{
 
   let mrr = 0;
   let totalSeats = 0;
+  let totalPaidSeats = 0;
 
   for (const sub of subscriptions) {
     const plan = sub.plan;
@@ -304,13 +307,16 @@ export async function calculateMRR(): Promise<{
       ? plan.pricePerSeatAnnual / 12
       : plan.pricePerSeatMonthly;
 
-    mrr += monthlyPrice * sub.seats;
+    // Use paidSeats for MRR calculation (excludes admin-granted free seats)
+    mrr += monthlyPrice * (sub.paidSeats || 0);
     totalSeats += sub.seats;
+    totalPaidSeats += sub.paidSeats || 0;
   }
 
   return {
     mrr,
     activeSubscriptions: subscriptions.filter((s: typeof subscriptions[number]) => s.plan.name !== 'free').length,
     totalSeats,
+    totalPaidSeats,
   };
 }

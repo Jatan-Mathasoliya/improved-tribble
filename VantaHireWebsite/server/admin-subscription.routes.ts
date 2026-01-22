@@ -32,6 +32,13 @@ import {
   getSubscriptionLimits,
   isValidFeatureKey,
 } from "./lib/featureGating";
+import {
+  getOrgCreditDetails,
+  grantBonusCredits,
+  setCustomCreditLimit,
+  clearBonusCredits,
+  recalculateOrgCredits,
+} from "./lib/creditService";
 import { requireSuperAdmin } from "./lib/adminAuth";
 import { getEmailService } from "./simpleEmailService";
 import { users } from "@shared/schema";
@@ -60,6 +67,18 @@ const overrideSubscriptionSchema = z.object({
   status: z.enum(['active', 'past_due', 'cancelled', 'trialing']).optional(),
   extendDays: z.number().int().min(1).max(365).optional(),
   featureOverrides: z.record(z.any()).optional(),
+  bonusCredits: z.number().int().min(0).optional(),
+  customCreditLimit: z.number().int().min(0).nullable().optional(),
+  reason: z.string().min(1).max(500),
+});
+
+const grantBonusCreditsSchema = z.object({
+  amount: z.number().int().min(1).max(100000),
+  reason: z.string().min(1).max(500),
+});
+
+const setCustomCreditLimitSchema = z.object({
+  customLimit: z.number().int().min(0).nullable(),
   reason: z.string().min(1).max(500),
 });
 
@@ -438,6 +457,8 @@ export function registerAdminSubscriptionRoutes(
       if (data.seats) updates.seats = data.seats;
       if (data.status) updates.status = data.status;
       if (data.featureOverrides) updates.featureOverrides = data.featureOverrides;
+      if (data.bonusCredits !== undefined) updates.bonusCredits = data.bonusCredits;
+      if (data.customCreditLimit !== undefined) updates.customCreditLimit = data.customCreditLimit;
 
       if (data.extendDays) {
         const subscription = await db.query.organizationSubscriptions.findFirst({
@@ -451,6 +472,11 @@ export function registerAdminSubscriptionRoutes(
       }
 
       const updated = await adminOverrideSubscription(subscriptionId, updates, user.id, data.reason);
+
+      // Recalculate credit allocations if plan or seats changed
+      if (data.planId || data.seats) {
+        await recalculateOrgCredits(updated.organizationId);
+      }
 
       res.json({
         success: true,
@@ -726,6 +752,164 @@ export function registerAdminSubscriptionRoutes(
     } catch (error: any) {
       console.error("Error getting feature audit log:", error);
       res.status(500).json({ error: "Failed to get feature audit log" });
+    }
+  });
+
+  // ===== Credit Management =====
+
+  // Get organization credit details
+  app.get("/api/admin/organizations/:id/credits", requireAuth, requireSuperAdmin(), async (req, res) => {
+    try {
+      const orgId = parseInt(req.params.id ?? '0');
+
+      const org = await db.query.organizations.findFirst({
+        where: eq(organizations.id, orgId),
+        columns: { id: true, name: true },
+      });
+
+      if (!org) {
+        res.status(404).json({ error: "Organization not found" });
+        return;
+      }
+
+      const creditDetails = await getOrgCreditDetails(orgId);
+      if (!creditDetails) {
+        res.status(404).json({ error: "Organization has no subscription" });
+        return;
+      }
+
+      res.json({
+        organizationId: orgId,
+        organizationName: org.name,
+        ...creditDetails,
+      });
+    } catch (error: any) {
+      console.error("Error getting organization credits:", error);
+      res.status(500).json({ error: "Failed to get organization credits" });
+    }
+  });
+
+  // Grant bonus credits to organization
+  app.post("/api/admin/organizations/:id/credits/bonus", requireAuth, requireSuperAdmin(), csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgId = parseInt(req.params.id ?? '0');
+      const { amount, reason } = grantBonusCreditsSchema.parse(req.body);
+
+      const org = await db.query.organizations.findFirst({
+        where: eq(organizations.id, orgId),
+        columns: { id: true, name: true },
+      });
+
+      if (!org) {
+        res.status(404).json({ error: "Organization not found" });
+        return;
+      }
+
+      const result = await grantBonusCredits(orgId, amount, reason, user.id);
+
+      res.json({
+        success: true,
+        ...result,
+      });
+    } catch (error: any) {
+      console.error("Error granting bonus credits:", error);
+      if (error.name === "ZodError") {
+        res.status(400).json({ error: "Invalid input", details: error.errors });
+        return;
+      }
+      res.status(500).json({ error: error.message || "Failed to grant bonus credits" });
+    }
+  });
+
+  // Set custom credit limit for organization
+  app.post("/api/admin/organizations/:id/credits/custom-limit", requireAuth, requireSuperAdmin(), csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgId = parseInt(req.params.id ?? '0');
+      const { customLimit, reason } = setCustomCreditLimitSchema.parse(req.body);
+
+      const org = await db.query.organizations.findFirst({
+        where: eq(organizations.id, orgId),
+        columns: { id: true, name: true },
+      });
+
+      if (!org) {
+        res.status(404).json({ error: "Organization not found" });
+        return;
+      }
+
+      const result = await setCustomCreditLimit(orgId, customLimit, reason, user.id);
+
+      res.json({
+        success: true,
+        ...result,
+      });
+    } catch (error: any) {
+      console.error("Error setting custom credit limit:", error);
+      if (error.name === "ZodError") {
+        res.status(400).json({ error: "Invalid input", details: error.errors });
+        return;
+      }
+      res.status(500).json({ error: error.message || "Failed to set custom credit limit" });
+    }
+  });
+
+  // Clear bonus credits
+  app.delete("/api/admin/organizations/:id/credits/bonus", requireAuth, requireSuperAdmin(), csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgId = parseInt(req.params.id ?? '0');
+      const reason = req.body.reason || 'Admin cleared bonus credits';
+
+      const org = await db.query.organizations.findFirst({
+        where: eq(organizations.id, orgId),
+        columns: { id: true, name: true },
+      });
+
+      if (!org) {
+        res.status(404).json({ error: "Organization not found" });
+        return;
+      }
+
+      const result = await clearBonusCredits(orgId, reason, user.id);
+
+      res.json({
+        success: true,
+        ...result,
+      });
+    } catch (error: any) {
+      console.error("Error clearing bonus credits:", error);
+      res.status(500).json({ error: error.message || "Failed to clear bonus credits" });
+    }
+  });
+
+  // Get all audit logs for an organization (unified history)
+  app.get("/api/admin/organizations/:id/audit-log", requireAuth, requireSuperAdmin(), async (req, res) => {
+    try {
+      const orgId = parseInt(req.params.id ?? '0');
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+
+      const org = await db.query.organizations.findFirst({
+        where: eq(organizations.id, orgId),
+        columns: { id: true, name: true },
+      });
+
+      if (!org) {
+        res.status(404).json({ error: "Organization not found" });
+        return;
+      }
+
+      const logs = await getSubscriptionAuditLog(orgId, limit);
+
+      res.json({
+        organizationId: orgId,
+        organizationName: org.name,
+        logs,
+      });
+    } catch (error: any) {
+      console.error("Error getting audit log:", error);
+      res.status(500).json({ error: "Failed to get audit log" });
     }
   });
 }

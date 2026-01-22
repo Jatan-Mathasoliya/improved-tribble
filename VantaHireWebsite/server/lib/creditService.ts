@@ -3,14 +3,14 @@ import {
   organizationMembers,
   organizationSubscriptions,
   subscriptionPlans,
+  subscriptionAuditLog,
   userAiUsage,
   type OrganizationMember,
   type UserAiUsage,
   type SubscriptionPlan,
 } from "@shared/schema";
 import { eq, and, sql, lte, desc } from "drizzle-orm";
-import { getOrganizationSubscription } from "./subscriptionService";
-import { getSeatedMembersCount } from "./membershipService";
+import { getOrganizationSubscription, logSubscriptionAction } from "./subscriptionService";
 
 export interface CreditBalance {
   allocated: number;
@@ -341,4 +341,292 @@ export async function bulkAllocateCreditsForUpgrade(
   }
 
   return updatedCount;
+}
+
+// ===== Admin Bonus Credits Functions =====
+
+export interface OrgCreditDetails {
+  planAllocation: number;      // Base from plan × seats
+  bonusCredits: number;        // Admin-granted bonuses
+  customLimit: number | null;  // Override if set
+  effectiveLimit: number;      // Actual monthly limit
+  usedThisPeriod: number;
+  remaining: number;
+  periodStart: Date | null;
+  periodEnd: Date | null;
+  seatedMembers: number;
+  memberBreakdown: {
+    userId: number;
+    name: string;
+    email: string;
+    allocated: number;
+    used: number;
+    remaining: number;
+  }[];
+}
+
+// Get detailed credit information for an organization (admin use)
+export async function getOrgCreditDetails(orgId: number): Promise<OrgCreditDetails | null> {
+  const subscription = await getOrganizationSubscription(orgId);
+  if (!subscription) {
+    return null;
+  }
+
+  const plan = subscription.plan;
+  const { creditsPerSeat } = getPlanCreditSettings(plan);
+
+  // Get all seated members with their user info
+  const members = await db.query.organizationMembers.findMany({
+    where: and(
+      eq(organizationMembers.organizationId, orgId),
+      eq(organizationMembers.seatAssigned, true)
+    ),
+    with: {
+      user: {
+        columns: {
+          id: true,
+          username: true,
+          firstName: true,
+          lastName: true,
+        },
+      },
+    },
+  });
+
+  const planAllocation = creditsPerSeat * subscription.seats;
+  const bonusCredits = subscription.bonusCredits || 0;
+  const customLimit = subscription.customCreditLimit;
+
+  // Effective limit: custom override takes precedence, then plan allocation + bonus
+  const effectiveLimit = customLimit !== null && customLimit !== undefined
+    ? customLimit
+    : planAllocation + bonusCredits;
+
+  const totalUsed = members.reduce((sum: number, m: typeof members[number]) => sum + m.creditsUsed, 0);
+  const totalAllocated = members.reduce((sum: number, m: typeof members[number]) => sum + m.creditsAllocated, 0);
+
+  // Period dates from first member (all should be synced)
+  const periodStart = members[0]?.creditsPeriodStart || null;
+  const periodEnd = members[0]?.creditsPeriodEnd || null;
+
+  const memberBreakdown = members.map((m: typeof members[number]) => ({
+    userId: m.userId,
+    name: m.user ? `${m.user.firstName || ''} ${m.user.lastName || ''}`.trim() || m.user.username : 'Unknown',
+    email: m.user?.username || '',
+    allocated: m.creditsAllocated,
+    used: m.creditsUsed,
+    remaining: Math.max(0, m.creditsAllocated - m.creditsUsed),
+  }));
+
+  return {
+    planAllocation,
+    bonusCredits,
+    customLimit,
+    effectiveLimit,
+    usedThisPeriod: totalUsed,
+    remaining: Math.max(0, totalAllocated - totalUsed),
+    periodStart,
+    periodEnd,
+    seatedMembers: members.length,
+    memberBreakdown,
+  };
+}
+
+// Recalculate and redistribute credits for an organization based on effective limit
+// Called when: bonus credits granted/cleared, custom limit set/cleared, seats/plan change
+export async function recalculateOrgCredits(orgId: number): Promise<{
+  effectiveLimit: number;
+  perMember: number;
+  membersUpdated: number;
+}> {
+  const subscription = await getOrganizationSubscription(orgId);
+  if (!subscription) {
+    throw new Error('Organization has no subscription');
+  }
+
+  const plan = subscription.plan;
+  const { creditsPerSeat } = getPlanCreditSettings(plan);
+
+  // Get all seated members
+  const members = await db.query.organizationMembers.findMany({
+    where: and(
+      eq(organizationMembers.organizationId, orgId),
+      eq(organizationMembers.seatAssigned, true)
+    ),
+  });
+
+  if (members.length === 0) {
+    return { effectiveLimit: 0, perMember: 0, membersUpdated: 0 };
+  }
+
+  // Calculate effective limit
+  const planAllocation = creditsPerSeat * members.length;
+  const bonusCredits = subscription.bonusCredits || 0;
+  const customLimit = subscription.customCreditLimit;
+
+  const effectiveLimit = customLimit !== null && customLimit !== undefined
+    ? customLimit
+    : planAllocation + bonusCredits;
+
+  // Calculate per-member allocation with remainder distribution
+  const perMember = Math.floor(effectiveLimit / members.length);
+  const remainder = effectiveLimit % members.length;
+
+  let membersUpdated = 0;
+
+  for (let i = 0; i < members.length; i++) {
+    const member = members[i];
+    // Distribute remainder to first N members (round-robin)
+    const newAllocation = perMember + (i < remainder ? 1 : 0);
+
+    // Clawback protection: can't reduce below what they've already used
+    const finalAllocation = Math.max(newAllocation, member.creditsUsed);
+
+    await db.update(organizationMembers)
+      .set({
+        creditsAllocated: finalAllocation,
+      })
+      .where(eq(organizationMembers.id, member.id));
+
+    membersUpdated++;
+  }
+
+  return {
+    effectiveLimit,
+    perMember,
+    membersUpdated,
+  };
+}
+
+// Grant bonus credits to an organization
+// Credits are always distributed to members via recalculateOrgCredits()
+export async function grantBonusCredits(
+  orgId: number,
+  amount: number,
+  reason: string,
+  grantedBy: number
+): Promise<{ totalGranted: number; membersAffected: number; newBonusTotal: number }> {
+  const subscription = await getOrganizationSubscription(orgId);
+  if (!subscription) {
+    throw new Error('Organization has no subscription');
+  }
+
+  const currentBonus = subscription.bonusCredits || 0;
+  const newBonusTotal = currentBonus + amount;
+
+  // Update the subscription with the new bonus amount
+  await db.update(organizationSubscriptions)
+    .set({
+      bonusCredits: newBonusTotal,
+      bonusCreditsGrantedAt: new Date(),
+      bonusCreditsReason: reason,
+      bonusCreditsGrantedBy: grantedBy,
+      updatedAt: new Date(),
+    })
+    .where(eq(organizationSubscriptions.id, subscription.id));
+
+  // Recalculate and redistribute credits to all members
+  const recalcResult = await recalculateOrgCredits(orgId);
+
+  // Log the action
+  await logSubscriptionAction(
+    orgId,
+    subscription.id,
+    'admin_override',
+    { bonusCredits: currentBonus },
+    { bonusCredits: newBonusTotal, bonusAmount: amount },
+    grantedBy,
+    `Bonus credits: ${reason}`
+  );
+
+  return {
+    totalGranted: amount,
+    membersAffected: recalcResult.membersUpdated,
+    newBonusTotal,
+  };
+}
+
+// Set custom credit limit for an organization (typically Business plan)
+// Recalculates member allocations after setting the limit
+export async function setCustomCreditLimit(
+  orgId: number,
+  customLimit: number | null,
+  reason: string,
+  setBy: number
+): Promise<{ previousLimit: number | null; newLimit: number | null; membersAffected: number }> {
+  const subscription = await getOrganizationSubscription(orgId);
+  if (!subscription) {
+    throw new Error('Organization has no subscription');
+  }
+
+  const previousLimit = subscription.customCreditLimit;
+
+  await db.update(organizationSubscriptions)
+    .set({
+      customCreditLimit: customLimit,
+      updatedAt: new Date(),
+    })
+    .where(eq(organizationSubscriptions.id, subscription.id));
+
+  // Recalculate and redistribute credits to all members
+  const recalcResult = await recalculateOrgCredits(orgId);
+
+  // Log the action
+  await logSubscriptionAction(
+    orgId,
+    subscription.id,
+    'admin_override',
+    { customCreditLimit: previousLimit },
+    { customCreditLimit: customLimit },
+    setBy,
+    `Custom credit limit: ${reason}`
+  );
+
+  return {
+    previousLimit,
+    newLimit: customLimit,
+    membersAffected: recalcResult.membersUpdated,
+  };
+}
+
+// Clear bonus credits for an organization
+// Implements clawback by recalculating member allocations (respects credits already used)
+export async function clearBonusCredits(
+  orgId: number,
+  reason: string,
+  clearedBy: number
+): Promise<{ previousAmount: number; membersAffected: number }> {
+  const subscription = await getOrganizationSubscription(orgId);
+  if (!subscription) {
+    throw new Error('Organization has no subscription');
+  }
+
+  const previousAmount = subscription.bonusCredits || 0;
+
+  await db.update(organizationSubscriptions)
+    .set({
+      bonusCredits: 0,
+      bonusCreditsGrantedAt: null,
+      bonusCreditsReason: null,
+      bonusCreditsGrantedBy: null,
+      updatedAt: new Date(),
+    })
+    .where(eq(organizationSubscriptions.id, subscription.id));
+
+  // Recalculate and redistribute credits (implements clawback)
+  // Members keep credits they've already used, but allocation is reduced
+  const recalcResult = await recalculateOrgCredits(orgId);
+
+  // Log the action
+  await logSubscriptionAction(
+    orgId,
+    subscription.id,
+    'admin_override',
+    { bonusCredits: previousAmount },
+    { bonusCredits: 0 },
+    clearedBy,
+    `Cleared bonus credits: ${reason}`
+  );
+
+  return { previousAmount, membersAffected: recalcResult.membersUpdated };
 }

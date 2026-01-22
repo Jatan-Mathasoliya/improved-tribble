@@ -658,11 +658,11 @@ export default function AdminSuperDashboard() {
               Subscriptions
             </Button>
             <Button
-              onClick={() => window.location.href = '/admin/features'}
+              onClick={() => window.location.href = '/admin/org-controls'}
               variant="outline"
             >
               <Settings className="h-4 w-4 mr-2" />
-              Features
+              Org Controls
             </Button>
             <Button
               onClick={() => window.location.href = '/admin/domain-claims'}
