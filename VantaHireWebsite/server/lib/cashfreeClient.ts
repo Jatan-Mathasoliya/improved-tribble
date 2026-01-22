@@ -186,10 +186,11 @@ export async function createCheckoutOrder(
     order_status: string;
   }>('/pg/orders', 'POST', orderRequest);
 
-  // Get payment link
+  // Get payment link - use Cashfree's hosted checkout page
+  // Note: payment_session_id is used for SDK integration, cf_order_id for hosted checkout
   const paymentLink = CASHFREE_ENV === 'PRODUCTION'
-    ? `https://payments.cashfree.com/forms/?cf_order_id=${response.cf_order_id}`
-    : `https://sandbox.cashfree.com/pg/pay?order_token=${response.payment_session_id}`;
+    ? `https://payments.cashfree.com/order/#${response.payment_session_id}`
+    : `https://sandbox.cashfree.com/checkout/order/#${response.payment_session_id}`;
 
   return {
     orderId: response.order_id,
@@ -407,9 +408,10 @@ export async function createSeatAddCheckout(
     payment_session_id: string;
   }>('/pg/orders', 'POST', orderRequest);
 
+  // Get payment link - use Cashfree's hosted checkout page
   const paymentLink = CASHFREE_ENV === 'PRODUCTION'
-    ? `https://payments.cashfree.com/forms/?cf_order_id=${response.cf_order_id}`
-    : `https://sandbox.cashfree.com/pg/pay?order_token=${response.payment_session_id}`;
+    ? `https://payments.cashfree.com/order/#${response.payment_session_id}`
+    : `https://sandbox.cashfree.com/checkout/order/#${response.payment_session_id}`;
 
   return {
     orderId: response.order_id,
