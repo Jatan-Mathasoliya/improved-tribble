@@ -58,7 +58,7 @@ const updateOrgSchema = z.object({
 
 const inviteMemberSchema = z.object({
   email: z.string().email(),
-  role: z.enum(['admin', 'member']).default('member'),
+  // Only 'member' role can be invited - owner can promote to admin after joining
 });
 
 const respondJoinRequestSchema = z.object({
@@ -246,7 +246,7 @@ export function registerOrganizationRoutes(
         return;
       }
 
-      const { email, role } = inviteMemberSchema.parse(req.body);
+      const { email } = inviteMemberSchema.parse(req.body);
 
       // Check if seats are available
       const seatsAvailable = await hasAvailableSeats(orgResult.organization.id);
@@ -258,10 +258,11 @@ export function registerOrganizationRoutes(
       // Check if email is already in an organization
       // This is handled by the createOrganizationInvite function
 
+      // Always invite as 'member' - owner can promote to admin after joining
       const invite = await createOrganizationInvite(
         orgResult.organization.id,
         email,
-        role,
+        'member',
         user.id
       );
 
@@ -521,11 +522,23 @@ export function registerOrganizationRoutes(
         return;
       }
 
+      // Check if invite has expired
+      if (new Date() > invite.expiresAt) {
+        res.status(410).json({ error: "This invite has expired" });
+        return;
+      }
+
+      const inviterFullName = invite.invitedByUser
+        ? [invite.invitedByUser.firstName, invite.invitedByUser.lastName].filter(Boolean).join(' ').trim()
+        : '';
+      const inviterName = inviterFullName || invite.invitedByUser?.username || 'A team member';
+
       res.json({
         organizationName: invite.organization.name,
         email: invite.email,
         role: invite.role,
         expiresAt: invite.expiresAt,
+        inviterName,
       });
     } catch (error: any) {
       console.error("Error getting invite:", error);
@@ -545,12 +558,35 @@ export function registerOrganizationRoutes(
         return;
       }
 
-      const membership = await acceptOrganizationInvite(token, user.id);
+      const membership = await acceptOrganizationInvite(token, user.id, user.username);
+
+      // Initialize credits for new member - best-effort, don't fail join if this fails
+      // Lazy-init fallback exists in /api/onboarding-status
+      try {
+        await initializeMemberCredits(membership.id, membership.organizationId);
+      } catch (creditError) {
+        console.error('Failed to initialize credits for new member (will retry on onboarding):', {
+          memberId: membership.id,
+          orgId: membership.organizationId,
+          error: creditError,
+        });
+      }
 
       res.json({ success: true, membership });
     } catch (error: any) {
       console.error("Error accepting invite:", error);
-      res.status(500).json({ error: error.message || "Failed to accept invite" });
+      const msg = error.message || "Failed to accept invite";
+
+      // Return appropriate 4xx codes based on error type
+      if (msg.includes("different email address")) {
+        res.status(403).json({ error: msg });
+      } else if (msg.includes("No seats available")) {
+        res.status(409).json({ error: msg });
+      } else if (msg.includes("Invalid") || msg.includes("expired") || msg.includes("not found")) {
+        res.status(404).json({ error: msg });
+      } else {
+        res.status(500).json({ error: msg });
+      }
     }
   });
 

@@ -435,7 +435,7 @@ const Layout = ({ children }: LayoutProps) => {
                   onClick={(e) => { e.preventDefault(); setLocation("/recruiters"); }}
                 >
                   <span className="relative z-10 flex items-center gap-2">
-                    Recruiters
+                    Browse Recruiters
                   </span>
                   <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
                 </a>
@@ -469,12 +469,12 @@ const Layout = ({ children }: LayoutProps) => {
                   <span className="relative z-10">Job Seekers</span>
                   <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
                 </a>
-                <a 
-                  href="/recruiter-auth" 
+                <a
+                  href="/recruiter-auth"
                   className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70"
                   onClick={(e) => { e.preventDefault(); setLocation("/recruiter-auth"); }}
                 >
-                  <span className="relative z-10">Recruiters</span>
+                  <span className="relative z-10">For Recruiters</span>
                   <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
                 </a>
               </div>
@@ -569,7 +569,7 @@ const Layout = ({ children }: LayoutProps) => {
                     className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
                     onClick={(e) => { e.preventDefault(); setLocation("/recruiters"); setIsMenuOpen(false); }}
                   >
-                    Our Recruiters
+                    Browse Recruiters
                   </a>
                 </>
               )}
@@ -592,12 +592,12 @@ const Layout = ({ children }: LayoutProps) => {
                   >
                     Job Seekers
                   </a>
-                  <a 
-                    href="/recruiter-auth" 
+                  <a
+                    href="/recruiter-auth"
                     className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
                     onClick={(e) => { e.preventDefault(); setLocation("/recruiter-auth"); setIsMenuOpen(false); }}
                   >
-                    Recruiters
+                    For Recruiters
                   </a>
                 </div>
               )}

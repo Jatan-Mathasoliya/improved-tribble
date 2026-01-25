@@ -172,6 +172,17 @@ export const applications = pgTable("applications", {
   aiSuggestedAction: text("ai_suggested_action"), // 'advance', 'hold', 'reject'
   aiSuggestedActionReason: text("ai_suggested_action_reason"), // Reasoning for the suggested action
   aiSummaryComputedAt: timestamp("ai_summary_computed_at"), // When the summary was generated
+  aiSummaryModelVersion: text("ai_summary_model_version"), // AI model used for summary (e.g., 'llama-3.3-70b-versatile')
+  aiStrengths: text("ai_strengths").array(), // Candidate strengths identified by AI
+  aiConcerns: text("ai_concerns").array(), // Concerns/gaps identified by AI
+  aiKeyHighlights: text("ai_key_highlights").array(), // Notable achievements/qualifications
+  // AI skill analysis
+  aiRequiredSkillsMatched: text("ai_required_skills_matched").array(), // Required skills found in candidate resume
+  aiRequiredSkillsMissing: text("ai_required_skills_missing").array(), // Required skills NOT found
+  aiRequiredSkillsMatchPercentage: integer("ai_required_skills_match_percentage"), // % of required skills matched (0-100)
+  aiRequiredSkillsDepthNotes: text("ai_required_skills_depth_notes"), // Notes on depth/quality of matched skills
+  aiGoodToHaveSkillsMatched: text("ai_good_to_have_skills_matched").array(), // Good-to-have skills found
+  aiGoodToHaveSkillsMissing: text("ai_good_to_have_skills_missing").array(), // Good-to-have skills NOT found
   resumeId: integer("resume_id").references(() => candidateResumes.id),
   whatsappConsent: boolean("whatsapp_consent").notNull().default(true), // WhatsApp notification consent (opt-out model)
 }, (table) => ({
@@ -1515,6 +1526,13 @@ export const insertUserSchema = createInsertSchema(users).pick({
   lastName: true,
   role: true,
 });
+
+// Registration payload extends insertUserSchema with optional org invite token
+export const registerPayloadSchema = insertUserSchema.extend({
+  inviteToken: z.string().length(64).optional(),
+});
+
+export type RegisterPayload = z.infer<typeof registerPayloadSchema>;
 
 export const insertContactSchema = createInsertSchema(contactSubmissions).pick({
   name: true,

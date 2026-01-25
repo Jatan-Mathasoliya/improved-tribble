@@ -15,10 +15,12 @@ import {
   type OrganizationJoinRequest,
   type DomainClaimRequest,
   type OrganizationRole,
+  type User,
 } from "@shared/schema";
 import { eq, and, desc, sql, or, isNull } from "drizzle-orm";
 import slugify from "slugify";
 import crypto from "crypto";
+import { hasAvailableSeats } from "./seatService";
 
 // Public email domains that cannot claim domain verification
 const PUBLIC_EMAIL_DOMAINS = [
@@ -215,7 +217,7 @@ export async function createOrganizationInvite(
   return invite;
 }
 
-export async function getOrganizationInviteByToken(token: string): Promise<(OrganizationInvite & { organization: Organization }) | undefined> {
+export async function getOrganizationInviteByToken(token: string): Promise<(OrganizationInvite & { organization: Organization; invitedByUser: User | null }) | undefined> {
   return db.query.organizationInvites.findFirst({
     where: and(
       eq(organizationInvites.token, token),
@@ -223,6 +225,7 @@ export async function getOrganizationInviteByToken(token: string): Promise<(Orga
     ),
     with: {
       organization: true,
+      invitedByUser: true,  // Get inviter details
     },
   });
 }
@@ -239,7 +242,8 @@ export async function getPendingInvitesForOrganization(orgId: number): Promise<O
 
 export async function acceptOrganizationInvite(
   token: string,
-  userId: number
+  userId: number,
+  userEmail: string
 ): Promise<OrganizationMember> {
   const invite = await getOrganizationInviteByToken(token);
   if (!invite) {
@@ -250,10 +254,21 @@ export async function acceptOrganizationInvite(
     throw new Error('Invite has expired');
   }
 
+  // Validate email matches invite
+  if (invite.email.toLowerCase() !== userEmail.toLowerCase()) {
+    throw new Error('This invite was sent to a different email address. Please use the correct email to accept this invite.');
+  }
+
   // Check if user is already in another org
   const inOrg = await isUserInOrganization(userId);
   if (inOrg) {
     throw new Error('You must leave your current organization first');
+  }
+
+  // Check seat availability
+  const seatsAvailable = await hasAvailableSeats(invite.organizationId);
+  if (!seatsAvailable) {
+    throw new Error('No seats available in this organization. Please contact the organization owner to add more seats.');
   }
 
   // Update invite as accepted

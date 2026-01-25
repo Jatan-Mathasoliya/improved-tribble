@@ -26,6 +26,7 @@ import {
   coRecruiterInvitations,
   aiFitJobs,
   candidateResumes,
+  organizationMembers,
   type User,
   type InsertUser,
   type ContactSubmission,
@@ -1633,20 +1634,50 @@ export class DatabaseStorage implements IStorage {
     highestRating: number | null;
     allTags: string[];
   }>> {
+    // Get user's role and organization
+    const user = await db.query.users.findFirst({
+      where: eq(users.id, recruiterId),
+      columns: { id: true, role: true },
+    });
+
+    if (!user) {
+      return [];
+    }
+
     // Build the SQL query with aggregation
     // Note: We collect tag arrays and flatten in JS since PostgreSQL can't use unnest() inside ARRAY_AGG()
-    let query = sql`
-      SELECT
-        a.email,
-        a.name,
-        COUNT(DISTINCT a.job_id)::int as jobs_applied_count,
-        MAX(a.applied_at) as last_application_date,
-        MAX(a.rating)::int as highest_rating,
-        array_agg(a.tags) FILTER (WHERE a.tags IS NOT NULL AND array_length(a.tags, 1) > 0) as all_tags_arrays
-      FROM applications a
-      INNER JOIN jobs j ON a.job_id = j.id
-      WHERE j.posted_by = ${recruiterId}
-    `;
+    let query;
+
+    if (user.role === 'super_admin') {
+      // Super admin sees ALL candidates across all organizations
+      query = sql`
+        SELECT
+          a.email,
+          a.name,
+          COUNT(DISTINCT a.job_id)::int as jobs_applied_count,
+          MAX(a.applied_at) as last_application_date,
+          MAX(a.rating)::int as highest_rating,
+          array_agg(a.tags) FILTER (WHERE a.tags IS NOT NULL AND array_length(a.tags, 1) > 0) as all_tags_arrays
+        FROM applications a
+        INNER JOIN jobs j ON a.job_id = j.id
+        WHERE 1=1
+      `;
+    } else {
+      // Recruiters see only candidates who applied to jobs in their organization
+      query = sql`
+        SELECT
+          a.email,
+          a.name,
+          COUNT(DISTINCT a.job_id)::int as jobs_applied_count,
+          MAX(a.applied_at) as last_application_date,
+          MAX(a.rating)::int as highest_rating,
+          array_agg(a.tags) FILTER (WHERE a.tags IS NOT NULL AND array_length(a.tags, 1) > 0) as all_tags_arrays
+        FROM applications a
+        INNER JOIN jobs j ON a.job_id = j.id
+        INNER JOIN organization_members om ON om.user_id = ${recruiterId}
+        WHERE j.organization_id = om.organization_id
+      `;
+    }
 
     // Add search filter
     if (filters?.search) {

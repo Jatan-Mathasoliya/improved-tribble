@@ -204,7 +204,8 @@ export function useInviteMember() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (data: { email: string; role: 'admin' | 'member' }) => {
+    // Role is optional - backend always assigns 'member' (owner can promote after join)
+    mutationFn: async (data: { email: string }) => {
       const csrfRes = await fetch('/api/csrf-token', { credentials: 'include' });
       const { token } = await csrfRes.json();
 
@@ -220,6 +221,33 @@ export function useInviteMember() {
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || 'Failed to invite member');
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organization', 'invites'] });
+    },
+  });
+}
+
+export function useCancelInvite() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (inviteId: number) => {
+      const csrfRes = await fetch('/api/csrf-token', { credentials: 'include' });
+      const { token } = await csrfRes.json();
+
+      const res = await fetch(`/api/organizations/invites/${inviteId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+        headers: {
+          'x-csrf-token': token,
+        },
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to cancel invite');
       }
       return res.json();
     },

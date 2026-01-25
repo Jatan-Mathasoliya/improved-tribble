@@ -503,7 +503,9 @@ async function processOneSummary(
     resumeText,
     app.job.title,
     app.job.description,
-    app.name
+    app.name,
+    app.job.skills || [],
+    app.job.goodToHaveSkills || []
   );
   const durationMs = Date.now() - startTime;
 
@@ -523,6 +525,13 @@ async function processOneSummary(
     aiSuggestedActionReason: result.suggestedActionReason,
     aiSummaryComputedAt: new Date(),
     aiSummaryModelVersion: result.model_version,
+    // Skill analysis fields
+    aiRequiredSkillsMatched: result.requiredSkillsMatched,
+    aiRequiredSkillsMissing: result.requiredSkillsMissing,
+    aiRequiredSkillsMatchPercentage: result.requiredSkillsMatchPercentage,
+    aiRequiredSkillsDepthNotes: result.requiredSkillsDepthNotes,
+    aiGoodToHaveSkillsMatched: result.goodToHaveSkillsMatched,
+    aiGoodToHaveSkillsMissing: result.goodToHaveSkillsMissing,
   }).where(eq(applications.id, applicationId));
 
   // Log AI usage

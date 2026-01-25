@@ -158,6 +158,13 @@ export interface CandidateSummaryResult {
   strengths: string[];
   concerns: string[];
   keyHighlights: string[];
+  // Skill analysis
+  requiredSkillsMatched: string[];
+  requiredSkillsMissing: string[];
+  requiredSkillsMatchPercentage: number;
+  requiredSkillsDepthNotes: string;
+  goodToHaveSkillsMatched: string[];
+  goodToHaveSkillsMissing: string[];
   model_version: string;
   tokensUsed: {
     input: number;
@@ -270,37 +277,74 @@ export async function generateCandidateSummary(
   resumeText: string,
   jobTitle: string,
   jobDescription: string,
-  candidateName: string
+  candidateName: string,
+  requiredSkills: string[] = [],
+  goodToHaveSkills: string[] = []
 ): Promise<CandidateSummaryResult> {
   try {
     const client = getGroqClient();
 
-    const prompt = `You are an expert technical recruiter reviewing a candidate for a position. Provide a comprehensive, actionable summary.
+    const prompt = `You are an expert technical recruiter reviewing a candidate for a position. Evaluate with STRICT attention to required vs. optional skills.
 
 **Job Position:** ${jobTitle}
 
-**Job Requirements:**
+**🔴 REQUIRED SKILLS (Non-negotiable):**
+${requiredSkills.length > 0 ? requiredSkills.join(', ') : 'Not specified'}
+
+**🟢 GOOD-TO-HAVE SKILLS (Bonus, not mandatory):**
+${goodToHaveSkills.length > 0 ? goodToHaveSkills.join(', ') : 'Not specified'}
+
+**Job Description:**
 ${jobDescription}
 
 **Candidate:** ${candidateName}
 **Resume:**
 ${resumeText}
 
-Analyze the candidate's qualifications and provide a JSON response with:
-1. **summary** (string, 150-250 words): A comprehensive overview of the candidate's fit, highlighting relevant experience, technical skills, and potential value. Write in a professional but conversational tone suitable for a recruiter dashboard.
+**EVALUATION CRITERIA:**
 
-2. **suggestedAction** (string): One of:
-   - "advance": Strong fit, recommend moving to interview
-   - "hold": Potential fit but needs more evaluation or has some gaps
-   - "reject": Not a good fit for this role
+1. **Required Skills Analysis:**
+   - Each required skill MUST be evaluated individually
+   - Missing required skills should heavily influence your decision
+   - Consider depth of experience, not just keyword presence
+   - Look for semantic equivalents (e.g., "PostgreSQL" counts for "SQL", "Go" for "Golang")
+   - Assess quality: is it just mentioned or demonstrated with projects/years of experience?
 
-3. **suggestedActionReason** (string, 50-100 words): Clear, specific reasoning for the suggested action based on job requirements vs. candidate qualifications.
+2. **Decision Guidelines:**
+   - ADVANCE: Has ALL or nearly all required skills with strong depth
+   - HOLD: Missing 1-2 required skills BUT shows potential to learn quickly, OR has required skills but limited depth
+   - REJECT: Missing multiple required skills with no transferable experience
 
-4. **strengths** (array of strings, 3-5 items): Specific strengths relevant to this role (e.g., "8+ years Python experience", "Led teams of 10+ engineers", "Experience with AWS and microservices")
+3. **Good-to-Have Skills:**
+   - These are bonuses that can tip borderline candidates toward "advance"
+   - Should NOT compensate for missing required skills
 
-5. **concerns** (array of strings, 0-3 items): Specific gaps or concerns (e.g., "No mention of React experience", "Limited team leadership examples"). Leave empty if no significant concerns.
+**Required JSON Response:**
+{
+  "summary": "150-250 word comprehensive overview of the candidate's fit",
 
-6. **keyHighlights** (array of strings, 3-5 items): Notable achievements or qualifications (e.g., "Built scalable systems handling 1M+ users", "Published research in ML conferences")
+  "requiredSkillsAnalysis": {
+    "matched": ["skill1", "skill2"],  // Required skills found in resume
+    "missing": ["skill3"],             // Required skills NOT found
+    "matchPercentage": 67,             // Percentage of required skills matched (0-100)
+    "depthNotes": "Brief notes on depth/quality of matched skills (e.g., '5+ years Python with production experience')"
+  },
+
+  "goodToHaveSkillsAnalysis": {
+    "matched": ["bonus1"],  // Good-to-have skills found
+    "missing": ["bonus2"]   // Good-to-have skills NOT found
+  },
+
+  "suggestedAction": "advance|hold|reject",
+
+  "suggestedActionReason": "Clear reasoning focusing on required skills match/gaps and why this action makes sense (100-150 words)",
+
+  "strengths": ["specific strength 1", "specific strength 2", ...],  // 3-5 items
+
+  "concerns": ["specific concern 1", "specific concern 2", ...],  // 0-3 items
+
+  "keyHighlights": ["achievement 1", "achievement 2", ...]  // 3-5 items
+}
 
 Be objective, specific, and actionable. Focus on job-relevant qualifications. Return only valid JSON.`;
 
@@ -317,8 +361,8 @@ Be objective, specific, and actionable. Focus on job-relevant qualifications. Re
         }
       ],
       response_format: { type: "json_object" },
-      max_tokens: 1500,
-      temperature: 0.4
+      max_tokens: 2000,
+      temperature: 0.3
     });
 
     const responseText = response.choices[0]?.message.content || "{}";
@@ -332,6 +376,13 @@ Be objective, specific, and actionable. Focus on job-relevant qualifications. Re
       strengths: result.strengths ?? [],
       concerns: result.concerns ?? [],
       keyHighlights: result.keyHighlights ?? [],
+      // Skill analysis
+      requiredSkillsMatched: result.requiredSkillsAnalysis?.matched ?? [],
+      requiredSkillsMissing: result.requiredSkillsAnalysis?.missing ?? [],
+      requiredSkillsMatchPercentage: result.requiredSkillsAnalysis?.matchPercentage ?? 0,
+      requiredSkillsDepthNotes: result.requiredSkillsAnalysis?.depthNotes ?? '',
+      goodToHaveSkillsMatched: result.goodToHaveSkillsAnalysis?.matched ?? [],
+      goodToHaveSkillsMissing: result.goodToHaveSkillsAnalysis?.missing ?? [],
       model_version: "llama-3.3-70b-versatile",
       tokensUsed: {
         input: usage?.prompt_tokens || 0,

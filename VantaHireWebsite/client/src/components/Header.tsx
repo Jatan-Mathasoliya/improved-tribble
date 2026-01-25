@@ -93,29 +93,34 @@ const Header = () => {
         {/* Enhanced desktop menu */}
         <div className="hidden md:flex items-center space-x-8">
           {/* Navigation links with premium hover effects */}
-          <Link href="/about" className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70 hover:text-white">
-            <span className="relative z-10">About</span>
-            <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
-            <span className="absolute inset-0 -z-10 bg-white/0 group-hover:bg-white/5 transition-colors duration-300 rounded-md"></span>
-          </Link>
+          {/* Marketing links - only show when NOT logged in */}
+          {!user && (
+            <>
+              <Link href="/about" className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70 hover:text-white">
+                <span className="relative z-10">About</span>
+                <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
+                <span className="absolute inset-0 -z-10 bg-white/0 group-hover:bg-white/5 transition-colors duration-300 rounded-md"></span>
+              </Link>
 
-          <Link href="/features" className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70 hover:text-white">
-            <span className="relative z-10">Features</span>
-            <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
-            <span className="absolute inset-0 -z-10 bg-white/0 group-hover:bg-white/5 transition-colors duration-300 rounded-md"></span>
-          </Link>
+              <Link href="/features" className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70 hover:text-white">
+                <span className="relative z-10">Features</span>
+                <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
+                <span className="absolute inset-0 -z-10 bg-white/0 group-hover:bg-white/5 transition-colors duration-300 rounded-md"></span>
+              </Link>
 
-          <Link href="/pricing" className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70 hover:text-white">
-            <span className="relative z-10">Pricing</span>
-            <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
-            <span className="absolute inset-0 -z-10 bg-white/0 group-hover:bg-white/5 transition-colors duration-300 rounded-md"></span>
-          </Link>
+              <Link href="/pricing" className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70 hover:text-white">
+                <span className="relative z-10">Pricing</span>
+                <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
+                <span className="absolute inset-0 -z-10 bg-white/0 group-hover:bg-white/5 transition-colors duration-300 rounded-md"></span>
+              </Link>
 
-          <Link href="/compare" className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70 hover:text-white">
-            <span className="relative z-10">Compare</span>
-            <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
-            <span className="absolute inset-0 -z-10 bg-white/0 group-hover:bg-white/5 transition-colors duration-300 rounded-md"></span>
-          </Link>
+              <Link href="/compare" className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70 hover:text-white">
+                <span className="relative z-10">Compare</span>
+                <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
+                <span className="absolute inset-0 -z-10 bg-white/0 group-hover:bg-white/5 transition-colors duration-300 rounded-md"></span>
+              </Link>
+            </>
+          )}
 
           {/* Jobs link */}
           <Link href="/jobs" className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70 hover:text-white">
@@ -152,7 +157,7 @@ const Header = () => {
           {/* Dashboard links for authenticated users based on role */}
           {user && user.role === 'candidate' && (
             <Link href="/my-dashboard" className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70 hover:text-white">
-              <span className="relative z-10">My Dashboard</span>
+              <span className="relative z-10">Dashboard</span>
               <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
               <span className="absolute inset-0 -z-10 bg-white/0 group-hover:bg-white/5 transition-colors duration-300 rounded-md"></span>
             </Link>
@@ -160,24 +165,17 @@ const Header = () => {
 
           {/* Recruiter dashboard link */}
           {user && user.role === 'recruiter' && (
-            <>
-              <Link href="/recruiter-dashboard" className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70 hover:text-white">
-                <span className="relative z-10">Recruiter Dashboard</span>
-                <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
-                <span className="absolute inset-0 -z-10 bg-white/0 group-hover:bg-white/5 transition-colors duration-300 rounded-md"></span>
-              </Link>
-              <Link href="/candidates" className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70 hover:text-white">
-                <span className="relative z-10">Candidates</span>
-                <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
-                <span className="absolute inset-0 -z-10 bg-white/0 group-hover:bg-white/5 transition-colors duration-300 rounded-md"></span>
-              </Link>
-            </>
+            <Link href="/recruiter-dashboard" className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70 hover:text-white">
+              <span className="relative z-10">Dashboard</span>
+              <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
+              <span className="absolute inset-0 -z-10 bg-white/0 group-hover:bg-white/5 transition-colors duration-300 rounded-md"></span>
+            </Link>
           )}
 
           {/* Hiring Manager dashboard link */}
           {user && user.role === 'hiring_manager' && (
             <Link href="/hiring-manager" className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70 hover:text-white">
-              <span className="relative z-10">My Dashboard</span>
+              <span className="relative z-10">Dashboard</span>
               <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
               <span className="absolute inset-0 -z-10 bg-white/0 group-hover:bg-white/5 transition-colors duration-300 rounded-md"></span>
             </Link>
@@ -207,7 +205,7 @@ const Header = () => {
                     <span className="absolute inset-0 -z-10 bg-white/0 group-hover:bg-white/5 transition-colors duration-300 rounded-md"></span>
                   </Link>
                   <Link href="/recruiter-auth" className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70 hover:text-white">
-                    <span className="relative z-10">Recruiters</span>
+                    <span className="relative z-10">For Recruiters</span>
                     <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
                     <span className="absolute inset-0 -z-10 bg-white/0 group-hover:bg-white/5 transition-colors duration-300 rounded-md"></span>
                   </Link>
@@ -216,17 +214,19 @@ const Header = () => {
             </div>
           )}
           
-          {/* Enhanced consultation button */}
-          <Button 
-            variant="gradient" 
-            size="lg" 
-            className="rounded-full premium-card hover:scale-105 transform transition-all duration-300 group shadow-lg"
-            onClick={openConsultation}
-          >
-            <span className="group-hover:tracking-wide transition-all duration-300">
-              Schedule a Free Consultation
-            </span>
-          </Button>
+          {/* Enhanced consultation button - only show for non-logged-in users */}
+          {!user && (
+            <Button
+              variant="gradient"
+              size="lg"
+              className="rounded-full premium-card hover:scale-105 transform transition-all duration-300 group shadow-lg"
+              onClick={openConsultation}
+            >
+              <span className="group-hover:tracking-wide transition-all duration-300">
+                Schedule a Free Consultation
+              </span>
+            </Button>
+          )}
         </div>
         
         {/* Enhanced mobile menu button */}
@@ -275,34 +275,39 @@ const Header = () => {
           </button>
         </div>
         <div className="flex flex-col space-y-6">
-          <Link
-            href="/about"
-            className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
-            onClick={() => setIsMenuOpen(false)}
-          >
-            About
-          </Link>
-          <Link
-            href="/features"
-            className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
-            onClick={() => setIsMenuOpen(false)}
-          >
-            Features
-          </Link>
-          <Link
-            href="/pricing"
-            className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
-            onClick={() => setIsMenuOpen(false)}
-          >
-            Pricing
-          </Link>
-          <Link
-            href="/compare"
-            className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
-            onClick={() => setIsMenuOpen(false)}
-          >
-            Compare
-          </Link>
+          {/* Marketing links - only show when NOT logged in */}
+          {!user && (
+            <>
+              <Link
+                href="/about"
+                className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                About
+              </Link>
+              <Link
+                href="/features"
+                className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Features
+              </Link>
+              <Link
+                href="/pricing"
+                className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Pricing
+              </Link>
+              <Link
+                href="/compare"
+                className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
+                onClick={() => setIsMenuOpen(false)}
+              >
+                Compare
+              </Link>
+            </>
+          )}
           {/* Mobile Jobs link */}
           <Link
             href="/jobs"
@@ -325,22 +330,22 @@ const Header = () => {
 
           {/* Mobile dashboard links based on role */}
           {user && user.role === 'candidate' && (
-            <Link 
+            <Link
               href="/my-dashboard"
               className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
               onClick={() => setIsMenuOpen(false)}
             >
-              My Dashboard
+              Dashboard
             </Link>
           )}
 
           {user && user.role === 'recruiter' && (
-            <Link 
+            <Link
               href="/recruiter-dashboard"
               className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
               onClick={() => setIsMenuOpen(false)}
             >
-              Recruiter Dashboard
+              Dashboard
             </Link>
           )}
 
@@ -371,28 +376,31 @@ const Header = () => {
                   >
                     Job Seekers
                   </Link>
-                  <Link 
+                  <Link
                     href="/recruiter-auth"
                     className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
                     onClick={() => setIsMenuOpen(false)}
                   >
-                    Recruiters
+                    For Recruiters
                   </Link>
                 </>
               )}
             </div>
           )}
           
-          <div className="mt-8">
-            <Button 
-              variant="gradient" 
-              size="lg" 
-              className="rounded-full w-full hover:shadow-lg hover:scale-105 transition-all duration-300"
-              onClick={openConsultation}
-            >
-              Schedule a Free Consultation
-            </Button>
-          </div>
+          {/* Consultation button - only show for non-logged-in users */}
+          {!user && (
+            <div className="mt-8">
+              <Button
+                variant="gradient"
+                size="lg"
+                className="rounded-full w-full hover:shadow-lg hover:scale-105 transition-all duration-300"
+                onClick={openConsultation}
+              >
+                Schedule a Free Consultation
+              </Button>
+            </div>
+          )}
         </div>
         
         {/* Decorative elements */}

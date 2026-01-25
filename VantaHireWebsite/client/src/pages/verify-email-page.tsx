@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { useRoute, Link } from "wouter";
+import { useState, useEffect, useMemo } from "react";
+import { useRoute, Link, useSearch } from "wouter";
 import { CheckCircle, XCircle, Loader2, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,11 +9,23 @@ type VerificationState = "loading" | "success" | "error" | "expired";
 
 export default function VerifyEmailPage() {
   const [, params] = useRoute("/verify-email/:token");
+  const searchString = useSearch();
   const [state, setState] = useState<VerificationState>("loading");
   const [message, setMessage] = useState("");
   const [isVisible, setIsVisible] = useState(false);
 
   const token = params?.token;
+
+  // Parse invite token from URL query params to preserve through verification
+  const inviteToken = useMemo(() => {
+    const searchParams = new URLSearchParams(searchString);
+    return searchParams.get('invite');
+  }, [searchString]);
+
+  // Build redirect URL with invite token if present
+  const redirectUrl = inviteToken
+    ? `/recruiter-auth?invite=${inviteToken}`
+    : '/recruiter-auth';
 
   // Fade-in animation on mount
   useEffect(() => {
@@ -121,7 +133,7 @@ export default function VerifyEmailPage() {
 
             <CardContent className="space-y-4">
               {state === "success" && (
-                <Link href="/recruiter-auth">
+                <Link href={redirectUrl}>
                   <Button className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600">
                     Continue to Login
                   </Button>
@@ -133,7 +145,7 @@ export default function VerifyEmailPage() {
                   <p className="text-sm text-muted-foreground text-center">
                     Please log in with your credentials to request a new verification email.
                   </p>
-                  <Link href="/recruiter-auth">
+                  <Link href={redirectUrl}>
                     <Button className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600">
                       Go to Login
                     </Button>
@@ -146,7 +158,7 @@ export default function VerifyEmailPage() {
                   <p className="text-sm text-muted-foreground text-center">
                     The verification link may be invalid or already used.
                   </p>
-                  <Link href="/recruiter-auth">
+                  <Link href={redirectUrl}>
                     <Button className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600">
                       Go to Login
                     </Button>

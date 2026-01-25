@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -18,6 +19,7 @@ import { PipelineActionChecklist } from "@/components/recruiter/PipelineActionCh
 import { AiPipelineSummary } from "@/components/recruiter/AiPipelineSummary";
 import { ProfileCompletionBanner } from "@/components/ProfileCompletionBanner";
 import type { PipelineData } from "@/lib/pipeline-types";
+import { useSubscription } from "@/hooks/use-subscription";
 // Extended types for API responses with relations
 type ApplicationWithJob = Application & {
   job?: { title: string };
@@ -94,6 +96,10 @@ export default function RecruiterDashboard() {
   const [, setLocation] = useLocation();
   const [rangePreset, setRangePreset] = useState<keyof typeof RANGE_PRESETS>("30d");
   const [selectedJobId, setSelectedJobId] = useState<number | "all">("all");
+
+  // Fetch subscription to show plan badge
+  const { data: subscriptionData } = useSubscription();
+  const planName = subscriptionData?.plan?.displayName || "Free";
 
   // Hiring Manager Invitation state
   const [showInviteHMDialog, setShowInviteHMDialog] = useState(false);
@@ -742,7 +748,12 @@ type HmFeedbackResponse = {
           <div className="space-y-3 pt-8">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
               <div>
-                <h1 className="text-2xl md:text-3xl font-semibold text-foreground">Recruiter Dashboard</h1>
+                <div className="flex items-center gap-3">
+                  <h1 className="text-2xl md:text-3xl font-semibold text-foreground">Recruiter Dashboard</h1>
+                  <Badge variant="outline" className="text-xs font-medium">
+                    {planName} Plan
+                  </Badge>
+                </div>
                 <p className="text-muted-foreground text-sm md:text-base">
                   Overview of jobs, applications, and hiring performance
                 </p>

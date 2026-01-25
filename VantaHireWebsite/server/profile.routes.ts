@@ -19,6 +19,7 @@ import type { CsrfMiddleware } from './types/routes';
 import { syncProfileCompletionStatus, computeProfileCompletion } from './lib/profileCompletion';
 import { generatePublicId, isValidPublicId, isNumericId } from './lib/publicId';
 import { getEmailService } from './simpleEmailService';
+import { initializeMemberCredits } from './lib/creditService';
 import crypto from 'crypto';
 
 // Validation schema for user updates (firstName, lastName)
@@ -638,6 +639,7 @@ export function registerProfileRoutes(
   app.get("/api/onboarding-status", requireAuth, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const user = req.user!;
+      let creditsLazyInit = false;
 
       // Only recruiters go through onboarding
       if (user.role !== 'recruiter') {
@@ -646,6 +648,7 @@ export function registerProfileRoutes(
           currentStep: 'complete',
           hasOrganization: false,
           profileComplete: true,
+          creditsLazyInit,
         });
         return;
       }
@@ -657,6 +660,7 @@ export function registerProfileRoutes(
           currentStep: 'complete',
           hasOrganization: true,
           profileComplete: true,
+          creditsLazyInit,
         });
         return;
       }
@@ -666,6 +670,35 @@ export function registerProfileRoutes(
         where: eq(organizationMembers.userId, user.id),
       });
       const hasOrganization = !!membership;
+
+      // Lazy-init credits if member exists but credits weren't initialized
+      // (fallback for failed credit init during invite acceptance)
+      // Only for seated members with missing credit period markers; 0 credits can be intentional.
+      if (
+        membership
+        && membership.seatAssigned
+        && (membership.creditsPeriodStart === null || membership.creditsPeriodEnd === null)
+      ) {
+        try {
+          await initializeMemberCredits(membership.id, membership.organizationId);
+          creditsLazyInit = true;
+          console.info('[metrics] credits_lazy_init', {
+            userId: user.id,
+            memberId: membership.id,
+            orgId: membership.organizationId,
+            via: 'onboarding-status',
+          });
+        } catch (creditError) {
+          // Still don't block onboarding - log and continue
+          console.warn('[metrics] credits_lazy_init_failed', {
+            userId: user.id,
+            memberId: membership.id,
+            orgId: membership.organizationId,
+            via: 'onboarding-status',
+            error: creditError instanceof Error ? creditError.message : String(creditError),
+          });
+        }
+      }
 
       // Check profile completion
       const profile = await storage.getUserProfile(user.id);
@@ -713,6 +746,7 @@ export function registerProfileRoutes(
         currentStep: needsOnboarding ? currentStep : 'complete',
         hasOrganization,
         profileComplete,
+        creditsLazyInit,
       });
       return;
     } catch (error) {

@@ -51,7 +51,12 @@ const passwordResetLimiter = rateLimit({
 });
 
 // Send verification email
-async function sendVerificationEmail(email: string, token: string, firstName?: string | null): Promise<boolean> {
+async function sendVerificationEmail(
+  email: string,
+  token: string,
+  firstName?: string | null,
+  inviteToken?: string | null
+): Promise<boolean> {
   const emailService = await getEmailService();
   if (!emailService) {
     console.error('Email service not available');
@@ -59,7 +64,9 @@ async function sendVerificationEmail(email: string, token: string, firstName?: s
   }
 
   const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
-  const verifyUrl = `${baseUrl}/verify-email/${token}`;
+  const verifyUrl = inviteToken
+    ? `${baseUrl}/verify-email/${token}?invite=${inviteToken}`
+    : `${baseUrl}/verify-email/${token}`;
   const name = firstName || 'there';
 
   try {
@@ -269,7 +276,7 @@ export function setupAuth(app: Express) {
 
   app.post("/api/register", async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { username, password, firstName, lastName, role = 'recruiter', invitationToken, coRecruiterInvitationToken } = req.body;
+      const { username, password, firstName, lastName, role = 'recruiter', invitationToken, coRecruiterInvitationToken, inviteToken } = req.body;
 
       if (!username || !password) {
         res.status(400).json({ error: "Email and password are required" });
@@ -426,7 +433,8 @@ export function setupAuth(app: Express) {
       await storage.setVerificationToken(user.id, hash, expires);
 
       // Send verification email (fire-and-forget, don't block registration)
-      sendVerificationEmail(username, token, firstName).catch((err) => {
+      // Pass inviteToken for organization invites to preserve it through verification flow
+      sendVerificationEmail(username, token, firstName, inviteToken).catch((err) => {
         console.error('Failed to send verification email:', err);
       });
 
@@ -647,7 +655,7 @@ export function setupAuth(app: Express) {
   // Resend verification email endpoint (rate-limited)
   app.post("/api/resend-verification", resendVerificationLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { email } = req.body;
+      const { email, inviteToken } = req.body;
       if (!email) {
         res.status(400).json({ error: "Email is required" });
         return;
@@ -670,8 +678,8 @@ export function setupAuth(app: Express) {
       const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
       await storage.setVerificationToken(user.id, hash, expires);
 
-      // Send verification email
-      await sendVerificationEmail(email, token, user.firstName);
+      // Send verification email - pass inviteToken to preserve org invite through verification
+      await sendVerificationEmail(email, token, user.firstName, inviteToken);
 
       res.json({ message: "If an account exists with this email, a verification link has been sent." });
     } catch (error) {

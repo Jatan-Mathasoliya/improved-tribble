@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useLocation, useSearch } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { useOnboardingStatus } from "@/hooks/use-onboarding-status";
+import { useToast } from "@/hooks/use-toast";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Loader2, AlertCircle, RefreshCw } from "lucide-react";
@@ -22,14 +23,18 @@ const STEP_LABELS: Record<OnboardingStep, string> = {
 export default function OnboardingPage() {
   const { user, isLoading: authLoading } = useAuth();
   const { status, isLoading: statusLoading, error: statusError, refetch } = useOnboardingStatus();
+  const { toast } = useToast();
   const [, setLocation] = useLocation();
   const searchString = useSearch();
 
-  // Parse step from URL query param
-  const urlStep = new URLSearchParams(searchString).get('step') as OnboardingStep | null;
+  // Parse step and fromInvite from URL query params
+  const urlParams = new URLSearchParams(searchString);
+  const urlStep = urlParams.get('step') as OnboardingStep | null;
+  const fromInvite = urlParams.get('fromInvite') === 'true';
 
   // Local state for current step (allows manual navigation)
   const [currentStep, setCurrentStep] = useState<OnboardingStep>('org');
+  const [creditsToastShown, setCreditsToastShown] = useState(false);
 
   // Initialize step from server status (URL step is ignored to prevent bypass)
   useEffect(() => {
@@ -45,11 +50,25 @@ export default function OnboardingPage() {
       setCurrentStep(serverStep);
 
       // Update URL to match server step if it differs (prevents confusion)
+      // Preserve fromInvite param for company pre-fill
       if (urlStep && urlStep !== serverStep) {
-        setLocation(`/onboarding?step=${serverStep}`, { replace: true });
+        const params = new URLSearchParams();
+        params.set('step', serverStep);
+        if (fromInvite) params.set('fromInvite', 'true');
+        setLocation(`/onboarding?${params.toString()}`, { replace: true });
       }
     }
   }, [status, urlStep, setLocation]);
+
+  useEffect(() => {
+    if (status?.creditsLazyInit && !creditsToastShown) {
+      toast({
+        title: "Credits initialized",
+        description: "Your AI credits are ready to use.",
+      });
+      setCreditsToastShown(true);
+    }
+  }, [status?.creditsLazyInit, creditsToastShown, toast]);
 
   // Redirect if not logged in or not a recruiter
   useEffect(() => {
@@ -75,8 +94,11 @@ export default function OnboardingPage() {
     const nextStep = STEP_ORDER[currentIndex + 1];
     if (nextStep) {
       setCurrentStep(nextStep);
-      // Update URL
-      setLocation(`/onboarding?step=${nextStep}`, { replace: true });
+      // Update URL - preserve fromInvite param
+      const params = new URLSearchParams();
+      params.set('step', nextStep);
+      if (fromInvite) params.set('fromInvite', 'true');
+      setLocation(`/onboarding?${params.toString()}`, { replace: true });
       // Refetch status to get updated server state
       refetch();
     }
@@ -177,6 +199,7 @@ export default function OnboardingPage() {
               <ProfileStep
                 onComplete={() => handleStepComplete('profile')}
                 onSkip={() => handleStepComplete('profile')}
+                fromInvite={fromInvite}
               />
             )}
             {currentStep === 'plan' && (

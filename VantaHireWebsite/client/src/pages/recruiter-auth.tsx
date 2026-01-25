@@ -1,16 +1,26 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation, useSearch } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Briefcase, Users, TrendingUp, Shield, Mail, CheckCircle } from "lucide-react";
+import { Briefcase, Users, TrendingUp, Shield, Mail, CheckCircle, UserPlus } from "lucide-react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import type { OnboardingStatus } from "@/hooks/use-onboarding-status";
+
+// Type for invite details response
+interface InviteDetails {
+  organizationName: string;
+  email: string;
+  role: string;
+  expiresAt: string;
+  inviterName: string;
+}
 
 export default function RecruiterAuth() {
   const { user, loginMutation, registerMutation } = useAuth();
@@ -30,6 +40,24 @@ export default function RecruiterAuth() {
     };
   }, [searchString]);
 
+  // Controlled tab state - default to register if invite token present
+  const [activeTab, setActiveTab] = useState<string>(inviteToken ? "register" : "login");
+
+  // Fetch invite details if token present (64 hex chars)
+  const { data: inviteDetails, isLoading: inviteLoading, error: inviteError } = useQuery<InviteDetails>({
+    queryKey: ["/api/invites", inviteToken],
+    queryFn: async () => {
+      const res = await fetch(`/api/invites/${inviteToken}`);
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Invalid invite");
+      }
+      return res.json();
+    },
+    enabled: !!inviteToken && inviteToken.length === 64,
+    retry: false,
+  });
+
   const [loginData, setLoginData] = useState({
     username: "",
     password: ""
@@ -40,8 +68,21 @@ export default function RecruiterAuth() {
     password: "",
     firstName: "",
     lastName: "",
-    role: "recruiter"
+    role: "recruiter",
+    inviteToken: inviteToken || undefined,
   });
+
+  // Pre-fill email from invite when details are loaded
+  useEffect(() => {
+    if (inviteDetails?.email) {
+      setRegisterData(prev => ({ ...prev, username: inviteDetails.email }));
+    }
+  }, [inviteDetails]);
+
+  // Update inviteToken in registerData if it changes
+  useEffect(() => {
+    setRegisterData(prev => ({ ...prev, inviteToken: inviteToken || undefined }));
+  }, [inviteToken]);
 
   // State for email verification flow
   const [verificationNeeded, setVerificationNeeded] = useState(false);
@@ -134,7 +175,7 @@ export default function RecruiterAuth() {
       const response = await fetch('/api/resend-verification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: verificationEmail }),
+        body: JSON.stringify({ email: verificationEmail, inviteToken }),
       });
       const data = await response.json();
       toast({
@@ -303,14 +344,47 @@ export default function RecruiterAuth() {
               {/* Normal Auth Form */}
               {!registrationSuccess && !verificationNeeded && (
               <>
+              {/* Invite Banner */}
+              {inviteToken && inviteDetails && (
+                <div className="bg-gradient-to-r from-[#7B38FB]/10 to-[#FF5BA8]/10 border-b border-border px-6 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-shrink-0">
+                      <UserPlus className="h-5 w-5 text-[#7B38FB]" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground">
+                        You've been invited to join <span className="text-[#7B38FB]">{inviteDetails.organizationName}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Invited by {inviteDetails.inviterName} as {inviteDetails.role}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Invite Error */}
+              {inviteToken && inviteError && (
+                <div className="bg-destructive/10 border-b border-destructive/30 px-6 py-4">
+                  <p className="text-sm text-destructive">
+                    {(inviteError as Error).message || "Invalid or expired invite link"}
+                  </p>
+                </div>
+              )}
+
               <CardHeader className="text-center">
-                <CardTitle className="text-foreground text-2xl">Recruiter Access</CardTitle>
+                <CardTitle className="text-foreground text-2xl">
+                  {inviteDetails ? "Create Your Account" : "Recruiter Access"}
+                </CardTitle>
                 <CardDescription className="text-muted-foreground">
-                  Sign in to your recruiter account or create a new one
+                  {inviteDetails
+                    ? `Register to join ${inviteDetails.organizationName}`
+                    : "Sign in to your recruiter account or create a new one"
+                  }
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <Tabs defaultValue="login" className="space-y-6">
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                   <TabsList className="grid w-full grid-cols-2 bg-muted/50">
                     <TabsTrigger value="login" className="data-[state=active]:bg-muted/60 text-foreground">
                       Sign In
@@ -392,10 +466,17 @@ export default function RecruiterAuth() {
                           type="email"
                           value={registerData.username}
                           onChange={(e) => setRegisterData(prev => ({ ...prev, username: e.target.value }))}
-                          className="bg-muted/30 border-border text-foreground placeholder:text-muted-foreground"
+                          className={`bg-muted/30 border-border text-foreground placeholder:text-muted-foreground ${inviteDetails ? 'bg-muted/50 cursor-not-allowed' : ''}`}
                           placeholder="Enter your email address"
                           required
+                          readOnly={!!inviteDetails}
+                          title={inviteDetails ? "Email is locked to the invite" : undefined}
                         />
+                        {inviteDetails && (
+                          <p className="text-xs text-muted-foreground">
+                            Email is locked to the invite
+                          </p>
+                        )}
                       </div>
                       <div className="space-y-2">
                         <Label htmlFor="regPassword" className="text-foreground">Password *</Label>

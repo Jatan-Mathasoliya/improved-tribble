@@ -40,9 +40,20 @@ interface ProfileData {
 interface ProfileStepProps {
   onComplete: () => void;
   onSkip: () => void;
+  fromInvite?: boolean;
 }
 
-export default function ProfileStep({ onComplete, onSkip }: ProfileStepProps) {
+interface OrgData {
+  organization: {
+    id: number;
+    name: string;
+  };
+  membership: {
+    role: string;
+  };
+}
+
+export default function ProfileStep({ onComplete, onSkip, fromInvite }: ProfileStepProps) {
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -67,19 +78,36 @@ export default function ProfileStep({ onComplete, onSkip }: ProfileStepProps) {
     enabled: !!user,
   });
 
+  // Fetch organization data (if user joined via invite, use org name for company)
+  const { data: orgData } = useQuery<OrgData>({
+    queryKey: ["/api/organizations/current"],
+    queryFn: async () => {
+      const response = await fetch("/api/organizations/current", { credentials: "include" });
+      if (!response.ok) throw new Error("Failed to fetch organization");
+      return response.json();
+    },
+    enabled: !!user && !!fromInvite,
+  });
+
   // Initialize form with existing data
   useEffect(() => {
     if (profileData) {
       setFirstName(profileData.user.firstName || "");
       setLastName(profileData.user.lastName || "");
-      setCompany(profileData.profile.company || "");
+      // If company is not set and user came from invite, use org name
+      const existingCompany = profileData.profile.company || "";
+      if (!existingCompany && fromInvite && orgData?.organization?.name) {
+        setCompany(orgData.organization.name);
+      } else {
+        setCompany(existingCompany);
+      }
       setDisplayName(profileData.profile.displayName || "");
       setPhone(profileData.profile.phone || "");
       setLinkedin(profileData.profile.linkedin || "");
       setLocation(profileData.profile.location || "");
       setBio(profileData.profile.bio || "");
     }
-  }, [profileData]);
+  }, [profileData, fromInvite, orgData]);
 
   // Update user (for first/last name)
   const updateUserMutation = useMutation({

@@ -6,6 +6,7 @@ export interface OnboardingStatus {
   currentStep: 'org' | 'profile' | 'plan' | 'complete';
   hasOrganization: boolean;
   profileComplete: boolean;
+  creditsLazyInit?: boolean;
 }
 
 /**
@@ -78,6 +79,7 @@ export function useOnboardingStatus() {
     currentStep: status?.currentStep ?? 'complete',
     hasOrganization: status?.hasOrganization ?? false,
     profileComplete: status?.profileComplete ?? false,
+    creditsLazyInit: status?.creditsLazyInit ?? false,
 
     // Actions (fire-and-forget)
     completeOnboarding: completeMutation.mutate,

@@ -1,6 +1,7 @@
 // @vitest-environment node
 import '../setup.integration';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi } from 'vitest';
+import { randomBytes } from 'crypto';
 import request from 'supertest';
 import express from 'express';
 import { registerRoutes } from '../../server/routes';
@@ -171,6 +172,37 @@ maybeDescribe('Invite + Cashfree webhook flows', () => {
     const emailArgs = emailMocks.sendEmail.mock.calls[0][0];
     expect(emailArgs.to).toBe(inviteEmail.toLowerCase());
     expect(emailArgs.html).toContain(`/recruiter-auth?invite=${inviteResponse.body.token}`);
+  });
+
+  it('includes invite token in verification email link during registration', async () => {
+    const inviteToken = randomBytes(32).toString('hex');
+    const email = `register_${Date.now()}@example.com`;
+
+    const response = await request(app)
+      .post('/api/register')
+      .send({
+        username: email,
+        password: 'ValidPass1!',
+        firstName: 'Invite',
+        lastName: 'Tester',
+        role: 'recruiter',
+        inviteToken,
+      });
+
+    expect(response.status).toBe(201);
+    expect(emailMocks.sendEmail).toHaveBeenCalledTimes(1);
+
+    const emailArgs = emailMocks.sendEmail.mock.calls[0][0];
+    expect(emailArgs.to).toBe(email.toLowerCase());
+    expect(emailArgs.html).toContain('/verify-email/');
+    expect(emailArgs.html).toContain(`?invite=${inviteToken}`);
+
+    const createdUser = await db.query.users.findFirst({
+      where: eq(users.username, email.toLowerCase()),
+    });
+    if (createdUser) {
+      created.userIds.push(createdUser.id);
+    }
   });
 
   it('processes subscription payment webhook and sends billing email', async () => {

@@ -1258,7 +1258,9 @@ export function registerApplicationsRoutes(
         effectiveText,
         job.title,
         job.description,
-        application.name
+        application.name,
+        job.skills || [],
+        job.goodToHaveSkills || []
       );
       const durationMs = Date.now() - startTime;
 
@@ -1272,6 +1274,17 @@ export function registerApplicationsRoutes(
           aiSuggestedAction: summaryResult.suggestedAction,
           aiSuggestedActionReason: summaryResult.suggestedActionReason,
           aiSummaryComputedAt: new Date(),
+          aiSummaryModelVersion: summaryResult.model_version,
+          aiStrengths: summaryResult.strengths,
+          aiConcerns: summaryResult.concerns,
+          aiKeyHighlights: summaryResult.keyHighlights,
+          // Skill analysis fields
+          aiRequiredSkillsMatched: summaryResult.requiredSkillsMatched,
+          aiRequiredSkillsMissing: summaryResult.requiredSkillsMissing,
+          aiRequiredSkillsMatchPercentage: summaryResult.requiredSkillsMatchPercentage,
+          aiRequiredSkillsDepthNotes: summaryResult.requiredSkillsDepthNotes,
+          aiGoodToHaveSkillsMatched: summaryResult.goodToHaveSkillsMatched,
+          aiGoodToHaveSkillsMissing: summaryResult.goodToHaveSkillsMissing,
         })
         .where(eq(applications.id, appId));
 
@@ -1304,6 +1317,13 @@ export function registerApplicationsRoutes(
           strengths: summaryResult.strengths,
           concerns: summaryResult.concerns,
           keyHighlights: summaryResult.keyHighlights,
+          // Skill analysis
+          requiredSkillsMatched: summaryResult.requiredSkillsMatched,
+          requiredSkillsMissing: summaryResult.requiredSkillsMissing,
+          requiredSkillsMatchPercentage: summaryResult.requiredSkillsMatchPercentage,
+          requiredSkillsDepthNotes: summaryResult.requiredSkillsDepthNotes,
+          goodToHaveSkillsMatched: summaryResult.goodToHaveSkillsMatched,
+          goodToHaveSkillsMissing: summaryResult.goodToHaveSkillsMissing,
           modelVersion: summaryResult.model_version,
           computedAt: new Date(),
           cost: parseFloat(costUsd),

@@ -465,6 +465,16 @@ export async function ensureAtsSchema(): Promise<void> {
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_suggested_action TEXT;`);
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_suggested_action_reason TEXT;`);
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_summary_computed_at TIMESTAMP;`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_summary_model_version TEXT;`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_strengths TEXT[];`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_concerns TEXT[];`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_key_highlights TEXT[];`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_required_skills_matched TEXT[];`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_required_skills_missing TEXT[];`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_required_skills_match_percentage INTEGER;`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_required_skills_depth_notes TEXT;`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_good_to_have_skills_matched TEXT[];`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_good_to_have_skills_missing TEXT[];`);
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS resume_id INTEGER;`);
 
   // AI Matching Feature: Create new tables

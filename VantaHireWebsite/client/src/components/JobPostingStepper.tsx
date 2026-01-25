@@ -616,6 +616,14 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                 <Label className="flex items-center gap-2 mb-2">
                   <IndianRupee className="h-4 w-4 text-muted-foreground" />
                   Salary / Pay (Optional - won't be visible to candidate if left blank)
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p>Providing salary range helps attract candidates with matching expectations. This remains private unless you choose to share it.</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </Label>
                 <div className="flex gap-3">
                   <div className="flex-1">
@@ -659,6 +667,14 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                 <Label className="flex items-center gap-2 mb-2">
                   <Tag className="h-4 w-4 text-muted-foreground" />
                   Required Skills (Non-negotiable)
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p>AI will recommend "hold" or "reject" for candidates missing these skills. Only add truly non-negotiable skills here.</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </Label>
                 <div className="flex gap-2 mb-3">
                   <Input
@@ -702,6 +718,14 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                 <Label className="flex items-center gap-2 mb-2">
                   <Sparkles className="h-4 w-4 text-muted-foreground" />
                   Good to Have Skills (Optional)
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p>These give candidates bonus points but won't disqualify them. Great for nice-to-have technologies or soft skills.</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </Label>
                 <div className="flex gap-2 mb-3">
                   <Input
@@ -745,6 +769,14 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                 <Label className="flex items-center gap-2 mb-2">
                   <GraduationCap className="h-4 w-4 text-muted-foreground" />
                   Education Requirement (Optional)
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p>Specify education requirements to help AI assess candidate qualifications more accurately.</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </Label>
                 <Input
                   type="text"
@@ -759,6 +791,14 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                 <Label className="flex items-center gap-2 mb-2">
                   <Briefcase className="h-4 w-4 text-muted-foreground" />
                   Preferred Experience (Years)
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      <p>AI uses experience requirements to match candidates at the right seniority level for this role.</p>
+                    </TooltipContent>
+                  </Tooltip>
                 </Label>
                 <Input
                   type="number"
@@ -774,8 +814,16 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
               {/* Job Description */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <Label htmlFor="description" className="block">
+                  <Label htmlFor="description" className="flex items-center gap-2">
                     Job Description *
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>A detailed job description improves AI candidate matching. Include responsibilities, team culture, and specific requirements for best results.</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </Label>
                   <Button variant="outline" size="sm" onClick={() => setShowAiDrawer(true)}>
                     Analyze JD (AI)

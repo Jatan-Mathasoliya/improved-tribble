@@ -6,6 +6,7 @@ import {
   useOrganizationInvites,
   useJoinRequests,
   useInviteMember,
+  useCancelInvite,
   useRemoveMember,
   useRespondToJoinRequest,
   useMemberJobs,
@@ -58,6 +59,8 @@ import {
   Shield,
   User,
   Loader2,
+  RefreshCw,
+  AlertCircle,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
@@ -90,15 +93,17 @@ export default function OrgTeamPage() {
   const { data: joinRequests } = useJoinRequests();
   const { data: seatUsage } = useSeatUsage();
   const inviteMember = useInviteMember();
+  const cancelInvite = useCancelInvite();
   const removeMember = useRemoveMember();
   const respondToJoinRequest = useRespondToJoinRequest();
   const reduceSeats = useReduceSeats();
   const reassignJobs = useReassignJobs();
   const { toast } = useToast();
+  const [resendingInviteId, setResendingInviteId] = useState<number | null>(null);
 
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<'admin' | 'member'>('member');
+  // Note: Invites are always 'member' role - owner can promote to admin after joining
 
   // Seat reduction modal state
   const [seatReductionOpen, setSeatReductionOpen] = useState(false);
@@ -119,13 +124,12 @@ export default function OrgTeamPage() {
     if (!inviteEmail.trim()) return;
 
     try {
-      await inviteMember.mutateAsync({ email: inviteEmail.trim(), role: inviteRole });
+      await inviteMember.mutateAsync({ email: inviteEmail.trim() });
       toast({
         title: "Invitation sent",
         description: `Invitation sent to ${inviteEmail}`,
       });
       setInviteEmail("");
-      setInviteRole('member');
       setInviteDialogOpen(false);
     } catch (error: any) {
       toast({
@@ -220,7 +224,48 @@ export default function OrgTeamPage() {
     }
   };
 
+  const handleResendInvite = async (invite: OrganizationInvite) => {
+    setResendingInviteId(invite.id);
+    try {
+      // Resend = create new invite with same email (replaces old one)
+      await inviteMember.mutateAsync({ email: invite.email });
+      toast({
+        title: "Invitation resent",
+        description: `A new invitation has been sent to ${invite.email}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to resend invitation",
+        variant: "destructive",
+      });
+    } finally {
+      setResendingInviteId(null);
+    }
+  };
+
+  const handleCancelInvite = async (invite: OrganizationInvite) => {
+    try {
+      await cancelInvite.mutateAsync(invite.id);
+      toast({
+        title: "Invitation cancelled",
+        description: `Invitation to ${invite.email} has been cancelled.`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to cancel invitation",
+        variant: "destructive",
+      });
+    }
+  };
+
   const pendingJoinRequests = joinRequests?.filter(r => r.status === 'pending') || [];
+
+  // Check if invite is expired
+  const isInviteExpired = (invite: OrganizationInvite) => {
+    return new Date(invite.expiresAt) < new Date();
+  };
 
   return (
     <Layout>
@@ -265,18 +310,10 @@ export default function OrgTeamPage() {
                       required
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="role">Role</Label>
-                    <Select value={inviteRole} onValueChange={(v: 'admin' | 'member') => setInviteRole(v)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="member">Member</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    The invited user will join as a <span className="font-medium">Member</span>.
+                    You can promote them to Admin after they join.
+                  </p>
                 </div>
                 <DialogFooter>
                   <Button
@@ -510,23 +547,80 @@ export default function OrgTeamPage() {
               <Mail className="h-5 w-5" />
               Pending Invitations
             </CardTitle>
+            <CardDescription>
+              Invitations that haven't been accepted yet
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
-              {invites.map((invite) => (
-                <div
-                  key={invite.id}
-                  className="flex items-center justify-between p-3 border rounded-lg"
-                >
-                  <div>
-                    <p className="font-medium">{invite.email}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Expires {formatDistanceToNow(new Date(invite.expiresAt), { addSuffix: true })}
-                    </p>
+              {invites.map((invite) => {
+                const expired = isInviteExpired(invite);
+                const isResending = resendingInviteId === invite.id;
+
+                return (
+                  <div
+                    key={invite.id}
+                    className={`flex items-center justify-between p-3 border rounded-lg ${
+                      expired ? 'bg-muted/50 border-dashed' : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                        expired ? 'bg-destructive/10' : 'bg-primary/10'
+                      }`}>
+                        {expired ? (
+                          <AlertCircle className="h-4 w-4 text-destructive" />
+                        ) : (
+                          <Mail className="h-4 w-4 text-primary" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="font-medium">{invite.email}</p>
+                        <p className={`text-sm ${expired ? 'text-destructive' : 'text-muted-foreground'}`}>
+                          {expired
+                            ? `Expired ${formatDistanceToNow(new Date(invite.expiresAt), { addSuffix: true })}`
+                            : `Expires ${formatDistanceToNow(new Date(invite.expiresAt), { addSuffix: true })}`
+                          }
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {expired ? (
+                        <Badge variant="destructive">Expired</Badge>
+                      ) : (
+                        <Badge variant="secondary">{invite.role}</Badge>
+                      )}
+                      {isOwnerOrAdmin && (
+                        <>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleResendInvite(invite)}
+                            disabled={isResending || cancelInvite.isPending}
+                          >
+                            {isResending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-4 w-4" />
+                            )}
+                            <span className="ml-1 hidden sm:inline">
+                              {expired ? 'Resend' : 'Resend'}
+                            </span>
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleCancelInvite(invite)}
+                            disabled={cancelInvite.isPending || isResending}
+                          >
+                            <X className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <Badge variant="secondary">{invite.role}</Badge>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>
