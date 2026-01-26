@@ -1258,6 +1258,11 @@ export async function ensureAtsSchema(): Promise<void> {
   await db.execute(sql`ALTER TABLE job_analytics ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
   await db.execute(sql`ALTER TABLE job_audit_log ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
   await db.execute(sql`ALTER TABLE co_recruiter_invitations ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE job_recruiters ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE automation_events ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE client_feedback ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE client_shortlist_items ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE client_shortlists ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
 
   // Create indexes for organization_id columns
   console.log('  Creating organization indexes...');

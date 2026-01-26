@@ -19,6 +19,17 @@ const API_BASE_URL = CASHFREE_ENV === 'PRODUCTION'
   ? 'https://api.cashfree.com'
   : 'https://sandbox.cashfree.com';
 
+function sanitizePaymentSessionId(sessionId: string | undefined): string | undefined {
+  if (!sessionId) return sessionId;
+  if (!sessionId.endsWith('paymentpayment')) return sessionId;
+  const sanitized = sessionId.replace(/paymentpayment$/, '');
+  console.warn('[Cashfree] Sanitized payment_session_id suffix', {
+    originalLength: sessionId.length,
+    sanitizedLength: sanitized.length,
+  });
+  return sanitized;
+}
+
 // Types for Cashfree API
 export interface CashfreeOrder {
   orderId: string;
@@ -220,17 +231,19 @@ export async function createCheckoutOrder(
     sessionIdLength: response.payment_session_id?.length,
   });
 
+  const sanitizedSessionId = sanitizePaymentSessionId(response.payment_session_id);
+
   // Get payment link - use Cashfree's hosted checkout page
   // API v2023-08-01 format: use payment_session_id with proper checkout URL
   const paymentLink = CASHFREE_ENV === 'PRODUCTION'
-    ? `https://payments.cashfree.com/pg/orders/pay?payment_session_id=${response.payment_session_id}`
-    : `https://sandbox.cashfree.com/pg/orders/pay?payment_session_id=${response.payment_session_id}`;
+    ? `https://payments.cashfree.com/pg/orders/pay?payment_session_id=${sanitizedSessionId}`
+    : `https://sandbox.cashfree.com/pg/orders/pay?payment_session_id=${sanitizedSessionId}`;
 
   console.log('Payment link generated:', paymentLink, 'cf_order_id:', response.cf_order_id);
 
   return {
     orderId: response.order_id,
-    sessionId: response.payment_session_id,
+    sessionId: sanitizedSessionId,
     paymentLink,
     amount: pricing.baseAmount,
     taxAmount: pricing.gstAmount,
@@ -474,14 +487,16 @@ export async function createSeatAddCheckout(
     payment_session_id: string;
   }>('/pg/orders', 'POST', orderRequest);
 
+  const sanitizedSessionId = sanitizePaymentSessionId(response.payment_session_id);
+
   // Get payment link - use Cashfree's hosted checkout page
   const paymentLink = CASHFREE_ENV === 'PRODUCTION'
-    ? `https://payments.cashfree.com/pg/orders/pay?payment_session_id=${response.payment_session_id}`
-    : `https://sandbox.cashfree.com/pg/orders/pay?payment_session_id=${response.payment_session_id}`;
+    ? `https://payments.cashfree.com/pg/orders/pay?payment_session_id=${sanitizedSessionId}`
+    : `https://sandbox.cashfree.com/pg/orders/pay?payment_session_id=${sanitizedSessionId}`;
 
   return {
     orderId: response.order_id,
-    sessionId: response.payment_session_id,
+    sessionId: sanitizedSessionId,
     paymentLink,
     amount: pricing.baseAmount,
     taxAmount: pricing.gstAmount,
