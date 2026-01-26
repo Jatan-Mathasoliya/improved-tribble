@@ -11,6 +11,7 @@ import { pool } from "./db";
 import { getEmailService } from "./simpleEmailService";
 import rateLimit from "express-rate-limit";
 import { computeProfileCompletion } from "./lib/profileCompletion";
+import { getOrganizationInviteByToken } from "./lib/organizationService";
 
 declare global {
   namespace Express {
@@ -427,22 +428,67 @@ export function setupAuth(app: Express) {
         console.log(`Co-recruiter invitation accepted: ${coRecruiterInvitation.email} registered as user ${user.id}, added to job ${coRecruiterInvitation.jobId}`);
       }
 
-      // Generate verification token and save hash
-      const { token, hash } = generateVerificationToken();
-      const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-      await storage.setVerificationToken(user.id, hash, expires);
+      // Check if user is registering via a valid organization invite
+      // If so, auto-verify them since receiving the invite proves email ownership
+      let validOrgInvite = false;
+      if (inviteToken) {
+        try {
+          const orgInvite = await getOrganizationInviteByToken(inviteToken);
+          if (orgInvite &&
+              new Date() <= orgInvite.expiresAt &&
+              orgInvite.email.toLowerCase() === username.toLowerCase()) {
+            validOrgInvite = true;
+            // Auto-verify user - they proved email ownership by receiving the invite
+            await storage.verifyUserEmail(user.id);
+            console.log(`Auto-verified user ${user.id} via org invite (invite proves email ownership)`);
+          }
+        } catch (err) {
+          // If invite validation fails, fall through to normal verification flow
+          console.log('Org invite validation failed, requiring email verification:', err);
+        }
+      }
 
-      // Send verification email (fire-and-forget, don't block registration)
-      // Pass inviteToken for organization invites to preserve it through verification flow
-      sendVerificationEmail(username, token, firstName, inviteToken).catch((err) => {
-        console.error('Failed to send verification email:', err);
-      });
+      if (validOrgInvite) {
+        // Auto-login since they're verified
+        req.login(user, (err) => {
+          if (err) {
+            console.error('Auto-login failed after org invite registration:', err);
+            res.status(201).json({
+              message: 'Registration successful. Please log in to continue.',
+              requiresVerification: false,
+            });
+            return;
+          }
+          res.status(201).json({
+            message: 'Registration successful.',
+            requiresVerification: false,
+            user: {
+              id: user.id,
+              username: user.username,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              role: user.role,
+              emailVerified: true,
+            },
+          });
+        });
+      } else {
+        // Normal flow: require email verification
+        const { token, hash } = generateVerificationToken();
+        const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        await storage.setVerificationToken(user.id, hash, expires);
 
-      // Don't auto-login - require email verification first
-      res.status(201).json({
-        message: 'Registration successful. Please check your email to verify your account.',
-        requiresVerification: true,
-      });
+        // Send verification email (fire-and-forget, don't block registration)
+        // Pass inviteToken for organization invites to preserve it through verification flow
+        sendVerificationEmail(username, token, firstName, inviteToken).catch((err) => {
+          console.error('Failed to send verification email:', err);
+        });
+
+        res.status(201).json({
+          message: 'Registration successful. Please check your email to verify your account.',
+          requiresVerification: true,
+        });
+      }
     } catch (error) {
       next(error);
     }

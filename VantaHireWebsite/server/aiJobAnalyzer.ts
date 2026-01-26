@@ -50,11 +50,12 @@ Focus on:
 
 For the rewrite:
 - Preserve ALL original job requirements, responsibilities, and qualifications
-- Structure with clear sections: About the Role, Responsibilities, Requirements, Nice-to-Have, Benefits (if mentioned)
+- Output as PLAIN TEXT (not JSON), using markdown-style headers like "## About the Role", "## Responsibilities", etc.
 - Use gender-neutral language throughout (they/them, "you will", avoid gendered terms)
 - Include relevant industry keywords naturally
-- Make it scannable with bullet points
+- Make it scannable with bullet points (use - or * for lists)
 - Keep professional but engaging tone
+- Do NOT include JSON keys like {"About the Role": ...} - output readable text only
 
 Return only valid JSON without any additional text.`;
 

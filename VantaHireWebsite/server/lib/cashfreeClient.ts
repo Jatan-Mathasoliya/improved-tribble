@@ -19,8 +19,8 @@ const API_BASE_URL = CASHFREE_ENV === 'PRODUCTION'
   ? 'https://api.cashfree.com'
   : 'https://sandbox.cashfree.com';
 
-function sanitizePaymentSessionId(sessionId: string | undefined): string | undefined {
-  if (!sessionId) return sessionId;
+function sanitizePaymentSessionId(sessionId: string | undefined): string {
+  if (!sessionId) return '';
   if (!sessionId.endsWith('paymentpayment')) return sessionId;
   const sanitized = sessionId.replace(/paymentpayment$/, '');
   console.warn('[Cashfree] Sanitized payment_session_id suffix', {
