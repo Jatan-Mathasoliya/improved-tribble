@@ -571,6 +571,7 @@ export function registerSubscriptionRoutes(
 
       res.json({
         checkoutUrl: checkout.paymentLink,
+        sessionId: checkout.sessionId,
         orderId: checkout.orderId,
         proratedAmount,
         taxAmount: checkout.taxAmount,

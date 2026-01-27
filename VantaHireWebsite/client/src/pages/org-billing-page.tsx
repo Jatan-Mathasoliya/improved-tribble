@@ -1,5 +1,6 @@
 import { useState } from "react";
 import Layout from "@/components/Layout";
+import { initiateCashfreeCheckout } from "@/lib/cashfree";
 import {
   useSubscription,
   usePlans,
@@ -86,9 +87,9 @@ export default function OrgBillingPage() {
         billingCycle,
       });
 
-      if (result.checkoutUrl) {
-        // Redirect to Cashfree checkout
-        window.location.href = result.checkoutUrl;
+      if (result.sessionId) {
+        // Use Cashfree SDK for checkout (required for production)
+        await initiateCashfreeCheckout(result.sessionId);
       } else {
         toast({
           title: "Error",

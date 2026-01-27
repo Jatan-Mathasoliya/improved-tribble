@@ -5,6 +5,7 @@ import { Helmet } from "react-helmet-async";
 import { useAuth } from "@/hooks/use-auth";
 import { useOrganization } from "@/hooks/use-organization";
 import { usePlans, useSubscription, useCreateCheckout, formatPriceINR } from "@/hooks/use-subscription";
+import { initiateCashfreeCheckout } from "@/lib/cashfree";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -176,7 +177,7 @@ export default function PricingPage() {
     if (!selectedPlan) return;
 
     try {
-      let paymentLink: string | undefined;
+      let sessionId: string | undefined;
 
       if (checkoutMode === 'public') {
         // Validate email and org name
@@ -203,7 +204,7 @@ export default function PricingPage() {
           return;
         }
 
-        paymentLink = result.paymentLink;
+        sessionId = result.sessionId;
       } else if (checkoutMode === 'create-org') {
         if (!orgName || orgName.length < 2) {
           toast({ title: "Error", description: "Please enter an organization name", variant: "destructive" });
@@ -218,7 +219,7 @@ export default function PricingPage() {
           ...(gstin ? { gstin } : {}),
         });
 
-        paymentLink = result.paymentLink;
+        sessionId = result.sessionId;
       } else {
         // Existing org checkout
         const result = await createCheckout.mutateAsync({
@@ -227,11 +228,12 @@ export default function PricingPage() {
           billingCycle,
         });
 
-        paymentLink = result.paymentLink;
+        sessionId = result.sessionId;
       }
 
-      if (paymentLink) {
-        window.location.href = paymentLink;
+      if (sessionId) {
+        // Use Cashfree SDK for checkout (required for production)
+        await initiateCashfreeCheckout(sessionId);
       } else {
         toast({
           title: "Error",

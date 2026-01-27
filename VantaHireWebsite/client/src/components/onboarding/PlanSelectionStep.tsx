@@ -2,6 +2,7 @@ import { useState } from "react";
 import { usePlans, useCreateCheckout, formatPriceINR } from "@/hooks/use-subscription";
 import { useOnboardingStatus } from "@/hooks/use-onboarding-status";
 import { useToast } from "@/hooks/use-toast";
+import { initiateCashfreeCheckout } from "@/lib/cashfree";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -78,13 +79,14 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
         billingCycle,
       });
 
-      if (result.paymentLink) {
+      if (result.sessionId) {
         // Mark onboarding as complete before redirecting
         // Don't await - we want to redirect immediately while this completes in background
         completeOnboardingAsync().catch(() => {
           // Ignore errors - payment is more important
         });
-        window.location.href = result.paymentLink;
+        // Use Cashfree SDK for checkout (required for production)
+        await initiateCashfreeCheckout(result.sessionId);
       } else {
         toast({
           title: "Error",
