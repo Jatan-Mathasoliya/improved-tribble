@@ -178,6 +178,7 @@ export default function PricingPage() {
 
     try {
       let sessionId: string | undefined;
+      let paymentLink: string | undefined;
 
       if (checkoutMode === 'public') {
         // Validate email and org name
@@ -205,6 +206,7 @@ export default function PricingPage() {
         }
 
         sessionId = result.sessionId;
+        paymentLink = result.paymentLink;
       } else if (checkoutMode === 'create-org') {
         if (!orgName || orgName.length < 2) {
           toast({ title: "Error", description: "Please enter an organization name", variant: "destructive" });
@@ -220,6 +222,7 @@ export default function PricingPage() {
         });
 
         sessionId = result.sessionId;
+        paymentLink = result.paymentLink;
       } else {
         // Existing org checkout
         const result = await createCheckout.mutateAsync({
@@ -229,11 +232,15 @@ export default function PricingPage() {
         });
 
         sessionId = result.sessionId;
+        paymentLink = result.paymentLink;
       }
 
       if (sessionId) {
         // Use Cashfree SDK for checkout (required for production)
         await initiateCashfreeCheckout(sessionId);
+      } else if (paymentLink) {
+        // Fallback to direct redirect (works in sandbox)
+        window.location.href = paymentLink;
       } else {
         toast({
           title: "Error",

@@ -79,14 +79,18 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
         billingCycle,
       });
 
+      // Mark onboarding as complete before redirecting
+      // Don't await - we want to redirect immediately while this completes in background
+      completeOnboardingAsync().catch(() => {
+        // Ignore errors - payment is more important
+      });
+
       if (result.sessionId) {
-        // Mark onboarding as complete before redirecting
-        // Don't await - we want to redirect immediately while this completes in background
-        completeOnboardingAsync().catch(() => {
-          // Ignore errors - payment is more important
-        });
         // Use Cashfree SDK for checkout (required for production)
         await initiateCashfreeCheckout(result.sessionId);
+      } else if (result.paymentLink) {
+        // Fallback to direct redirect (works in sandbox)
+        window.location.href = result.paymentLink;
       } else {
         toast({
           title: "Error",

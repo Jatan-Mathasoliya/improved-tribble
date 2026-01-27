@@ -90,6 +90,9 @@ export default function OrgBillingPage() {
       if (result.sessionId) {
         // Use Cashfree SDK for checkout (required for production)
         await initiateCashfreeCheckout(result.sessionId);
+      } else if (result.paymentLink || result.checkoutUrl) {
+        // Fallback to direct redirect (works in sandbox)
+        window.location.href = result.paymentLink || result.checkoutUrl;
       } else {
         toast({
           title: "Error",
