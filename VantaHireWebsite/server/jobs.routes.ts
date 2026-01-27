@@ -193,8 +193,25 @@ export function registerJobsRoutes(
       const isExpired = job.expiresAt && new Date(job.expiresAt) < new Date();
       const isInactive = !job.isActive || job.status !== 'approved';
 
-      // For expired/inactive jobs, return 410 Gone with job info for SEO transition
-      if (isExpired || isInactive) {
+      // Allow owners/admins/org members to view inactive jobs
+      let isOwnerOrAdmin = false;
+      if (req.user) {
+        if (req.user.role === 'super_admin') {
+          isOwnerOrAdmin = true;
+        } else if (req.user.role === 'recruiter') {
+          if (job.postedBy === req.user.id) {
+            isOwnerOrAdmin = true;
+          } else if (job.organizationId != null) {
+            const orgResult = await getUserOrganization(req.user.id);
+            if (orgResult?.organization.id === job.organizationId) {
+              isOwnerOrAdmin = true;
+            }
+          }
+        }
+      }
+
+      // For expired/inactive jobs, return 410 Gone only for public visitors
+      if ((isExpired || isInactive) && !isOwnerOrAdmin) {
         res.status(410).json({
           error: 'Job is no longer available',
           code: isExpired ? 'EXPIRED' : 'INACTIVE',

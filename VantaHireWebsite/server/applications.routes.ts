@@ -100,6 +100,22 @@ export function registerApplicationsRoutes(
         return;
       }
 
+      // Check if job is accepting applications
+      if (!job.isActive) {
+        res.status(400).json({ error: 'This job is no longer accepting applications' });
+        return;
+      }
+
+      if (job.status && job.status !== 'published') {
+        res.status(400).json({ error: 'This job is not currently published' });
+        return;
+      }
+
+      if (job.deadline && new Date(job.deadline) < new Date()) {
+        res.status(400).json({ error: 'The application deadline for this job has passed' });
+        return;
+      }
+
       if (!req.file) {
         res.status(400).json({ error: 'Resume file is required' });
         return;
@@ -132,12 +148,21 @@ export function registerApplicationsRoutes(
       let resumeUrl = 'placeholder-resume.pdf';
       let resumeRecordId: number | null = null;
       let resumeCountForCompletion: number | null = null;
+      let extractedResumeText: string | null = null;
       if (req.file) {
         try {
           resumeUrl = await uploadToGCS(req.file.buffer, req.file.originalname);
         } catch (error) {
           console.log('Google Cloud Storage not configured, using placeholder resume URL');
           resumeUrl = `resume-${Date.now()}-${req.file.originalname}`;
+        }
+        try {
+          const extraction = await extractResumeText(req.file.buffer);
+          if (extraction.success && validateResumeText(extraction.text)) {
+            extractedResumeText = extraction.text;
+          }
+        } catch (resumeExtractError) {
+          console.error('Resume extraction failed during application (non-blocking):', resumeExtractError);
         }
       }
 
@@ -151,23 +176,21 @@ export function registerApplicationsRoutes(
           });
           resumeCountForCompletion = existingResumes.length;
 
-          if (existingResumes.length < 3) {
-            const extraction = await extractResumeText(req.file.buffer);
-            if (extraction.success && validateResumeText(extraction.text)) {
-              const shouldBeDefault = !existingResumes.some((r: { isDefault: boolean }) => r.isDefault);
-              const [resume] = await db
-                .insert(candidateResumes)
-                .values({
-                  userId: req.user.id,
-                  label: req.file.originalname || 'Uploaded Resume',
-                  gcsPath: resumeUrl,
-                  extractedText: extraction.text,
-                  isDefault: shouldBeDefault,
-                })
-                .returning();
-              resumeRecordId = resume.id;
-              resumeCountForCompletion = existingResumes.length + 1;
-            }
+          // Reuse already-extracted text instead of extracting again
+          if (existingResumes.length < 3 && extractedResumeText) {
+            const shouldBeDefault = !existingResumes.some((r: { isDefault: boolean }) => r.isDefault);
+            const [resume] = await db
+              .insert(candidateResumes)
+              .values({
+                userId: req.user.id,
+                label: req.file.originalname || 'Uploaded Resume',
+                gcsPath: resumeUrl,
+                extractedText: extractedResumeText,
+                isDefault: shouldBeDefault,
+              })
+              .returning();
+            resumeRecordId = resume.id;
+            resumeCountForCompletion = existingResumes.length + 1;
           }
         } catch (resumeErr) {
           console.error('Resume save/extraction failed (non-blocking):', resumeErr);
@@ -196,6 +219,7 @@ export function registerApplicationsRoutes(
         resumeUrl,
         resumeFilename: req.file?.originalname ?? null,
         ...(resumeRecordId !== null && { resumeId: resumeRecordId }),
+        ...(extractedResumeText && { extractedResumeText }),
         ...(req.user?.id !== undefined && { userId: req.user.id }),
         ...(initialStageId !== null && {
           currentStage: initialStageId,
@@ -346,6 +370,17 @@ export function registerApplicationsRoutes(
           resumeUrl = `resume-${Date.now()}-${req.file.originalname}`;
         }
 
+        // Extract resume text for AI summary (recruiter-add has no candidateResumes record)
+        let extractedResumeText: string | null = null;
+        try {
+          const extraction = await extractResumeText(req.file.buffer);
+          if (extraction.success && validateResumeText(extraction.text)) {
+            extractedResumeText = extraction.text;
+          }
+        } catch (resumeExtractError) {
+          console.error('Resume extraction failed during recruiter-add (non-blocking):', resumeExtractError);
+        }
+
         // Determine default pipeline stage for recruiter-added candidates (if stages are configured)
         let defaultStageId: number | null = null;
         try {
@@ -389,6 +424,7 @@ export function registerApplicationsRoutes(
           jobId,
           resumeUrl,
           resumeFilename: req.file.originalname,
+          ...(extractedResumeText && { extractedResumeText }),
           submittedByRecruiter: true,
           createdByUserId: req.user!.id,
           source: applicationData.source,
@@ -1223,7 +1259,9 @@ export function registerApplicationsRoutes(
 
       let resumeText = '';
 
-      if (application.resumeId) {
+      if (application.extractedResumeText) {
+        resumeText = application.extractedResumeText;
+      } else if (application.resumeId) {
         const resumeData = await db.query.candidateResumes.findFirst({
           where: eq(candidateResumes.id, application.resumeId)
         });

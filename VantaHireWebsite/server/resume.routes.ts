@@ -34,7 +34,9 @@ export function registerResumeRoutes(app: Express): void {
 
         let resumeText = '';
 
-        if (application.resumeId) {
+        if (application.extractedResumeText) {
+          resumeText = application.extractedResumeText;
+        } else if (application.resumeId) {
           const resumeData = await db.query.candidateResumes.findFirst({
             where: (resumes: typeof candidateResumes, { eq }: any) => eq(resumes.id, application.resumeId),
           });

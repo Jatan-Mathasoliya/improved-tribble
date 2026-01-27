@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
@@ -270,6 +271,15 @@ interface Client {
   name: string;
 }
 
+type ResumeBackfillResult = {
+  processed: number;
+  updated: number;
+  skipped: number;
+  errors: number;
+  durationMs: number;
+  dryRun?: boolean;
+};
+
 export default function AdminSuperDashboard() {
   const { toast } = useToast();
   const { user } = useAuth();
@@ -291,6 +301,23 @@ export default function AdminSuperDashboard() {
   const [showInviteHMDialog, setShowInviteHMDialog] = useState(false);
   const [inviteHMEmail, setInviteHMEmail] = useState("");
   const [inviteHMName, setInviteHMName] = useState("");
+
+  // Resume text backfill state
+  const [backfillBatchSize, setBackfillBatchSize] = useState("100");
+  const [backfillLimit, setBackfillLimit] = useState("");
+  const [backfillResult, setBackfillResult] = useState<ResumeBackfillResult | null>(null);
+  const [backfillEstimateMs, setBackfillEstimateMs] = useState<number | null>(null);
+  const [backfillRunType, setBackfillRunType] = useState<'dry-run' | 'execute' | null>(null);
+  const [backfillElapsedMs, setBackfillElapsedMs] = useState(0);
+
+  const formatDuration = (ms?: number | null) => {
+    if (ms === undefined || ms === null) return "—";
+    const totalSeconds = Math.max(0, Math.round(ms / 1000));
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+    if (minutes === 0) return `${seconds}s`;
+    return `${minutes}m ${seconds.toString().padStart(2, "0")}s`;
+  };
 
   // Fetch admin statistics
   const { data: stats } = useQuery<AdminStats>({
@@ -512,6 +539,67 @@ export default function AdminSuperDashboard() {
       });
     },
   });
+
+  const backfillResumeTextMutation = useMutation({
+    mutationFn: async (mode: 'dry-run' | 'execute') => {
+      const parsePositiveInt = (value: string) => {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : undefined;
+      };
+
+      const payload = {
+        batchSize: parsePositiveInt(backfillBatchSize),
+        limit: parsePositiveInt(backfillLimit),
+        dryRun: mode === 'dry-run',
+      };
+
+      const res = await apiRequest("POST", "/api/admin/applications/backfill-resume-text", payload);
+      return res.json();
+    },
+    onMutate: (mode) => {
+      setBackfillRunType(mode);
+      setBackfillElapsedMs(0);
+    },
+    onSuccess: (data: ResumeBackfillResult, mode) => {
+      setBackfillResult({
+        ...data,
+        dryRun: mode === 'dry-run',
+      });
+      if (mode === 'dry-run') {
+        setBackfillEstimateMs(data.durationMs);
+        toast({
+          title: "Dry run complete",
+          description: `Processed ${data.processed}, updated ${data.updated}, skipped ${data.skipped}, errors ${data.errors}.`,
+        });
+      } else {
+        toast({
+          title: "Backfill complete",
+          description: `Processed ${data.processed}, updated ${data.updated}, skipped ${data.skipped}, errors ${data.errors}.`,
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Backfill failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+    onSettled: () => {
+      setBackfillRunType(null);
+    },
+  });
+
+  useEffect(() => {
+    if (!backfillResumeTextMutation.isPending || !backfillRunType) return;
+
+    const start = Date.now();
+    const interval = setInterval(() => {
+      setBackfillElapsedMs(Date.now() - start);
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [backfillResumeTextMutation.isPending, backfillRunType]);
 
   // Invite hiring manager mutation
   const inviteHiringManagerMutation = useMutation({
@@ -2352,6 +2440,126 @@ export default function AdminSuperDashboard() {
                     Real-time system monitoring active
                   </div>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardHeader>
+                <CardTitle className="text-foreground">Resume Text Backfill</CardTitle>
+                <CardDescription className="text-foreground/70">
+                  Populate extracted resume text for existing applications (admin only).
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="backfill-batch">Batch size</Label>
+                    <Input
+                      id="backfill-batch"
+                      type="number"
+                      min={1}
+                      max={500}
+                      value={backfillBatchSize}
+                      onChange={(e) => setBackfillBatchSize(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="backfill-limit">Limit (optional)</Label>
+                    <Input
+                      id="backfill-limit"
+                      type="number"
+                      min={1}
+                      value={backfillLimit}
+                      onChange={(e) => setBackfillLimit(e.target.value)}
+                      placeholder="Unlimited"
+                    />
+                  </div>
+                </div>
+
+                <div className="text-sm text-muted-foreground">
+                  This will run a dry run first, then let you confirm the write step.
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    className="w-full md:w-auto"
+                    disabled={backfillResumeTextMutation.isPending}
+                    onClick={() => backfillResumeTextMutation.mutate('dry-run')}
+                  >
+                    {backfillResumeTextMutation.isPending && backfillRunType === 'dry-run' ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Running dry run...
+                      </>
+                    ) : (
+                      "Run Dry Run"
+                    )}
+                  </Button>
+
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        variant="outline"
+                        className="w-full md:w-auto"
+                        disabled={
+                          backfillResumeTextMutation.isPending
+                          || !backfillResult
+                          || !backfillResult.dryRun
+                        }
+                      >
+                        Execute Backfill
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Execute resume text backfill?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This will write extracted resume text to applications missing it.
+                          Proceeding will run the same backfill with writes enabled.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction onClick={() => backfillResumeTextMutation.mutate('execute')}>
+                          Confirm & Run
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+
+                {backfillResumeTextMutation.isPending && (
+                  <div className="text-sm text-muted-foreground">
+                    Running {backfillRunType === 'execute' ? 'backfill' : 'dry run'} · Elapsed{" "}
+                    <strong>{formatDuration(backfillElapsedMs)}</strong>
+                    {backfillRunType === 'execute' && backfillEstimateMs && (
+                      <>
+                        {" "}· Est. remaining{" "}
+                        <strong>{formatDuration(Math.max(backfillEstimateMs - backfillElapsedMs, 0))}</strong>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {backfillResult && (
+                  <div className="border border-border rounded-lg p-3 bg-muted/50 text-sm">
+                    <div className="flex flex-wrap gap-3">
+                      <span>Processed: <strong>{backfillResult.processed}</strong></span>
+                      <span>Updated: <strong>{backfillResult.updated}</strong></span>
+                      <span>Skipped: <strong>{backfillResult.skipped}</strong></span>
+                      <span>Errors: <strong>{backfillResult.errors}</strong></span>
+                      <span>Duration: <strong>{Math.round(backfillResult.durationMs)}ms</strong></span>
+                      {backfillResult.dryRun && (
+                        <Badge variant="outline">Dry run</Badge>
+                      )}
+                    </div>
+                    {backfillResult.dryRun && (
+                      <div className="mt-2 text-muted-foreground">
+                        Estimated run time: <strong>{formatDuration(backfillResult.durationMs)}</strong>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

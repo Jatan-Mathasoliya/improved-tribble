@@ -134,6 +134,7 @@ export const applications = pgTable("applications", {
   phone: text("phone").notNull(),
   resumeUrl: text("resume_url").notNull(),
   resumeFilename: text("resume_filename"), // Original filename for proper downloads
+  extractedResumeText: text("extracted_resume_text"), // Extracted resume text for AI summary
   coverLetter: text("cover_letter"),
   status: text("status").default("submitted").notNull(),
   rejectionReason: text("rejection_reason"), // 'skills_mismatch', 'experience_gap', 'salary_expectations', 'culture_fit', 'withdrew', 'no_show', 'position_filled', 'other'
@@ -1608,15 +1609,27 @@ export const insertApplicationSchema = createInsertSchema(applications).pick({
 export const recruiterAddApplicationSchema = z.object({
   name: z.string().min(1).max(100),
   email: z.string().email(),
-  phone: z.string().regex(/^\d{10}$/, "Please enter exactly 10 digits for your phone number"),
+  phone: z.preprocess((val) => {
+    const raw = val === undefined || val === null ? '' : String(val);
+    return raw.replace(/\D/g, '');
+  }, z.string().regex(/^\d{10}$/, "Please enter exactly 10 digits for your phone number")),
   coverLetter: z.string().max(2000).optional(),
   source: z.enum(['recruiter_add', 'referral', 'linkedin', 'indeed', 'other']).default('recruiter_add'),
-  sourceMetadata: z.object({
+  sourceMetadata: z.preprocess((val) => {
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val);
+      } catch {
+        return val;
+      }
+    }
+    return val;
+  }, z.object({
     referrer: z.string().optional(),
     platform: z.string().optional(),
     notes: z.string().max(500).optional(),
-  }).optional(),
-  currentStage: z.number().int().positive().optional(), // Initial stage assignment
+  }).optional()),
+  currentStage: z.coerce.number().int().positive().optional(), // Initial stage assignment
   whatsappConsent: z.preprocess(
     (val) => val === 'true' || val === true,
     z.boolean()

@@ -20,6 +20,7 @@ import { syncProfileCompletionStatus, computeProfileCompletion } from './lib/pro
 import { generatePublicId, isValidPublicId, isNumericId } from './lib/publicId';
 import { getEmailService } from './simpleEmailService';
 import { initializeMemberCredits } from './lib/creditService';
+import { getOrganizationSubscription } from './lib/subscriptionService';
 import crypto from 'crypto';
 
 // Validation schema for user updates (firstName, lastName)
@@ -718,11 +719,34 @@ export function registerProfileRoutes(
         currentStep = 'plan';
       }
 
+      // Skip plan step for invited members if org already has a plan (paid or admin-assigned)
+      let skipPlanForMember = false;
+      if (currentStep === 'plan' && membership) {
+        const subscription = await getOrganizationSubscription(membership.organizationId);
+        const hasNonFreePlan = !!subscription && subscription.plan?.name !== 'free';
+        const planIsActiveOrAdmin = !!subscription && (subscription.status === 'active' || subscription.adminOverride);
+        const invitedMember = membership.role !== 'owner';
+
+        if (invitedMember && membership.seatAssigned && hasNonFreePlan && planIsActiveOrAdmin) {
+          skipPlanForMember = true;
+        }
+      }
+
       // For existing users with org + complete profile, check if they should skip onboarding
       // (i.e., they're existing users who predate the onboarding feature)
       // We consider onboarding complete if they've been a member for more than 24 hours (established users)
       let needsOnboarding = true;
-      if (hasOrganization && profileComplete && membership) {
+      if (skipPlanForMember) {
+        needsOnboarding = false;
+
+        // Mark onboarding as complete in the database (fire-and-forget, don't block response)
+        db.update(users)
+          .set({ onboardingCompletedAt: new Date() })
+          .where(eq(users.id, user.id))
+          .catch((err: unknown) => {
+            console.error('Failed to auto-complete onboarding for invited member:', err);
+          });
+      } else if (hasOrganization && profileComplete && membership) {
         // Check if user joined more than 24 hours ago (established user, skip onboarding)
         const joinedAt = new Date(membership.joinedAt);
         const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);

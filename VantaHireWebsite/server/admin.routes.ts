@@ -12,8 +12,10 @@
  */
 
 import type { Express, Request, Response, NextFunction } from 'express';
+import { z } from 'zod';
 import { sql, eq, and, desc, gte, inArray } from 'drizzle-orm';
 import { db } from './db';
+import { backfillExtractedResumeText } from './lib/backfillResumeText';
 import { storage } from './storage';
 import { requireRole } from './auth';
 import {
@@ -1226,6 +1228,42 @@ export function registerAdminRoutes(
       return;
     } catch (error) {
       console.error('[Admin Ops] Error logging automation event:', error);
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/admin/applications/backfill-resume-text
+   * Run backfill for applications.extracted_resume_text (admin only)
+   */
+  app.post("/api/admin/applications/backfill-resume-text", csrfProtection, requireRole(['super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const bodySchema = z.object({
+        batchSize: z.number().int().positive().max(500).optional(),
+        limit: z.number().int().positive().optional(),
+        dryRun: z.boolean().optional(),
+      });
+
+      const parsed = bodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        res.status(400).json({ error: 'Validation error', details: parsed.error.errors });
+        return;
+      }
+
+      const options: { batchSize?: number; limit?: number; dryRun?: boolean } = {};
+      if (parsed.data.batchSize !== undefined) options.batchSize = parsed.data.batchSize;
+      if (parsed.data.limit !== undefined) options.limit = parsed.data.limit;
+      if (parsed.data.dryRun !== undefined) options.dryRun = parsed.data.dryRun;
+
+      const result = await backfillExtractedResumeText(options);
+
+      res.status(200).json({
+        success: true,
+        ...result,
+      });
+      return;
+    } catch (error) {
+      console.error('[Admin] Backfill extracted resume text failed:', error);
       next(error);
     }
   });

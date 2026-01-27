@@ -54,6 +54,11 @@ const inviteCoRecruiterSchema = z.object({
   name: z.string().optional(),
 });
 
+// Validation schema for email check
+const checkEmailSchema = z.object({
+  email: z.string().email('Please enter a valid email address'),
+});
+
 /**
  * Register co-recruiter invitation routes
  */
@@ -61,6 +66,107 @@ export function registerCoRecruiterInvitationRoutes(
   app: Express,
   csrfProtection: CsrfMiddleware
 ): void {
+  // ============= CHECK EMAIL STATUS =============
+  // Returns whether an email exists on platform and their status
+  app.post(
+    "/api/jobs/:jobId/co-recruiters/check-email",
+    csrfProtection,
+    requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
+    async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+      try {
+        const jobIdParam = req.params.jobId;
+        if (!jobIdParam) {
+          res.status(400).json({ error: 'Job ID required' });
+          return;
+        }
+        const jobId = parseInt(jobIdParam, 10);
+        if (isNaN(jobId) || jobId <= 0) {
+          res.status(400).json({ error: 'Invalid job ID' });
+          return;
+        }
+
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
+
+        // Verify job exists and user has access
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          res.status(404).json({ error: 'Job not found' });
+          return;
+        }
+
+        const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id, userOrgId);
+        if (!hasAccess) {
+          res.status(403).json({ error: 'Access denied' });
+          return;
+        }
+
+        // Validate request body
+        const body = checkEmailSchema.parse(req.body);
+        const email = body.email.toLowerCase();
+
+        // Check if user with this email already exists
+        const existingUser = await storage.getUserByUsername(email);
+
+        if (!existingUser) {
+          // User does not exist - will consume a seat when they register
+          res.json({
+            status: 'not_on_platform',
+            message: 'This person is not on VantaHire. They will need to register and will consume an organization seat.',
+            willConsumeSeat: true,
+          });
+          return;
+        }
+
+        if (existingUser.role === 'recruiter' || existingUser.role === 'super_admin') {
+          // Already a recruiter - check if already on this job
+          const alreadyOnJob = await storage.isRecruiterOnJob(jobId, existingUser.id);
+          if (alreadyOnJob) {
+            res.json({
+              status: 'already_on_job',
+              message: 'This recruiter is already collaborating on this job.',
+              willConsumeSeat: false,
+            });
+            return;
+          }
+
+          // Existing recruiter, will be added directly
+          res.json({
+            status: 'existing_recruiter',
+            message: 'This person is already a recruiter on VantaHire. They will be added immediately.',
+            willConsumeSeat: false,
+            userName: existingUser.firstName
+              ? `${existingUser.firstName} ${existingUser.lastName || ''}`.trim()
+              : undefined,
+          });
+          return;
+        }
+
+        // User exists but is not a recruiter
+        res.json({
+          status: 'not_recruiter',
+          message: 'This person has an account but is not a recruiter. They will be notified about registering a recruiter account.',
+          willConsumeSeat: false,
+        });
+        return;
+      } catch (error) {
+        if (error instanceof z.ZodError) {
+          res.status(400).json({
+            error: 'Validation error',
+            details: error.errors.map(e => ({
+              field: e.path.join('.'),
+              message: e.message,
+            })),
+          });
+          return;
+        }
+        next(error);
+      }
+    }
+  );
+
   // ============= INVITE CO-RECRUITER =============
   app.post(
     "/api/jobs/:jobId/co-recruiters/invite",

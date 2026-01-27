@@ -15,7 +15,7 @@ export const contactSchema = z.object({
   firstName: z.string().min(1, "First name is required").max(50),
   lastName: z.string().min(1, "Last name is required").max(50),
   email: z.string().email("Valid email is required"),
-  phone: z.string().min(10, "Phone must be at least 10 digits").max(15).optional().or(z.literal("")),
+  phone: z.string().regex(/^\d{10}$/, "Please enter exactly 10 digits for the phone number"),
   location: z.string().max(100).optional().or(z.literal("")),
 });
 

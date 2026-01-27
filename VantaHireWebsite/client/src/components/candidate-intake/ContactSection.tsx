@@ -138,14 +138,22 @@ export function ContactSection({
 
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
-          <Label htmlFor="phone">Phone</Label>
+          <Label htmlFor="phone">
+            Phone <span className="text-destructive">*</span>
+          </Label>
           <Input
             id="phone"
             type="tel"
+            inputMode="numeric"
+            pattern="\d*"
+            maxLength={10}
             value={data.phone}
-            onChange={(e) => updateField("phone", e.target.value)}
+            onChange={(e) => {
+              const digits = e.target.value.replace(/\D/g, "").slice(0, 10);
+              updateField("phone", digits);
+            }}
             onBlur={() => handleBlur("phone")}
-            placeholder="+1 (555) 123-4567"
+            placeholder="10-digit number"
             className={showError("phone") ? "border-destructive" : ""}
           />
           {showError("phone") && (

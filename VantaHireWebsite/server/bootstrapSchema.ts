@@ -80,6 +80,7 @@ export async function ensureAtsSchema(): Promise<void> {
       phone TEXT NOT NULL,
       resume_url TEXT NOT NULL,
       resume_filename TEXT,
+      extracted_resume_text TEXT,
       cover_letter TEXT,
       status TEXT DEFAULT 'submitted' NOT NULL,
       notes TEXT,
@@ -216,6 +217,7 @@ export async function ensureAtsSchema(): Promise<void> {
 
   // Add resumeFilename column for proper file download headers
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS resume_filename TEXT;`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS extracted_resume_text TEXT;`);
 
   // Add recruiter metadata columns for "Add Candidate" feature
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS submitted_by_recruiter BOOLEAN DEFAULT FALSE;`);

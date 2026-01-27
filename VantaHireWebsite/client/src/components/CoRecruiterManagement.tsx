@@ -26,7 +26,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Users, UserPlus, X, Mail, Crown, Clock, Loader2 } from "lucide-react";
+import { Users, UserPlus, X, Mail, Crown, Clock, Loader2, AlertTriangle } from "lucide-react";
 
 interface Recruiter {
   id: number;
@@ -62,6 +62,8 @@ export function CoRecruiterManagement({ jobId, className = "" }: CoRecruiterMana
   const [inviteName, setInviteName] = useState("");
   const [removeTarget, setRemoveTarget] = useState<Recruiter | null>(null);
   const [cancelTarget, setCancelTarget] = useState<PendingInvitation | null>(null);
+  const [seatWarningOpen, setSeatWarningOpen] = useState(false);
+  const [pendingInviteData, setPendingInviteData] = useState<{ email: string; name?: string } | null>(null);
 
   // Fetch co-recruiters and pending invitations
   const { data, isLoading, error } = useQuery<CoRecruitersResponse>({
@@ -77,6 +79,14 @@ export function CoRecruiterManagement({ jobId, className = "" }: CoRecruiterMana
     enabled: !!jobId,
   });
 
+  // Email check mutation
+  const checkEmailMutation = useMutation({
+    mutationFn: async (email: string) => {
+      const res = await apiRequest("POST", `/api/jobs/${jobId}/co-recruiters/check-email`, { email });
+      return res.json();
+    },
+  });
+
   // Invite mutation
   const inviteMutation = useMutation({
     mutationFn: async (data: { email: string; name?: string }) => {
@@ -88,6 +98,8 @@ export function CoRecruiterManagement({ jobId, className = "" }: CoRecruiterMana
       setInviteDialogOpen(false);
       setInviteEmail("");
       setInviteName("");
+      setSeatWarningOpen(false);
+      setPendingInviteData(null);
 
       if (result.addedDirectly) {
         toast({
@@ -156,7 +168,7 @@ export function CoRecruiterManagement({ jobId, className = "" }: CoRecruiterMana
     },
   });
 
-  const handleInvite = (e: React.FormEvent) => {
+  const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inviteEmail.trim()) return;
 
@@ -164,7 +176,46 @@ export function CoRecruiterManagement({ jobId, className = "" }: CoRecruiterMana
     if (inviteName.trim()) {
       payload.name = inviteName.trim();
     }
-    inviteMutation.mutate(payload);
+
+    try {
+      // First check the email status
+      const checkResult = await checkEmailMutation.mutateAsync(inviteEmail.trim());
+
+      if (checkResult.status === 'already_on_job') {
+        toast({
+          title: "Already a Co-Recruiter",
+          description: checkResult.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (checkResult.status === 'not_on_platform') {
+        // User not on platform - show warning about seat consumption
+        setPendingInviteData(payload);
+        setSeatWarningOpen(true);
+        return;
+      }
+
+      // For other statuses (existing_recruiter, not_recruiter), proceed directly
+      inviteMutation.mutate(payload);
+    } catch (error: any) {
+      // If check fails, fall back to direct invite (server will handle validation)
+      inviteMutation.mutate(payload);
+    }
+  };
+
+  const handleConfirmSeatConsumption = () => {
+    if (pendingInviteData) {
+      inviteMutation.mutate(pendingInviteData);
+      setSeatWarningOpen(false);
+      setPendingInviteData(null);
+    }
+  };
+
+  const handleCancelSeatWarning = () => {
+    setSeatWarningOpen(false);
+    setPendingInviteData(null);
   };
 
   const formatName = (recruiter: Recruiter) => {
@@ -236,7 +287,7 @@ export function CoRecruiterManagement({ jobId, className = "" }: CoRecruiterMana
               <DialogHeader>
                 <DialogTitle>Invite Co-Recruiter</DialogTitle>
                 <DialogDescription>
-                  Enter the email address of the recruiter you want to invite. If they already have an account, they'll be added immediately. Otherwise, they'll receive an invitation to register.
+                  Enter the email address of the recruiter you want to invite. If they already have an account, they'll be added immediately. New users will receive an invitation to register.
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleInvite} className="space-y-4">
@@ -268,11 +319,11 @@ export function CoRecruiterManagement({ jobId, className = "" }: CoRecruiterMana
                   <Button type="button" variant="outline" onClick={() => setInviteDialogOpen(false)}>
                     Cancel
                   </Button>
-                  <Button type="submit" disabled={inviteMutation.isPending}>
-                    {inviteMutation.isPending ? (
+                  <Button type="submit" disabled={inviteMutation.isPending || checkEmailMutation.isPending}>
+                    {inviteMutation.isPending || checkEmailMutation.isPending ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Sending...
+                        {checkEmailMutation.isPending ? "Checking..." : "Sending..."}
                       </>
                     ) : (
                       "Send Invitation"
@@ -410,6 +461,46 @@ export function CoRecruiterManagement({ jobId, className = "" }: CoRecruiterMana
               onClick={() => cancelTarget && cancelInvitationMutation.mutate(cancelTarget.id)}
             >
               {cancelInvitationMutation.isPending ? "Cancelling..." : "Cancel Invitation"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Seat Consumption Warning Dialog */}
+      <AlertDialog open={seatWarningOpen} onOpenChange={(open) => !open && handleCancelSeatWarning()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-amber-500" />
+              New User Will Consume a Seat
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-3">
+              <p>
+                <strong>{pendingInviteData?.email}</strong> is not currently on VantaHire.
+              </p>
+              <p>
+                When they accept this invitation and register, they will be added to your organization
+                and <strong>consume one organization seat</strong>.
+              </p>
+              <p className="text-amber-600 dark:text-amber-400">
+                Make sure you have available seats in your subscription before proceeding.
+              </p>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleCancelSeatWarning}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmSeatConsumption}
+              disabled={inviteMutation.isPending}
+            >
+              {inviteMutation.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                "Send Invitation Anyway"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

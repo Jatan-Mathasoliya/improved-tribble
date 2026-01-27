@@ -89,7 +89,30 @@ export default function OnboardingPage() {
   }, [user, authLoading, setLocation]);
 
   // Handle step advancement
-  const handleStepComplete = (step: OnboardingStep) => {
+  const handleStepComplete = async (step: OnboardingStep) => {
+    try {
+      const result = await refetch();
+      const nextStatus = result.data;
+
+      if (nextStatus && nextStatus.needsOnboarding === false) {
+        setLocation('/recruiter-dashboard');
+        return;
+      }
+
+      if (nextStatus?.currentStep && nextStatus.currentStep !== 'complete') {
+        const nextStep = nextStatus.currentStep as OnboardingStep;
+        setCurrentStep(nextStep);
+        // Update URL - preserve fromInvite param
+        const params = new URLSearchParams();
+        params.set('step', nextStep);
+        if (fromInvite) params.set('fromInvite', 'true');
+        setLocation(`/onboarding?${params.toString()}`, { replace: true });
+        return;
+      }
+    } catch {
+      // Fallback to local progression if refetch fails
+    }
+
     const currentIndex = STEP_ORDER.indexOf(step);
     const nextStep = STEP_ORDER[currentIndex + 1];
     if (nextStep) {
@@ -99,8 +122,6 @@ export default function OnboardingPage() {
       params.set('step', nextStep);
       if (fromInvite) params.set('fromInvite', 'true');
       setLocation(`/onboarding?${params.toString()}`, { replace: true });
-      // Refetch status to get updated server state
-      refetch();
     }
   };
 
