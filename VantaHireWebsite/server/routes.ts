@@ -47,9 +47,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // scriptSrc: Mautic form embed requires inline scripts for form handling
         // 'unsafe-inline' needed in both dev and prod for Mautic form functionality
         // Google Tag Manager needed for analytics
+        // Cashfree SDK needed for payment checkout
         scriptSrc: isDevelopment
-          ? ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://assets.apollo.io", "https://mautic.evalmatch.app", "https://www.googletagmanager.com"]
-          : ["'self'", "'unsafe-inline'", "https://assets.apollo.io", "https://mautic.evalmatch.app", "https://www.googletagmanager.com"],
+          ? ["'self'", "'unsafe-inline'", "'unsafe-eval'", "https://assets.apollo.io", "https://mautic.evalmatch.app", "https://www.googletagmanager.com", "https://sdk.cashfree.com"]
+          : ["'self'", "'unsafe-inline'", "https://assets.apollo.io", "https://mautic.evalmatch.app", "https://www.googletagmanager.com", "https://sdk.cashfree.com"],
         // style: allow inline styles for UI libraries and static landing pages with embedded CSS
         // 'unsafe-inline' needed in both dev and prod for inline <style> blocks
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com", "https://mautic.evalmatch.app"],
@@ -57,9 +58,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
         // connectSrc: Restrict WebSocket connections in production
         // Mautic form submissions require connection to mautic domain
         // Google Analytics requires connection to google-analytics.com
+        // Cashfree SDK makes API calls to their servers
         connectSrc: isDevelopment
-          ? ["'self'", "ws:", "wss:", "https://assets.apollo.io", "https://mautic.evalmatch.app", "https://www.google-analytics.com", "https://region1.google-analytics.com"]
-          : ["'self'", "https://assets.apollo.io", "https://mautic.evalmatch.app", "https://www.google-analytics.com", "https://region1.google-analytics.com"],
+          ? ["'self'", "ws:", "wss:", "https://assets.apollo.io", "https://mautic.evalmatch.app", "https://www.google-analytics.com", "https://region1.google-analytics.com", "https://*.cashfree.com"]
+          : ["'self'", "https://assets.apollo.io", "https://mautic.evalmatch.app", "https://www.google-analytics.com", "https://region1.google-analytics.com", "https://*.cashfree.com"],
         fontSrc: [
           "'self'",
           "data:",
@@ -68,7 +70,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ],
         objectSrc: ["'self'"],
         mediaSrc: ["'self'"],
-        frameSrc: ["'self'", "https://mautic.evalmatch.app"],
+        // Cashfree checkout opens in iframe
+        frameSrc: ["'self'", "https://mautic.evalmatch.app", "https://sdk.cashfree.com", "https://*.cashfree.com"],
         // formAction: Allow form submissions to Mautic for lead capture forms
         formAction: ["'self'", "https://mautic.evalmatch.app"],
       },
