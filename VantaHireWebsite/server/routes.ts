@@ -72,8 +72,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         mediaSrc: ["'self'"],
         // Cashfree checkout opens in iframe
         frameSrc: ["'self'", "https://mautic.evalmatch.app", "https://sdk.cashfree.com", "https://*.cashfree.com"],
-        // formAction: Allow form submissions to Mautic for lead capture forms
-        formAction: ["'self'", "https://mautic.evalmatch.app"],
+        // formAction: Allow form submissions to Mautic and Cashfree
+        formAction: ["'self'", "https://mautic.evalmatch.app", "https://*.cashfree.com", "https://api.cashfree.com"],
       },
     },
   }));
