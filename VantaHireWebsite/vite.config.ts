@@ -4,6 +4,23 @@ import path from "path";
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    headers: {
+      // CSP for development - mirrors Express helmet config
+      "Content-Security-Policy": [
+        "default-src 'self'",
+        "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://assets.apollo.io https://mautic.evalmatch.app https://www.googletagmanager.com https://sdk.cashfree.com",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://mautic.evalmatch.app",
+        "img-src 'self' data: https:",
+        "connect-src 'self' ws: wss: https://assets.apollo.io https://mautic.evalmatch.app https://www.google-analytics.com https://region1.google-analytics.com https://*.cashfree.com",
+        "font-src 'self' data: https://fonts.gstatic.com https://r2cdn.perplexity.ai",
+        "object-src 'self'",
+        "media-src 'self'",
+        "frame-src 'self' https://mautic.evalmatch.app https://sdk.cashfree.com https://*.cashfree.com",
+        "form-action 'self' https://mautic.evalmatch.app https://*.cashfree.com https://api.cashfree.com",
+      ].join("; "),
+    },
+  },
   resolve: {
     alias: {
       "@": path.resolve(import.meta.dirname, "client", "src"),

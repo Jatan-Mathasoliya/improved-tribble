@@ -37,7 +37,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const isDevelopment = process.env.NODE_ENV === 'development';
 
   // Ensure body parsing is available even when registerRoutes is used directly in tests
-  app.use(express.json());
+  // Capture raw body for webhook signature verification
+  app.use(express.json({
+    verify: (req: any, _res, buf) => {
+      if (req.url?.startsWith('/api/webhooks/')) {
+        req.rawBody = buf.toString('utf-8');
+      }
+    }
+  }));
   app.use(express.urlencoded({ extended: false }));
 
   app.use(helmet({

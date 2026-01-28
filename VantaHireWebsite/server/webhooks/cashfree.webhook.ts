@@ -495,13 +495,13 @@ async function handleSubscriptionRenewal(
 
 export function registerCashfreeWebhook(app: Express) {
   // Cashfree webhook endpoint (no CSRF, raw body needed for signature verification)
-  app.post("/api/webhooks/cashfree", async (req: Request, res: Response) => {
+  app.post("/api/webhooks/cashfree", async (req: Request & { rawBody?: string }, res: Response) => {
     try {
       const signature = req.headers['x-webhook-signature'] as string;
       const timestamp = req.headers['x-webhook-timestamp'] as string;
 
-      // Get raw body for signature verification
-      const rawBody = JSON.stringify(req.body);
+      // Get raw body for signature verification (captured by express.json verify option)
+      const rawBody = req.rawBody || JSON.stringify(req.body);
 
       // Verify signature (if webhook secret is configured)
       if (process.env.CASHFREE_WEBHOOK_SECRET) {

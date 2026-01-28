@@ -20,14 +20,10 @@ const API_BASE_URL = CASHFREE_ENV === 'PRODUCTION'
   : 'https://sandbox.cashfree.com';
 
 function sanitizePaymentSessionId(sessionId: string | undefined): string {
-  if (!sessionId) return '';
-  if (!sessionId.endsWith('paymentpayment')) return sessionId;
-  const sanitized = sessionId.replace(/paymentpayment$/, '');
-  console.warn('[Cashfree] Sanitized payment_session_id suffix', {
-    originalLength: sessionId.length,
-    sanitizedLength: sanitized.length,
-  });
-  return sanitized;
+  // Cashfree session IDs may end with 'paymentpayment' - this is VALID and should NOT be removed.
+  // The suffix appears to be part of Cashfree's internal encoding.
+  // Removing it causes "payment_session_id_invalid" errors.
+  return sessionId || '';
 }
 
 // Types for Cashfree API
@@ -337,7 +333,22 @@ export function parseWebhookEvent(payload: CashfreeWebhookPayload): {
 } {
   // Handle different event type field names
   const eventType = payload.type || payload.event_type || 'UNKNOWN';
-  const eventId = `${eventType}_${Date.now()}`;
+
+  // Extract identifiers for deterministic event ID
+  // IMPORTANT: Use merchant order_id, NOT cf_order_id (Cashfree's internal ID)
+  // Our transaction lookup uses merchant order_id (e.g., ORD_246_xxx)
+  const orderId = payload.data?.order?.order_id || payload.order_id || '';
+  const cfOrderId = payload.cf_order_id || ''; // For event ID uniqueness only
+  const paymentId = payload.data?.payment?.cf_payment_id || '';
+  const subscriptionId = payload.data?.subscription?.subscription_id || '';
+
+  // Generate deterministic event ID for idempotency
+  // Use combination of event_type + order_id + payment_id to ensure retries are deduplicated
+  const eventId = crypto
+    .createHash('sha256')
+    .update(`${eventType}:${orderId}:${paymentId}:${subscriptionId}`)
+    .digest('hex')
+    .substring(0, 32);
 
   const result: {
     eventType: string;
@@ -353,25 +364,15 @@ export function parseWebhookEvent(payload: CashfreeWebhookPayload): {
   } = {
     eventType,
     eventId,
+    orderId: orderId || undefined,
+    paymentId: paymentId || undefined,
+    subscriptionId: subscriptionId || undefined,
   };
 
-  // Try data.order/payment first, then top-level fields
-  const order = payload.data?.order;
+  // Extract additional payment/subscription details
   const payment = payload.data?.payment;
   const subscription = payload.data?.subscription;
   const errorDetails = payload.data?.error_details;
-
-  if (order?.order_id) {
-    result.orderId = order.order_id;
-  } else if (payload.order_id) {
-    result.orderId = payload.order_id;
-  } else if (payload.cf_order_id) {
-    result.orderId = payload.cf_order_id;
-  }
-
-  if (payment?.cf_payment_id) {
-    result.paymentId = payment.cf_payment_id;
-  }
   if (payment?.payment_status) {
     result.paymentStatus = payment.payment_status;
   }
@@ -384,9 +385,6 @@ export function parseWebhookEvent(payload: CashfreeWebhookPayload): {
     result.paymentMethod = payment.payment_group;
   } else if (payment?.payment_method?.payment_method_type) {
     result.paymentMethod = payment.payment_method.payment_method_type;
-  }
-  if (subscription?.subscription_id) {
-    result.subscriptionId = subscription.subscription_id;
   }
   if (subscription?.status) {
     result.subscriptionStatus = subscription.status;

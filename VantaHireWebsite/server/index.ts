@@ -23,7 +23,16 @@ app.use(compression({
   }
 }));
 
-app.use(express.json());
+// Capture raw body for webhook signature verification
+// The rawBody is stored on the request object for routes that need it
+app.use(express.json({
+  verify: (req: any, _res, buf) => {
+    // Store raw body for webhook signature verification
+    if (req.url?.startsWith('/api/webhooks/')) {
+      req.rawBody = buf.toString('utf-8');
+    }
+  }
+}));
 app.use(express.urlencoded({ extended: false }));
 
 // WWW to non-WWW redirect for SEO (301 permanent redirect)

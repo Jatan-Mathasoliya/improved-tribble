@@ -13,12 +13,11 @@ declare global {
   }
 }
 
-// Determine environment based on API URL or explicit env variable
+// Determine environment from explicit env variable only
+// IMPORTANT: Must match server's CASHFREE_ENV to avoid session ID mismatch
+// Set VITE_CASHFREE_ENV=PRODUCTION in production deployments
 const CASHFREE_MODE: 'sandbox' | 'production' =
-  import.meta.env.VITE_CASHFREE_ENV === 'PRODUCTION' ||
-  (typeof window !== 'undefined' && window.location.hostname !== 'localhost')
-    ? 'production'
-    : 'sandbox';
+  import.meta.env.VITE_CASHFREE_ENV === 'PRODUCTION' ? 'production' : 'sandbox';
 
 /**
  * Initialize Cashfree checkout with payment session ID
@@ -30,6 +29,8 @@ export async function initiateCashfreeCheckout(paymentSessionId: string): Promis
   if (typeof window === 'undefined' || !window.Cashfree) {
     throw new Error('Cashfree SDK not loaded. Please refresh the page and try again.');
   }
+
+  console.log('[Cashfree] SDK mode:', CASHFREE_MODE, 'hostname:', window.location.hostname, 'sessionId length:', paymentSessionId.length);
 
   const cashfree = window.Cashfree({
     mode: CASHFREE_MODE,
