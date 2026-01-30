@@ -23,6 +23,9 @@ export const users = pgTable("users", {
   // Profile completion
   profilePromptSnoozeUntil: timestamp("profile_prompt_snooze_until"),
   profileCompletedAt: timestamp("profile_completed_at"),
+  // Onboarding tracking
+  onboardingCompletedAt: timestamp("onboarding_completed_at"),
+  profileSkippedAt: timestamp("profile_skipped_at"),
 });
 
 export const contactSubmissions = pgTable("contact_submissions", {
@@ -39,6 +42,7 @@ export const contactSubmissions = pgTable("contact_submissions", {
 // Clients (for consulting/agency use-cases)
 export const clients = pgTable("clients", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   name: text("name").notNull(),
   domain: text("domain"),
   primaryContactName: text("primary_contact_name"),
@@ -48,10 +52,12 @@ export const clients = pgTable("clients", {
   createdBy: integer("created_by").notNull().references(() => users.id),
 }, (table) => ({
   nameIdx: index("clients_name_idx").on(table.name),
+  orgIdx: index("clients_org_idx").on(table.organizationId),
 }));
 
 export const jobs = pgTable("jobs", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   title: text("title").notNull(),
   location: text("location").notNull(),
   type: text("type").notNull(), // full-time, part-time, contract, remote
@@ -88,6 +94,7 @@ export const jobs = pgTable("jobs", {
   experienceYears: integer("experience_years"), // Preferred years of experience
 }, (table) => ({
   // Indexes for performance hotspots
+  orgIdx: index("jobs_org_idx").on(table.organizationId),
   statusIdx: index("jobs_status_idx").on(table.status),
   postedByIdx: index("jobs_posted_by_idx").on(table.postedBy),
   hiringManagerIdx: index("jobs_hiring_manager_idx").on(table.hiringManagerId),
@@ -119,6 +126,7 @@ export const userProfiles = pgTable("user_profiles", {
 
 export const applications = pgTable("applications", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   jobId: integer("job_id").notNull().references(() => jobs.id),
   userId: integer("user_id").references(() => users.id), // Optional: bind application to user account
   name: text("name").notNull(),
@@ -126,6 +134,7 @@ export const applications = pgTable("applications", {
   phone: text("phone").notNull(),
   resumeUrl: text("resume_url").notNull(),
   resumeFilename: text("resume_filename"), // Original filename for proper downloads
+  extractedResumeText: text("extracted_resume_text"), // Extracted resume text for AI summary
   coverLetter: text("cover_letter"),
   status: text("status").default("submitted").notNull(),
   rejectionReason: text("rejection_reason"), // 'skills_mismatch', 'experience_gap', 'salary_expectations', 'culture_fit', 'withdrew', 'no_show', 'position_filled', 'other'
@@ -164,10 +173,22 @@ export const applications = pgTable("applications", {
   aiSuggestedAction: text("ai_suggested_action"), // 'advance', 'hold', 'reject'
   aiSuggestedActionReason: text("ai_suggested_action_reason"), // Reasoning for the suggested action
   aiSummaryComputedAt: timestamp("ai_summary_computed_at"), // When the summary was generated
+  aiSummaryModelVersion: text("ai_summary_model_version"), // AI model used for summary (e.g., 'llama-3.3-70b-versatile')
+  aiStrengths: text("ai_strengths").array(), // Candidate strengths identified by AI
+  aiConcerns: text("ai_concerns").array(), // Concerns/gaps identified by AI
+  aiKeyHighlights: text("ai_key_highlights").array(), // Notable achievements/qualifications
+  // AI skill analysis
+  aiRequiredSkillsMatched: text("ai_required_skills_matched").array(), // Required skills found in candidate resume
+  aiRequiredSkillsMissing: text("ai_required_skills_missing").array(), // Required skills NOT found
+  aiRequiredSkillsMatchPercentage: integer("ai_required_skills_match_percentage"), // % of required skills matched (0-100)
+  aiRequiredSkillsDepthNotes: text("ai_required_skills_depth_notes"), // Notes on depth/quality of matched skills
+  aiGoodToHaveSkillsMatched: text("ai_good_to_have_skills_matched").array(), // Good-to-have skills found
+  aiGoodToHaveSkillsMissing: text("ai_good_to_have_skills_missing").array(), // Good-to-have skills NOT found
   resumeId: integer("resume_id").references(() => candidateResumes.id),
   whatsappConsent: boolean("whatsapp_consent").notNull().default(true), // WhatsApp notification consent (opt-out model)
 }, (table) => ({
   // Indexes for ATS performance
+  orgIdx: index("applications_org_idx").on(table.organizationId),
   currentStageIdx: index("applications_current_stage_idx").on(table.currentStage),
   jobIdIdx: index("applications_job_id_idx").on(table.jobId),
   emailIdx: index("applications_email_idx").on(table.email),
@@ -178,6 +199,7 @@ export const applications = pgTable("applications", {
 
 export const jobAnalytics = pgTable("job_analytics", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   jobId: integer("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
   views: integer("views").notNull().default(0),
   applyClicks: integer("apply_clicks").notNull().default(0),
@@ -191,6 +213,7 @@ export const jobAnalytics = pgTable("job_analytics", {
 // Job audit log for compliance and debugging
 export const jobAuditLog = pgTable("job_audit_log", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   jobId: integer("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
   action: text("action").notNull(), // 'deactivated', 'reactivated', 'created', 'approved', 'declined'
   performedBy: integer("performed_by").notNull().references(() => users.id),
@@ -206,6 +229,7 @@ export const jobAuditLog = pgTable("job_audit_log", {
 // ATS: Pipeline stages
 export const pipelineStages = pgTable("pipeline_stages", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   name: text("name").notNull(),
   order: integer("order").notNull(),
   color: text("color").default("#3b82f6"),
@@ -243,6 +267,7 @@ export const applicationFeedback = pgTable("application_feedback", {
 // ATS: Email templates
 export const emailTemplates = pgTable("email_templates", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   name: text("name").notNull(),
   subject: text("subject").notNull(),
   body: text("body").notNull(),
@@ -270,7 +295,8 @@ export const emailAuditLog = pgTable("email_audit_log", {
 // ATS: Automation settings
 export const automationSettings = pgTable("automation_settings", {
   id: serial("id").primaryKey(),
-  settingKey: text("setting_key").notNull().unique(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
+  settingKey: text("setting_key").notNull(),
   settingValue: boolean("setting_value").notNull().default(true),
   description: text("description"),
   updatedBy: integer("updated_by").references(() => users.id),
@@ -280,6 +306,7 @@ export const automationSettings = pgTable("automation_settings", {
 // ATS: Automation events log (tracks when automations fire)
 export const automationEvents = pgTable("automation_events", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   automationKey: text("automation_key").notNull(), // e.g., 'auto_acknowledge', 'auto_stage_move', 'reminder_email'
   targetType: text("target_type").notNull(), // 'application', 'job', 'user'
   targetId: integer("target_id").notNull(), // ID of the target entity
@@ -354,6 +381,7 @@ export const consultants = pgTable("consultants", {
 // Client Shortlists: Agency feature to share candidate lists with clients
 export const clientShortlists = pgTable("client_shortlists", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: 'cascade' }),
   jobId: integer("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
   token: text("token").notNull().unique(), // Public access token
@@ -371,6 +399,7 @@ export const clientShortlists = pgTable("client_shortlists", {
 
 export const clientShortlistItems = pgTable("client_shortlist_items", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   shortlistId: integer("shortlist_id").notNull().references(() => clientShortlists.id, { onDelete: 'cascade' }),
   applicationId: integer("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),
   position: integer("position").notNull(), // Order in the list
@@ -384,6 +413,7 @@ export const clientShortlistItems = pgTable("client_shortlist_items", {
 
 export const clientFeedback = pgTable("client_feedback", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   applicationId: integer("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),
   clientId: integer("client_id").notNull().references(() => clients.id, { onDelete: 'cascade' }),
   shortlistId: integer("shortlist_id").references(() => clientShortlists.id, { onDelete: 'set null' }), // Track which shortlist generated this feedback
@@ -400,6 +430,7 @@ export const clientFeedback = pgTable("client_feedback", {
 // Forms Feature: Recruiter-sent candidate forms
 export const forms = pgTable("forms", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   name: text("name").notNull(),
   description: text("description"),
   isPublished: boolean("is_published").notNull().default(true),
@@ -425,6 +456,7 @@ export const formFields = pgTable("form_fields", {
 
 export const formInvitations = pgTable("form_invitations", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   applicationId: integer("application_id").references(() => applications.id, { onDelete: 'cascade' }), // Nullable for external invites
   formId: integer("form_id").notNull().references(() => forms.id),
   token: text("token").notNull().unique(),
@@ -453,6 +485,7 @@ export const formInvitations = pgTable("form_invitations", {
 
 export const formResponses = pgTable("form_responses", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   invitationId: integer("invitation_id").notNull().references(() => formInvitations.id, { onDelete: 'cascade' }).unique(),
   applicationId: integer("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }),
   submittedAt: timestamp("submitted_at").defaultNow().notNull(),
@@ -491,6 +524,7 @@ export const candidateResumes = pgTable("candidate_resumes", {
 // AI Matching: Usage tracking for billing and limits
 export const userAiUsage = pgTable("user_ai_usage", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   kind: text("kind").notNull(), // 'fit', 'content', 'role', 'feedback', 'summary'
   tokensIn: integer("tokens_in").notNull(),
@@ -507,6 +541,7 @@ export const userAiUsage = pgTable("user_ai_usage", {
 // Talent Pool: Candidates added via external form invites (no job application yet)
 export const talentPool = pgTable("talent_pool", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   email: text("email").notNull(),
   name: text("name").notNull(),
   phone: text("phone"),
@@ -545,6 +580,7 @@ export const hiringManagerInvitations = pgTable("hiring_manager_invitations", {
 // Job Recruiters: Many-to-many relationship for co-recruiters on jobs
 export const jobRecruiters = pgTable("job_recruiters", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   jobId: integer("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
   recruiterId: integer("recruiter_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
   addedBy: integer("added_by").references(() => users.id),
@@ -558,6 +594,7 @@ export const jobRecruiters = pgTable("job_recruiters", {
 // Co-Recruiter Invitations: Invite recruiters to collaborate on jobs
 export const coRecruiterInvitations = pgTable("co_recruiter_invitations", {
   id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").references(() => organizations.id, { onDelete: 'cascade' }), // Nullable for migration
   jobId: integer("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
   email: text("email").notNull(),
   token: text("token").notNull(), // SHA256 hashed
@@ -610,6 +647,302 @@ export const aiFitJobs = pgTable("ai_fit_jobs", {
   applicationIdIdx: index("ai_fit_jobs_application_id_idx").on(table.applicationId),
   createdAtIdx: index("ai_fit_jobs_created_at_idx").on(table.createdAt),
 }));
+
+// =====================================================
+// ORGANIZATION & SUBSCRIPTION TABLES
+// =====================================================
+
+// Organizations
+export const organizations = pgTable("organizations", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+
+  // Branding
+  logo: text("logo"),
+
+  // Domain (admin-approved)
+  domain: text("domain").unique(),
+  domainVerified: boolean("domain_verified").default(false),
+  domainApprovedBy: integer("domain_approved_by").references(() => users.id),
+  domainApprovedAt: timestamp("domain_approved_at"),
+
+  // Billing info
+  gstin: text("gstin"),
+  billingName: text("billing_name"),
+  billingAddress: text("billing_address"),
+  billingCity: text("billing_city"),
+  billingState: text("billing_state"),
+  billingPincode: text("billing_pincode"),
+  billingContactEmail: text("billing_contact_email"),
+  billingContactName: text("billing_contact_name"),
+
+  settings: jsonb("settings"),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  slugIdx: uniqueIndex("organizations_slug_idx").on(table.slug),
+  domainIdx: index("organizations_domain_idx").on(table.domain),
+}));
+
+// Organization members
+export const organizationMembers = pgTable("organization_members", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  role: text("role").notNull().default('member'), // 'owner', 'admin', 'member'
+
+  // Seat assignment (for downgrade/reduction scenarios)
+  seatAssigned: boolean("seat_assigned").default(true).notNull(),
+  lastActivityAt: timestamp("last_activity_at"),
+
+  // Credits (follow the seat)
+  creditsAllocated: integer("credits_allocated").notNull().default(0),
+  creditsUsed: integer("credits_used").notNull().default(0),
+  creditsRollover: integer("credits_rollover").notNull().default(0),
+  creditsPeriodStart: timestamp("credits_period_start"),
+  creditsPeriodEnd: timestamp("credits_period_end"),
+
+  joinedAt: timestamp("joined_at").defaultNow().notNull(),
+  invitedBy: integer("invited_by").references(() => users.id),
+}, (table) => ({
+  orgUserIdx: uniqueIndex("org_members_org_user_idx").on(table.organizationId, table.userId),
+  userUniqueIdx: uniqueIndex("org_members_user_unique_idx").on(table.userId), // Enforce single-org-per-user
+  roleIdx: index("org_members_role_idx").on(table.role),
+  seatAssignedIdx: index("org_members_seat_assigned_idx").on(table.seatAssigned),
+}));
+
+// Organization invites
+export const organizationInvites = pgTable("organization_invites", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  email: text("email").notNull(),
+  role: text("role").notNull().default('member'),
+  token: text("token").notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  invitedBy: integer("invited_by").notNull().references(() => users.id),
+  acceptedAt: timestamp("accepted_at"),
+  acceptedBy: integer("accepted_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  orgEmailIdx: uniqueIndex("org_invites_org_email_idx").on(table.organizationId, table.email),
+  tokenIdx: uniqueIndex("org_invites_token_idx").on(table.token),
+}));
+
+// Organization join requests (for domain-based join)
+export const organizationJoinRequests = pgTable("organization_join_requests", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: integer("user_id").notNull().references(() => users.id, { onDelete: 'cascade' }),
+  status: text("status").notNull().default('pending'), // 'pending', 'approved', 'rejected'
+  requestedAt: timestamp("requested_at").defaultNow().notNull(),
+  respondedAt: timestamp("responded_at"),
+  respondedBy: integer("responded_by").references(() => users.id),
+  rejectionReason: text("rejection_reason"),
+}, (table) => ({
+  orgUserIdx: uniqueIndex("org_join_requests_org_user_idx").on(table.organizationId, table.userId),
+  statusIdx: index("org_join_requests_status_idx").on(table.status),
+}));
+
+// Domain claim requests (admin-approved)
+export const domainClaimRequests = pgTable("domain_claim_requests", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  domain: text("domain").notNull(),
+  status: text("status").notNull().default('pending'), // 'pending', 'approved', 'rejected'
+  requestedBy: integer("requested_by").notNull().references(() => users.id),
+  requestedAt: timestamp("requested_at").defaultNow().notNull(),
+  reviewedBy: integer("reviewed_by").references(() => users.id),
+  reviewedAt: timestamp("reviewed_at"),
+  rejectionReason: text("rejection_reason"),
+}, (table) => ({
+  domainIdx: index("domain_claim_requests_domain_idx").on(table.domain),
+  statusIdx: index("domain_claim_requests_status_idx").on(table.status),
+  orgIdx: index("domain_claim_requests_org_idx").on(table.organizationId),
+}));
+
+// Subscription plans
+export const subscriptionPlans = pgTable("subscription_plans", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  description: text("description"),
+  pricePerSeatMonthly: integer("price_per_seat_monthly").notNull(), // paise
+  pricePerSeatAnnual: integer("price_per_seat_annual").notNull(),
+  aiCreditsPerSeatMonthly: integer("ai_credits_per_seat_monthly").notNull(),
+  maxCreditRolloverMonths: integer("max_credit_rollover_months").default(3),
+  features: jsonb("features").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  nameIdx: uniqueIndex("subscription_plans_name_idx").on(table.name),
+  isActiveIdx: index("subscription_plans_is_active_idx").on(table.isActive),
+}));
+
+// Organization subscriptions
+export const organizationSubscriptions = pgTable("organization_subscriptions", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  planId: integer("plan_id").notNull().references(() => subscriptionPlans.id),
+
+  seats: integer("seats").notNull().default(1),
+  paidSeats: integer("paid_seats").notNull().default(0), // Seats actually paid for (for MRR calculation)
+  billingCycle: text("billing_cycle").notNull(), // 'monthly', 'annual'
+  status: text("status").notNull().default('active'), // 'active', 'past_due', 'cancelled', 'trialing'
+
+  startDate: timestamp("start_date").notNull(),
+  currentPeriodStart: timestamp("current_period_start").notNull(),
+  currentPeriodEnd: timestamp("current_period_end").notNull(),
+  cancelledAt: timestamp("cancelled_at"),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false),
+
+  cashfreeSubscriptionId: text("cashfree_subscription_id"),
+  cashfreeCustomerId: text("cashfree_customer_id"),
+
+  gracePeriodEndDate: timestamp("grace_period_end_date"),
+  paymentFailureCount: integer("payment_failure_count").default(0),
+
+  // Admin override
+  adminOverride: boolean("admin_override").default(false),
+  adminOverrideReason: text("admin_override_reason"),
+  adminOverrideBy: integer("admin_override_by").references(() => users.id),
+
+  featureOverrides: jsonb("feature_overrides"),
+
+  // Bonus credits (admin-granted pool shared by org)
+  bonusCredits: integer("bonus_credits").default(0),
+  bonusCreditsGrantedAt: timestamp("bonus_credits_granted_at"),
+  bonusCreditsReason: text("bonus_credits_reason"),
+  bonusCreditsGrantedBy: integer("bonus_credits_granted_by").references(() => users.id),
+
+  // Custom credit limit override (for Business plan customization)
+  customCreditLimit: integer("custom_credit_limit"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: uniqueIndex("org_subscriptions_org_idx").on(table.organizationId),
+  statusIdx: index("org_subscriptions_status_idx").on(table.status),
+  planIdx: index("org_subscriptions_plan_idx").on(table.planId),
+  cashfreeSubIdx: index("org_subscriptions_cashfree_sub_idx").on(table.cashfreeSubscriptionId),
+}));
+
+// Payment transactions
+export const paymentTransactions = pgTable("payment_transactions", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  subscriptionId: integer("subscription_id").references(() => organizationSubscriptions.id),
+
+  type: text("type").notNull(), // 'subscription', 'seat_addition', 'refund'
+  amount: integer("amount").notNull(), // paise
+  taxAmount: integer("tax_amount").default(0).notNull(),
+  totalAmount: integer("total_amount").notNull(),
+  currency: text("currency").default('INR').notNull(),
+  status: text("status").notNull(), // 'pending', 'completed', 'failed', 'refunded'
+
+  cashfreeOrderId: text("cashfree_order_id").unique(),
+  cashfreePaymentId: text("cashfree_payment_id"),
+  cashfreePaymentMethod: text("cashfree_payment_method"),
+
+  metadata: jsonb("metadata"),
+  failureReason: text("failure_reason"),
+
+  invoiceNumber: text("invoice_number"),
+  invoiceUrl: text("invoice_url"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+}, (table) => ({
+  orgIdx: index("payment_transactions_org_idx").on(table.organizationId),
+  subIdx: index("payment_transactions_sub_idx").on(table.subscriptionId),
+  statusIdx: index("payment_transactions_status_idx").on(table.status),
+  cashfreeOrderIdx: uniqueIndex("payment_transactions_cashfree_order_idx").on(table.cashfreeOrderId),
+  createdAtIdx: index("payment_transactions_created_at_idx").on(table.createdAt),
+}));
+
+// Webhook events (for idempotency)
+export const webhookEvents = pgTable("webhook_events", {
+  id: serial("id").primaryKey(),
+  provider: text("provider").notNull(), // 'cashfree'
+  eventId: text("event_id").notNull(),
+  eventType: text("event_type").notNull(),
+  payload: jsonb("payload").notNull(),
+  processedAt: timestamp("processed_at").defaultNow().notNull(),
+  status: text("status").notNull(), // 'processed', 'skipped', 'failed'
+  errorMessage: text("error_message"),
+}, (table) => ({
+  eventIdIdx: uniqueIndex("webhook_events_event_id_idx").on(table.provider, table.eventId),
+  eventTypeIdx: index("webhook_events_event_type_idx").on(table.eventType),
+}));
+
+// Subscription alerts
+export const subscriptionAlerts = pgTable("subscription_alerts", {
+  id: serial("id").primaryKey(),
+  subscriptionId: integer("subscription_id").notNull().references(() => organizationSubscriptions.id),
+  alertType: text("alert_type").notNull(), // 'payment_failed', 'grace_period_start', 'grace_period_end', 'renewal_reminder', 'seats_reduced'
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+  recipientEmail: text("recipient_email").notNull(),
+  emailStatus: text("email_status").default('sent').notNull(),
+}, (table) => ({
+  subIdx: index("subscription_alerts_sub_idx").on(table.subscriptionId),
+  alertTypeIdx: index("subscription_alerts_type_idx").on(table.alertType),
+}));
+
+// Subscription audit log
+export const subscriptionAuditLog = pgTable("subscription_audit_log", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id),
+  subscriptionId: integer("subscription_id").references(() => organizationSubscriptions.id),
+  action: text("action").notNull(), // 'created', 'upgraded', 'downgraded', 'seats_added', 'seats_removed', 'cancelled', 'reactivated', 'admin_override'
+  previousValue: jsonb("previous_value"),
+  newValue: jsonb("new_value"),
+  performedBy: integer("performed_by").references(() => users.id),
+  performedAt: timestamp("performed_at").defaultNow().notNull(),
+  reason: text("reason"),
+}, (table) => ({
+  orgIdx: index("subscription_audit_log_org_idx").on(table.organizationId),
+  subIdx: index("subscription_audit_log_sub_idx").on(table.subscriptionId),
+  actionIdx: index("subscription_audit_log_action_idx").on(table.action),
+  performedAtIdx: index("subscription_audit_log_performed_at_idx").on(table.performedAt),
+}));
+
+// Checkout intents - for public checkout flow before org/user creation
+export const checkoutIntents = pgTable("checkout_intents", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  orgName: text("org_name").notNull(),
+  userId: integer("user_id").references(() => users.id), // nullable - set if user already exists
+  organizationId: integer("organization_id").references(() => organizations.id), // nullable - set if org already exists
+  planId: integer("plan_id").notNull().references(() => subscriptionPlans.id),
+  seats: integer("seats").notNull().default(1),
+  billingCycle: text("billing_cycle").notNull().default('monthly'), // 'monthly' | 'annual'
+  gstin: text("gstin"),
+  billingName: text("billing_name"),
+  billingAddress: text("billing_address"),
+  billingCity: text("billing_city"),
+  billingState: text("billing_state"),
+  billingPincode: text("billing_pincode"),
+  status: text("status").notNull().default('pending'), // 'pending', 'paid', 'claimed', 'expired'
+  cashfreeOrderId: text("cashfree_order_id").unique(),
+  claimToken: text("claim_token").unique(), // for claiming after payment
+  claimedAt: timestamp("claimed_at"),
+  claimedBy: integer("claimed_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  paidAt: timestamp("paid_at"),
+}, (table) => ({
+  emailIdx: index("checkout_intents_email_idx").on(table.email),
+  statusIdx: index("checkout_intents_status_idx").on(table.status),
+  claimTokenIdx: uniqueIndex("checkout_intents_claim_token_idx").on(table.claimToken),
+  cashfreeOrderIdx: uniqueIndex("checkout_intents_cashfree_order_idx").on(table.cashfreeOrderId),
+  expiresAtIdx: index("checkout_intents_expires_at_idx").on(table.expiresAt),
+}));
+
+// =====================================================
+// END ORGANIZATION & SUBSCRIPTION TABLES
+// =====================================================
 
 // Relations
 export const usersRelations = relations(users, ({ many, one }) => ({
@@ -955,6 +1288,175 @@ export const aiFitJobsRelations = relations(aiFitJobs, ({ one }) => ({
   }),
 }));
 
+// =====================================================
+// ORGANIZATION & SUBSCRIPTION RELATIONS
+// =====================================================
+
+export const organizationsRelations = relations(organizations, ({ many, one }) => ({
+  members: many(organizationMembers),
+  invites: many(organizationInvites),
+  joinRequests: many(organizationJoinRequests),
+  domainClaimRequests: many(domainClaimRequests),
+  subscription: one(organizationSubscriptions, {
+    fields: [organizations.id],
+    references: [organizationSubscriptions.organizationId],
+  }),
+  transactions: many(paymentTransactions),
+  auditLogs: many(subscriptionAuditLog),
+  jobs: many(jobs),
+  clients: many(clients),
+  forms: many(forms),
+  emailTemplates: many(emailTemplates),
+  pipelineStages: many(pipelineStages),
+  talentPool: many(talentPool),
+}));
+
+export const organizationMembersRelations = relations(organizationMembers, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [organizationMembers.organizationId],
+    references: [organizations.id],
+  }),
+  user: one(users, {
+    fields: [organizationMembers.userId],
+    references: [users.id],
+  }),
+  invitedByUser: one(users, {
+    fields: [organizationMembers.invitedBy],
+    references: [users.id],
+    relationName: "invitedByUser",
+  }),
+}));
+
+export const organizationInvitesRelations = relations(organizationInvites, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [organizationInvites.organizationId],
+    references: [organizations.id],
+  }),
+  invitedByUser: one(users, {
+    fields: [organizationInvites.invitedBy],
+    references: [users.id],
+  }),
+  acceptedByUser: one(users, {
+    fields: [organizationInvites.acceptedBy],
+    references: [users.id],
+    relationName: "acceptedByUser",
+  }),
+}));
+
+export const organizationJoinRequestsRelations = relations(organizationJoinRequests, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [organizationJoinRequests.organizationId],
+    references: [organizations.id],
+  }),
+  user: one(users, {
+    fields: [organizationJoinRequests.userId],
+    references: [users.id],
+  }),
+  respondedByUser: one(users, {
+    fields: [organizationJoinRequests.respondedBy],
+    references: [users.id],
+    relationName: "respondedByUser",
+  }),
+}));
+
+export const domainClaimRequestsRelations = relations(domainClaimRequests, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [domainClaimRequests.organizationId],
+    references: [organizations.id],
+  }),
+  requestedByUser: one(users, {
+    fields: [domainClaimRequests.requestedBy],
+    references: [users.id],
+  }),
+  reviewedByUser: one(users, {
+    fields: [domainClaimRequests.reviewedBy],
+    references: [users.id],
+    relationName: "reviewedByUser",
+  }),
+}));
+
+export const subscriptionPlansRelations = relations(subscriptionPlans, ({ many }) => ({
+  subscriptions: many(organizationSubscriptions),
+}));
+
+export const organizationSubscriptionsRelations = relations(organizationSubscriptions, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [organizationSubscriptions.organizationId],
+    references: [organizations.id],
+  }),
+  plan: one(subscriptionPlans, {
+    fields: [organizationSubscriptions.planId],
+    references: [subscriptionPlans.id],
+  }),
+  transactions: many(paymentTransactions),
+  alerts: many(subscriptionAlerts),
+  auditLogs: many(subscriptionAuditLog),
+  adminOverrideByUser: one(users, {
+    fields: [organizationSubscriptions.adminOverrideBy],
+    references: [users.id],
+    relationName: "adminOverrideByUser",
+  }),
+}));
+
+export const paymentTransactionsRelations = relations(paymentTransactions, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [paymentTransactions.organizationId],
+    references: [organizations.id],
+  }),
+  subscription: one(organizationSubscriptions, {
+    fields: [paymentTransactions.subscriptionId],
+    references: [organizationSubscriptions.id],
+  }),
+}));
+
+export const webhookEventsRelations = relations(webhookEvents, () => ({}));
+
+export const subscriptionAlertsRelations = relations(subscriptionAlerts, ({ one }) => ({
+  subscription: one(organizationSubscriptions, {
+    fields: [subscriptionAlerts.subscriptionId],
+    references: [organizationSubscriptions.id],
+  }),
+}));
+
+export const subscriptionAuditLogRelations = relations(subscriptionAuditLog, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [subscriptionAuditLog.organizationId],
+    references: [organizations.id],
+  }),
+  subscription: one(organizationSubscriptions, {
+    fields: [subscriptionAuditLog.subscriptionId],
+    references: [organizationSubscriptions.id],
+  }),
+  performedByUser: one(users, {
+    fields: [subscriptionAuditLog.performedBy],
+    references: [users.id],
+  }),
+}));
+
+export const checkoutIntentsRelations = relations(checkoutIntents, ({ one }) => ({
+  user: one(users, {
+    fields: [checkoutIntents.userId],
+    references: [users.id],
+  }),
+  organization: one(organizations, {
+    fields: [checkoutIntents.organizationId],
+    references: [organizations.id],
+  }),
+  plan: one(subscriptionPlans, {
+    fields: [checkoutIntents.planId],
+    references: [subscriptionPlans.id],
+  }),
+  claimedByUser: one(users, {
+    fields: [checkoutIntents.claimedBy],
+    references: [users.id],
+    relationName: "claimedByUser",
+  }),
+}));
+
+// =====================================================
+// END ORGANIZATION & SUBSCRIPTION RELATIONS
+// =====================================================
+
 // Types and insert schemas for new tables
 export const insertPipelineStageSchema = createInsertSchema(pipelineStages).pick({
   name: true,
@@ -1025,6 +1527,13 @@ export const insertUserSchema = createInsertSchema(users).pick({
   lastName: true,
   role: true,
 });
+
+// Registration payload extends insertUserSchema with optional org invite token
+export const registerPayloadSchema = insertUserSchema.extend({
+  inviteToken: z.string().length(64).optional(),
+});
+
+export type RegisterPayload = z.infer<typeof registerPayloadSchema>;
 
 export const insertContactSchema = createInsertSchema(contactSubmissions).pick({
   name: true,
@@ -1100,15 +1609,27 @@ export const insertApplicationSchema = createInsertSchema(applications).pick({
 export const recruiterAddApplicationSchema = z.object({
   name: z.string().min(1).max(100),
   email: z.string().email(),
-  phone: z.string().regex(/^\d{10}$/, "Please enter exactly 10 digits for your phone number"),
+  phone: z.preprocess((val) => {
+    const raw = val === undefined || val === null ? '' : String(val);
+    return raw.replace(/\D/g, '');
+  }, z.string().regex(/^\d{10}$/, "Please enter exactly 10 digits for your phone number")),
   coverLetter: z.string().max(2000).optional(),
   source: z.enum(['recruiter_add', 'referral', 'linkedin', 'indeed', 'other']).default('recruiter_add'),
-  sourceMetadata: z.object({
+  sourceMetadata: z.preprocess((val) => {
+    if (typeof val === 'string') {
+      try {
+        return JSON.parse(val);
+      } catch {
+        return val;
+      }
+    }
+    return val;
+  }, z.object({
     referrer: z.string().optional(),
     platform: z.string().optional(),
     notes: z.string().max(500).optional(),
-  }).optional(),
-  currentStage: z.number().int().positive().optional(), // Initial stage assignment
+  }).optional()),
+  currentStage: z.coerce.number().int().positive().optional(), // Initial stage assignment
   whatsappConsent: z.preprocess(
     (val) => val === 'true' || val === true,
     z.boolean()
@@ -1439,3 +1960,213 @@ export interface BatchFitResult {
     errors: number;
   };
 }
+
+// =====================================================
+// ORGANIZATION & SUBSCRIPTION INSERT SCHEMAS & TYPES
+// =====================================================
+
+// Organization role enum
+export const organizationRoles = ['owner', 'admin', 'member'] as const;
+export type OrganizationRole = typeof organizationRoles[number];
+
+// Organization membership status
+export const membershipStatuses = ['active', 'inactive', 'pending'] as const;
+export type MembershipStatus = typeof membershipStatuses[number];
+
+// Subscription statuses
+export const subscriptionStatuses = ['active', 'past_due', 'cancelled', 'trialing'] as const;
+export type SubscriptionStatus = typeof subscriptionStatuses[number];
+
+// Billing cycles
+export const billingCycles = ['monthly', 'annual'] as const;
+export type BillingCycle = typeof billingCycles[number];
+
+// Join request statuses
+export const joinRequestStatuses = ['pending', 'approved', 'rejected'] as const;
+export type JoinRequestStatus = typeof joinRequestStatuses[number];
+
+// Domain claim statuses
+export const domainClaimStatuses = ['pending', 'approved', 'rejected'] as const;
+export type DomainClaimStatus = typeof domainClaimStatuses[number];
+
+// Payment transaction types
+export const paymentTransactionTypes = ['subscription', 'seat_addition', 'refund'] as const;
+export type PaymentTransactionType = typeof paymentTransactionTypes[number];
+
+// Payment statuses
+export const paymentStatuses = ['pending', 'completed', 'failed', 'refunded'] as const;
+export type PaymentStatus = typeof paymentStatuses[number];
+
+// Webhook statuses
+export const webhookStatuses = ['processed', 'skipped', 'failed'] as const;
+export type WebhookStatus = typeof webhookStatuses[number];
+
+// Subscription audit actions
+export const subscriptionAuditActions = [
+  'created', 'upgraded', 'downgraded', 'seats_added', 'seats_removed',
+  'cancelled', 'reactivated', 'admin_override'
+] as const;
+export type SubscriptionAuditAction = typeof subscriptionAuditActions[number];
+
+// Insert Schemas
+export const insertOrganizationSchema = z.object({
+  name: z.string().min(1).max(200),
+  slug: z.string().min(1).max(100).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens'),
+  logo: z.string().url().optional(),
+  domain: z.string().max(255).optional(),
+  gstin: z.string().max(15).optional(),
+  billingName: z.string().max(200).optional(),
+  billingAddress: z.string().max(500).optional(),
+  billingCity: z.string().max(100).optional(),
+  billingState: z.string().max(100).optional(),
+  billingPincode: z.string().max(10).optional(),
+  billingContactEmail: z.string().email().optional(),
+  billingContactName: z.string().max(200).optional(),
+  settings: z.record(z.any()).optional(),
+});
+
+export const insertOrganizationMemberSchema = z.object({
+  organizationId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+  role: z.enum(organizationRoles).default('member'),
+  seatAssigned: z.boolean().default(true),
+});
+
+export const insertOrganizationInviteSchema = z.object({
+  organizationId: z.number().int().positive(),
+  email: z.string().email().max(255),
+  role: z.enum(organizationRoles).default('member'),
+});
+
+export const insertOrganizationJoinRequestSchema = z.object({
+  organizationId: z.number().int().positive(),
+  userId: z.number().int().positive(),
+});
+
+export const insertDomainClaimRequestSchema = z.object({
+  organizationId: z.number().int().positive(),
+  domain: z.string().min(1).max(255),
+});
+
+export const insertSubscriptionPlanSchema = z.object({
+  name: z.string().min(1).max(50),
+  displayName: z.string().min(1).max(100),
+  description: z.string().max(500).optional(),
+  pricePerSeatMonthly: z.number().int().min(0),
+  pricePerSeatAnnual: z.number().int().min(0),
+  aiCreditsPerSeatMonthly: z.number().int().min(0),
+  maxCreditRolloverMonths: z.number().int().min(0).default(3),
+  features: z.record(z.any()),
+  sortOrder: z.number().int().default(0),
+});
+
+export const insertOrganizationSubscriptionSchema = z.object({
+  organizationId: z.number().int().positive(),
+  planId: z.number().int().positive(),
+  seats: z.number().int().min(1).default(1),
+  billingCycle: z.enum(billingCycles),
+  status: z.enum(subscriptionStatuses).default('active'),
+  startDate: z.date(),
+  currentPeriodStart: z.date(),
+  currentPeriodEnd: z.date(),
+});
+
+export const insertPaymentTransactionSchema = z.object({
+  organizationId: z.number().int().positive(),
+  subscriptionId: z.number().int().positive().optional(),
+  type: z.enum(paymentTransactionTypes),
+  amount: z.number().int().min(0),
+  taxAmount: z.number().int().min(0).default(0),
+  totalAmount: z.number().int().min(0),
+  currency: z.string().default('INR'),
+  status: z.enum(paymentStatuses),
+  metadata: z.record(z.any()).optional(),
+});
+
+export const insertWebhookEventSchema = z.object({
+  provider: z.string().min(1),
+  eventId: z.string().min(1),
+  eventType: z.string().min(1),
+  payload: z.record(z.any()),
+  status: z.enum(webhookStatuses),
+  errorMessage: z.string().optional(),
+});
+
+export const insertSubscriptionAlertSchema = z.object({
+  subscriptionId: z.number().int().positive(),
+  alertType: z.string().min(1),
+  recipientEmail: z.string().email(),
+  emailStatus: z.string().default('sent'),
+});
+
+export const insertSubscriptionAuditLogSchema = z.object({
+  organizationId: z.number().int().positive(),
+  subscriptionId: z.number().int().positive().optional(),
+  action: z.enum(subscriptionAuditActions),
+  previousValue: z.record(z.any()).optional(),
+  newValue: z.record(z.any()).optional(),
+  reason: z.string().max(500).optional(),
+});
+
+export const checkoutIntentStatuses = ['pending', 'paid', 'claimed', 'expired'] as const;
+
+export const insertCheckoutIntentSchema = z.object({
+  email: z.string().email(),
+  orgName: z.string().min(2).max(100),
+  userId: z.number().int().positive().optional(),
+  organizationId: z.number().int().positive().optional(),
+  planId: z.number().int().positive(),
+  seats: z.number().int().min(1).default(1),
+  billingCycle: z.enum(['monthly', 'annual']).default('monthly'),
+  gstin: z.string().max(20).optional(),
+  billingName: z.string().max(200).optional(),
+  billingAddress: z.string().max(500).optional(),
+  billingCity: z.string().max(100).optional(),
+  billingState: z.string().max(100).optional(),
+  billingPincode: z.string().max(10).optional(),
+  status: z.enum(checkoutIntentStatuses).default('pending'),
+  cashfreeOrderId: z.string().optional(),
+  claimToken: z.string().optional(),
+  expiresAt: z.date(),
+});
+
+// Types
+export type Organization = typeof organizations.$inferSelect;
+export type InsertOrganization = z.infer<typeof insertOrganizationSchema>;
+
+export type OrganizationMember = typeof organizationMembers.$inferSelect;
+export type InsertOrganizationMember = z.infer<typeof insertOrganizationMemberSchema>;
+
+export type OrganizationInvite = typeof organizationInvites.$inferSelect;
+export type InsertOrganizationInvite = z.infer<typeof insertOrganizationInviteSchema>;
+
+export type OrganizationJoinRequest = typeof organizationJoinRequests.$inferSelect;
+export type InsertOrganizationJoinRequest = z.infer<typeof insertOrganizationJoinRequestSchema>;
+
+export type DomainClaimRequest = typeof domainClaimRequests.$inferSelect;
+export type InsertDomainClaimRequest = z.infer<typeof insertDomainClaimRequestSchema>;
+
+export type SubscriptionPlan = typeof subscriptionPlans.$inferSelect;
+export type InsertSubscriptionPlan = z.infer<typeof insertSubscriptionPlanSchema>;
+
+export type OrganizationSubscription = typeof organizationSubscriptions.$inferSelect;
+export type InsertOrganizationSubscription = z.infer<typeof insertOrganizationSubscriptionSchema>;
+
+export type PaymentTransaction = typeof paymentTransactions.$inferSelect;
+export type InsertPaymentTransaction = z.infer<typeof insertPaymentTransactionSchema>;
+
+export type WebhookEvent = typeof webhookEvents.$inferSelect;
+export type InsertWebhookEvent = z.infer<typeof insertWebhookEventSchema>;
+
+export type SubscriptionAlert = typeof subscriptionAlerts.$inferSelect;
+export type InsertSubscriptionAlert = z.infer<typeof insertSubscriptionAlertSchema>;
+
+export type SubscriptionAuditLog = typeof subscriptionAuditLog.$inferSelect;
+export type InsertSubscriptionAuditLog = z.infer<typeof insertSubscriptionAuditLogSchema>;
+
+export type CheckoutIntent = typeof checkoutIntents.$inferSelect;
+export type InsertCheckoutIntent = z.infer<typeof insertCheckoutIntentSchema>;
+
+// =====================================================
+// END ORGANIZATION & SUBSCRIPTION INSERT SCHEMAS & TYPES
+// =====================================================

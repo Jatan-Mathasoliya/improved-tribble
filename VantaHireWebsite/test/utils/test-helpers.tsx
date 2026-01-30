@@ -107,15 +107,15 @@ export const generateTestData = {
   })
 };
 
-// Accessibility testing helpers
-export const checkAccessibility = async (container: HTMLElement) => {
-  const { toHaveNoViolations } = await import('jest-axe');
-  expect.extend(toHaveNoViolations);
-  
-  const axe = await import('axe-core');
-  const results = await axe.run(container);
-  expect(results).toHaveNoViolations();
-};
+// Accessibility testing helpers (requires jest-axe and axe-core to be installed)
+// export const checkAccessibility = async (container: HTMLElement) => {
+//   const { toHaveNoViolations } = await import('jest-axe');
+//   expect.extend(toHaveNoViolations);
+//
+//   const axe = await import('axe-core');
+//   const results = await axe.run(container);
+//   expect(results).toHaveNoViolations();
+// };
 
 // Performance testing helpers
 export const measurePerformance = async (fn: () => Promise<void>) => {

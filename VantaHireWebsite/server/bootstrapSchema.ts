@@ -80,6 +80,7 @@ export async function ensureAtsSchema(): Promise<void> {
       phone TEXT NOT NULL,
       resume_url TEXT NOT NULL,
       resume_filename TEXT,
+      extracted_resume_text TEXT,
       cover_letter TEXT,
       status TEXT DEFAULT 'submitted' NOT NULL,
       notes TEXT,
@@ -216,6 +217,7 @@ export async function ensureAtsSchema(): Promise<void> {
 
   // Add resumeFilename column for proper file download headers
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS resume_filename TEXT;`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS extracted_resume_text TEXT;`);
 
   // Add recruiter metadata columns for "Add Candidate" feature
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS submitted_by_recruiter BOOLEAN DEFAULT FALSE;`);
@@ -443,6 +445,11 @@ export async function ensureAtsSchema(): Promise<void> {
   await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_prompt_snooze_until TIMESTAMP;`);
   await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_completed_at TIMESTAMP;`);
 
+  // Users table: Onboarding tracking
+  console.log('  Adding onboarding tracking column to users table...');
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS onboarding_completed_at TIMESTAMP;`);
+  await db.execute(sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_skipped_at TIMESTAMP;`);
+
   // Jobs table: JD digest caching
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS jd_digest JSONB;`);
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS jd_digest_version INTEGER DEFAULT 1;`);
@@ -460,6 +467,16 @@ export async function ensureAtsSchema(): Promise<void> {
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_suggested_action TEXT;`);
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_suggested_action_reason TEXT;`);
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_summary_computed_at TIMESTAMP;`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_summary_model_version TEXT;`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_strengths TEXT[];`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_concerns TEXT[];`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_key_highlights TEXT[];`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_required_skills_matched TEXT[];`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_required_skills_missing TEXT[];`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_required_skills_match_percentage INTEGER;`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_required_skills_depth_notes TEXT;`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_good_to_have_skills_matched TEXT[];`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS ai_good_to_have_skills_missing TEXT[];`);
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS resume_id INTEGER;`);
 
   // AI Matching Feature: Create new tables
@@ -975,7 +992,328 @@ export async function ensureAtsSchema(): Promise<void> {
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS education_requirement TEXT;`);
   await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS experience_years INTEGER;`);
 
+  // ============= ORGANIZATION & SUBSCRIPTION TABLES =============
+
+  // Organizations table
+  console.log('  Creating organizations table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS organizations (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT NOT NULL UNIQUE,
+      logo TEXT,
+      domain TEXT UNIQUE,
+      domain_verified BOOLEAN DEFAULT FALSE,
+      domain_approved_by INTEGER REFERENCES users(id),
+      domain_approved_at TIMESTAMP,
+      gstin TEXT,
+      billing_name TEXT,
+      billing_address TEXT,
+      billing_city TEXT,
+      billing_state TEXT,
+      billing_pincode TEXT,
+      billing_contact_email TEXT,
+      billing_contact_name TEXT,
+      settings JSONB,
+      is_active BOOLEAN DEFAULT TRUE NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+  `);
+
+  // Organization Members table
+  console.log('  Creating organization_members table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS organization_members (
+      id SERIAL PRIMARY KEY,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      role TEXT NOT NULL DEFAULT 'member',
+      seat_assigned BOOLEAN DEFAULT TRUE NOT NULL,
+      last_activity_at TIMESTAMP,
+      credits_allocated INTEGER DEFAULT 0 NOT NULL,
+      credits_used INTEGER DEFAULT 0 NOT NULL,
+      credits_rollover INTEGER DEFAULT 0 NOT NULL,
+      credits_period_start TIMESTAMP,
+      credits_period_end TIMESTAMP,
+      joined_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      invited_by INTEGER REFERENCES users(id)
+    );
+  `);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS org_members_org_user_idx ON organization_members(organization_id, user_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS org_members_user_idx ON organization_members(user_id);`);
+
+  // Organization Invites table
+  console.log('  Creating organization_invites table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS organization_invites (
+      id SERIAL PRIMARY KEY,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'member',
+      token TEXT NOT NULL UNIQUE,
+      expires_at TIMESTAMP NOT NULL,
+      invited_by INTEGER NOT NULL REFERENCES users(id),
+      accepted_at TIMESTAMP,
+      accepted_by INTEGER REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+  `);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS org_invites_org_email_idx ON organization_invites(organization_id, email);`);
+
+  // Organization Join Requests table
+  console.log('  Creating organization_join_requests table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS organization_join_requests (
+      id SERIAL PRIMARY KEY,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      status TEXT NOT NULL DEFAULT 'pending',
+      requested_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      responded_at TIMESTAMP,
+      responded_by INTEGER REFERENCES users(id),
+      rejection_reason TEXT
+    );
+  `);
+
+  // Domain Claim Requests table
+  console.log('  Creating domain_claim_requests table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS domain_claim_requests (
+      id SERIAL PRIMARY KEY,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      domain TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      requested_by INTEGER NOT NULL REFERENCES users(id),
+      requested_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      reviewed_by INTEGER REFERENCES users(id),
+      reviewed_at TIMESTAMP,
+      rejection_reason TEXT
+    );
+  `);
+
+  // Subscription Plans table
+  console.log('  Creating subscription_plans table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS subscription_plans (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      display_name TEXT NOT NULL,
+      description TEXT,
+      price_per_seat_monthly INTEGER NOT NULL,
+      price_per_seat_annual INTEGER NOT NULL,
+      ai_credits_per_seat_monthly INTEGER NOT NULL,
+      max_credit_rollover_months INTEGER DEFAULT 3,
+      features JSONB NOT NULL,
+      is_active BOOLEAN DEFAULT TRUE NOT NULL,
+      sort_order INTEGER DEFAULT 0 NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+  `);
+
+  // Organization Subscriptions table
+  console.log('  Creating organization_subscriptions table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS organization_subscriptions (
+      id SERIAL PRIMARY KEY,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      plan_id INTEGER NOT NULL REFERENCES subscription_plans(id),
+      seats INTEGER NOT NULL DEFAULT 1,
+      billing_cycle TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      start_date TIMESTAMP NOT NULL,
+      current_period_start TIMESTAMP NOT NULL,
+      current_period_end TIMESTAMP NOT NULL,
+      cancelled_at TIMESTAMP,
+      cancel_at_period_end BOOLEAN DEFAULT FALSE,
+      cashfree_subscription_id TEXT,
+      cashfree_customer_id TEXT,
+      grace_period_end_date TIMESTAMP,
+      payment_failure_count INTEGER DEFAULT 0,
+      admin_override BOOLEAN DEFAULT FALSE,
+      admin_override_reason TEXT,
+      admin_override_by INTEGER REFERENCES users(id),
+      feature_overrides JSONB,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+  `);
+
+  // Payment Transactions table
+  console.log('  Creating payment_transactions table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS payment_transactions (
+      id SERIAL PRIMARY KEY,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id),
+      subscription_id INTEGER REFERENCES organization_subscriptions(id),
+      type TEXT NOT NULL,
+      amount INTEGER NOT NULL,
+      tax_amount INTEGER DEFAULT 0 NOT NULL,
+      total_amount INTEGER NOT NULL,
+      currency TEXT DEFAULT 'INR' NOT NULL,
+      status TEXT NOT NULL,
+      cashfree_order_id TEXT UNIQUE,
+      cashfree_payment_id TEXT,
+      cashfree_payment_method TEXT,
+      metadata JSONB,
+      failure_reason TEXT,
+      invoice_number TEXT,
+      invoice_url TEXT,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      completed_at TIMESTAMP
+    );
+  `);
+
+  // Webhook Events table (for idempotency)
+  console.log('  Creating webhook_events table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS webhook_events (
+      id SERIAL PRIMARY KEY,
+      provider TEXT NOT NULL,
+      event_id TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      payload JSONB NOT NULL,
+      processed_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      status TEXT NOT NULL,
+      error_message TEXT
+    );
+  `);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS webhook_events_event_id_idx ON webhook_events(provider, event_id);`);
+
+  // Subscription Alerts table
+  console.log('  Creating subscription_alerts table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS subscription_alerts (
+      id SERIAL PRIMARY KEY,
+      subscription_id INTEGER NOT NULL REFERENCES organization_subscriptions(id),
+      alert_type TEXT NOT NULL,
+      sent_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      recipient_email TEXT NOT NULL,
+      email_status TEXT DEFAULT 'sent' NOT NULL
+    );
+  `);
+
+  // Subscription Audit Log table
+  console.log('  Creating subscription_audit_log table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS subscription_audit_log (
+      id SERIAL PRIMARY KEY,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id),
+      subscription_id INTEGER REFERENCES organization_subscriptions(id),
+      action TEXT NOT NULL,
+      previous_value JSONB,
+      new_value JSONB,
+      performed_by INTEGER REFERENCES users(id),
+      performed_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      reason TEXT
+    );
+  `);
+
+  // Checkout Intents table (for public checkout flow)
+  console.log('  Creating checkout_intents table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS checkout_intents (
+      id SERIAL PRIMARY KEY,
+      email TEXT NOT NULL,
+      org_name TEXT NOT NULL,
+      user_id INTEGER REFERENCES users(id),
+      organization_id INTEGER REFERENCES organizations(id),
+      plan_id INTEGER NOT NULL REFERENCES subscription_plans(id),
+      seats INTEGER NOT NULL DEFAULT 1,
+      billing_cycle TEXT NOT NULL DEFAULT 'monthly',
+      gstin TEXT,
+      billing_name TEXT,
+      billing_address TEXT,
+      billing_city TEXT,
+      billing_state TEXT,
+      billing_pincode TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      cashfree_order_id TEXT UNIQUE,
+      claim_token TEXT UNIQUE,
+      claimed_at TIMESTAMP,
+      claimed_by INTEGER REFERENCES users(id),
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      expires_at TIMESTAMP NOT NULL,
+      paid_at TIMESTAMP
+    );
+  `);
+  console.log('  Creating checkout_intents indexes...');
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS checkout_intents_email_idx ON checkout_intents(email);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS checkout_intents_status_idx ON checkout_intents(status);`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS checkout_intents_claim_token_idx ON checkout_intents(claim_token) WHERE claim_token IS NOT NULL;`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS checkout_intents_cashfree_order_idx ON checkout_intents(cashfree_order_id) WHERE cashfree_order_id IS NOT NULL;`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS checkout_intents_expires_at_idx ON checkout_intents(expires_at);`);
+
+  // Add organizationId to existing tables
+  console.log('  Adding organization_id to existing tables...');
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE clients ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE forms ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE form_invitations ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE form_responses ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE email_templates ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE pipeline_stages ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE automation_settings ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE talent_pool ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE user_ai_usage ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE job_analytics ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE job_audit_log ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE co_recruiter_invitations ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE job_recruiters ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE automation_events ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE client_feedback ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE client_shortlist_items ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+  await db.execute(sql`ALTER TABLE client_shortlists ADD COLUMN IF NOT EXISTS organization_id INTEGER REFERENCES organizations(id);`);
+
+  // Create indexes for organization_id columns
+  console.log('  Creating organization indexes...');
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS jobs_org_idx ON jobs(organization_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS applications_org_idx ON applications(organization_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS clients_org_idx ON clients(organization_id);`);
+
+  // Seed default subscription plans
+  console.log('  Seeding default subscription plans...');
+  await db.execute(sql`
+    INSERT INTO subscription_plans (name, display_name, description, price_per_seat_monthly, price_per_seat_annual, ai_credits_per_seat_monthly, features, sort_order)
+    VALUES
+      ('free', 'Free', 'Basic ATS features for small teams', 0, 0, 5, '{"basicAts":true,"jobPosting":true,"applicationManagement":true,"aiMatching":false,"aiContent":false,"advancedAnalytics":false,"customBranding":false,"apiAccess":false,"prioritySupport":false}'::jsonb, 0),
+      ('pro', 'Pro', 'Full-featured ATS with AI capabilities', 99900, 999900, 600, '{"basicAts":true,"jobPosting":true,"applicationManagement":true,"aiMatching":true,"aiContent":true,"advancedAnalytics":true,"customBranding":true,"apiAccess":false,"prioritySupport":true}'::jsonb, 1),
+      ('business', 'Business', 'Enterprise-grade features and support', 0, 0, 1000, '{"basicAts":true,"jobPosting":true,"applicationManagement":true,"aiMatching":true,"aiContent":true,"advancedAnalytics":true,"customBranding":true,"apiAccess":true,"prioritySupport":true}'::jsonb, 2)
+    ON CONFLICT (name) DO UPDATE SET
+      display_name = EXCLUDED.display_name,
+      description = EXCLUDED.description,
+      price_per_seat_monthly = EXCLUDED.price_per_seat_monthly,
+      price_per_seat_annual = EXCLUDED.price_per_seat_annual,
+      ai_credits_per_seat_monthly = EXCLUDED.ai_credits_per_seat_monthly,
+      features = EXCLUDED.features,
+      sort_order = EXCLUDED.sort_order;
+  `);
+
+  // Fix duplicate job slugs by prepending job ID (e.g., "123-relationship-manager")
+  // ID-first format allows the router to extract ID for direct lookup
+  console.log('  Fixing duplicate job slugs...');
+  await db.execute(sql`
+    UPDATE jobs
+    SET slug = CONCAT(id::text, '-', slug)
+    WHERE slug IS NOT NULL
+    AND slug !~ ('^' || id::text || '-');
+  `);
+
+  // Admin Org Controls: Add bonus credits fields to organization_subscriptions
+  console.log('  Adding bonus credits columns to organization_subscriptions...');
+  await db.execute(sql`ALTER TABLE organization_subscriptions ADD COLUMN IF NOT EXISTS bonus_credits INTEGER DEFAULT 0;`);
+  await db.execute(sql`ALTER TABLE organization_subscriptions ADD COLUMN IF NOT EXISTS bonus_credits_granted_at TIMESTAMP;`);
+  await db.execute(sql`ALTER TABLE organization_subscriptions ADD COLUMN IF NOT EXISTS bonus_credits_reason TEXT;`);
+  await db.execute(sql`ALTER TABLE organization_subscriptions ADD COLUMN IF NOT EXISTS bonus_credits_granted_by INTEGER REFERENCES users(id);`);
+  await db.execute(sql`ALTER TABLE organization_subscriptions ADD COLUMN IF NOT EXISTS custom_credit_limit INTEGER;`);
+
+  // Add paid_seats column for accurate MRR calculation (tracks seats actually paid for)
+  console.log('  Adding paid_seats column to organization_subscriptions...');
+  await db.execute(sql`ALTER TABLE organization_subscriptions ADD COLUMN IF NOT EXISTS paid_seats INTEGER NOT NULL DEFAULT 0;`);
+
   });
+
 
   console.log('✅ ATS schema ready');
 }

@@ -2,7 +2,7 @@ import type { Express, Request, Response, NextFunction } from "express";
 import { db } from "./db";
 import { forms, formFields, formInvitations, formResponses, formResponseAnswers, applications, jobs, emailAuditLog, userAiUsage } from "@shared/schema";
 import { insertFormSchema, insertFormFieldSchema, insertFormInvitationSchema, insertFormResponseAnswerSchema } from "@shared/schema";
-import { requireAuth, requireRole } from "./auth";
+import { requireAuth, requireRole, requireSeat } from "./auth";
 import { eq, and, desc, sql, or, inArray } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
@@ -16,9 +16,13 @@ import { parseFormSnapshot, isValidFieldType, parseSelectOptions, normalizeYesNo
 import { generateFormQuestions, isAIEnabled } from "./aiJobAnalyzer";
 import { calculateAiCost } from './lib/aiMatchingEngine';
 import { aiAnalysisRateLimit } from "./rateLimit";
+import { getUserOrganization } from './lib/organizationService';
+import { updateMemberActivity } from './lib/membershipService';
+import { requireFeatureAccess, FEATURES } from './lib/featureGating';
+import { hasEnoughCredits, useCredits } from './lib/creditService';
 
 // Environment configuration
-const isTestEnv = process.env.NODE_ENV === 'test';
+const isTestEnv = process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development';
 const FORM_INVITE_EXPIRY_DAYS = parseInt(process.env.FORM_INVITE_EXPIRY_DAYS || '14', 10);
 const FORM_PUBLIC_RATE_LIMIT = parseInt(
   process.env.FORM_PUBLIC_RATE_LIMIT || (isTestEnv ? '1000' : '10'),
@@ -125,10 +129,21 @@ export function registerFormsRoutes(app: Express, csrfProtection?: (req: Request
     "/api/forms/templates",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     csrf,
     async (req: Request, res: Response) => {
       try {
         const body = createTemplateSchema.parse(req.body);
+
+        // Get user's organization
+        let organizationId: number | undefined;
+        if (req.user!.role === 'recruiter') {
+          const orgResult = await getUserOrganization(req.user!.id);
+          if (orgResult) {
+            organizationId = orgResult.organization.id;
+            await updateMemberActivity(req.user!.id);
+          }
+        }
 
         // Insert form
         const [form] = await db.insert(forms).values({
@@ -136,6 +151,7 @@ export function registerFormsRoutes(app: Express, csrfProtection?: (req: Request
           description: body.description,
           isPublished: body.isPublished ?? true,
           createdBy: req.user!.id,
+          organizationId,
         }).returning();
 
         // Insert fields
@@ -169,6 +185,8 @@ export function registerFormsRoutes(app: Express, csrfProtection?: (req: Request
     "/api/forms/ai-suggest",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
+    requireFeatureAccess(FEATURES.AI_CONTENT),
     csrf,
     aiAnalysisRateLimit,
     async (req: Request, res: Response) => {
@@ -178,11 +196,20 @@ export function registerFormsRoutes(app: Express, csrfProtection?: (req: Request
           return res.status(503).json({ error: 'AI features are not enabled. Please configure GROQ_API_KEY.' });
         }
 
+        // Check AI credits for recruiters
+        if (req.user!.role === 'recruiter') {
+          const creditCheck = await hasEnoughCredits(req.user!.id, 1);
+          if (!creditCheck) {
+            return res.status(403).json({ error: 'Insufficient AI credits' });
+          }
+        }
+
         const body = aiSuggestSchema.parse(req.body);
         const startTime = Date.now();
 
         let jobDescription = body.jobDescription || "";
         let skills: string[] = [];
+        let organizationId: number | undefined;
 
         // If jobId provided, fetch job details
         if (body.jobId) {
@@ -192,6 +219,12 @@ export function registerFormsRoutes(app: Express, csrfProtection?: (req: Request
           }
           jobDescription = job.description;
           skills = job.skills || [];
+          organizationId = job.organizationId ?? undefined;
+        }
+
+        if (organizationId == null) {
+          const orgResult = await getUserOrganization(req.user!.id);
+          organizationId = orgResult?.organization.id;
         }
 
         // Validate that we have job description
@@ -224,7 +257,13 @@ export function registerFormsRoutes(app: Express, csrfProtection?: (req: Request
             fieldsGenerated: result.fields.length,
             durationMs,
           },
+          ...(organizationId != null && { organizationId }),
         });
+
+        // Deduct credits after successful generation (recruiters only)
+        if (req.user!.role === 'recruiter') {
+          await useCredits(req.user!.id, 1);
+        }
 
         return res.json({
           fields: result.fields,
@@ -241,22 +280,32 @@ export function registerFormsRoutes(app: Express, csrfProtection?: (req: Request
     }
   );
 
-  // List templates
+  // List templates - scoped by organization
   app.get(
     "/api/forms/templates",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response) => {
       try {
         const isAdmin = req.user!.role === 'super_admin';
 
+        // Get user's organization for data isolation
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
+
         // Admins see ALL templates (published + drafts for oversight)
-        // Recruiters see: (published templates) OR (their own templates regardless of published status)
+        // Recruiters see: (published templates in their org) OR (their own templates regardless of published status)
         const templates = await db.query.forms.findMany({
           where: isAdmin
             ? undefined // No filter - admins see everything
             : or(
-                eq(forms.isPublished, true),
+                // Published templates in the same organization
+                and(
+                  eq(forms.isPublished, true),
+                  userOrgId ? eq(forms.organizationId, userOrgId) : undefined
+                ),
+                // Own templates (regardless of published or org)
                 eq(forms.createdBy, req.user!.id)
               ),
           with: {
@@ -280,6 +329,7 @@ export function registerFormsRoutes(app: Express, csrfProtection?: (req: Request
     "/api/forms/templates/:id",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response) => {
       try {
         const formId = parseInt(req.params.id ?? '', 10);
@@ -315,6 +365,7 @@ export function registerFormsRoutes(app: Express, csrfProtection?: (req: Request
     "/api/forms/templates/:id",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     csrf,
     async (req: Request, res: Response) => {
       try {
@@ -396,6 +447,7 @@ export function registerFormsRoutes(app: Express, csrfProtection?: (req: Request
     "/api/forms/templates/:id",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     csrf,
     async (req: Request, res: Response) => {
       try {
@@ -531,6 +583,7 @@ VantaHire Team`;
     "/api/forms/invitations/quota",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response) => {
       try {
         // Count invitations sent today by this user
@@ -576,12 +629,17 @@ VantaHire Team`;
     "/api/forms/invitations",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     csrf,
     invitationRateLimit,
     async (req: Request, res: Response) => {
       try {
         const body = insertFormInvitationSchema.parse(req.body);
         const { applicationId, formId, customMessage } = body;
+
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
 
         // 1. Verify ownership: application → job.postedBy === req.user.id
         const application = await db.query.applications.findFirst({
@@ -596,7 +654,7 @@ VantaHire Team`;
         }
 
         // Use isRecruiterOnJob to check access (includes co-recruiters)
-        const hasAccess = application.job && await storage.isRecruiterOnJob(application.job.id, req.user!.id);
+        const hasAccess = application.job && await storage.isRecruiterOnJob(application.job.id, req.user!.id, userOrgId);
         if (!hasAccess) {
           return res.status(403).json({ error: 'Unauthorized: You can only send forms for your own job postings' });
         }
@@ -674,6 +732,7 @@ VantaHire Team`;
           sentBy: req.user!.id,
           fieldSnapshot,
           customMessage,
+          ...(application.job?.organizationId != null && { organizationId: application.job.organizationId }),
         }).returning();
 
         // 7. Send email and update status
@@ -731,6 +790,7 @@ VantaHire Team`;
     "/api/forms/invitations/bulk",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     csrf,
     rateLimit({
       windowMs: 60_000, // 1 minute
@@ -752,6 +812,10 @@ VantaHire Team`;
         });
 
         const { applicationIds, formId, customMessage, skipExisting, resendAnswered } = bodySchema.parse(req.body);
+
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
 
         // 1. Fetch form template once (consistency across all invitations)
         const form = await db.query.forms.findFirst({
@@ -794,7 +858,7 @@ VantaHire Team`;
 
         for (const app of fetchedApplications) {
           // Check ownership (use isRecruiterOnJob to include co-recruiters)
-          const hasAccess = app.job && await storage.isRecruiterOnJob(app.job.id, req.user!.id);
+          const hasAccess = app.job && await storage.isRecruiterOnJob(app.job.id, req.user!.id, userOrgId);
           if (!hasAccess) {
             results.push({
               applicationId: app.id,
@@ -877,6 +941,7 @@ VantaHire Team`;
               sentBy: req.user!.id,
               fieldSnapshot,
               customMessage,
+              ...(app.job?.organizationId != null && { organizationId: app.job.organizationId }),
             }).returning();
 
             invitations.push({ invitation, application: app });
@@ -964,6 +1029,7 @@ VantaHire Team`;
     "/api/forms/invitations/external",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     csrf,
     rateLimit({
       windowMs: 60_000,
@@ -985,6 +1051,10 @@ VantaHire Team`;
         });
 
         const { formId, email, candidateName, jobId, customMessage, expiresInDays } = bodySchema.parse(req.body);
+
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
 
         // 1. Fetch form template
         const form = await db.query.forms.findFirst({
@@ -1012,16 +1082,18 @@ VantaHire Team`;
         }
 
         // 3. Check if job exists and user has access (if jobId provided)
+        let jobOrgId: number | undefined;
         if (jobId) {
           const job = await storage.getJob(jobId);
           if (!job) {
             return res.status(404).json({ error: 'Job not found' });
           }
           // Use isRecruiterOnJob to check access (includes co-recruiters)
-          const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id);
+          const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id, userOrgId);
           if (!hasAccess) {
             return res.status(403).json({ error: 'Unauthorized: Job does not belong to you' });
           }
+          jobOrgId = job.organizationId ?? undefined;
         }
 
         // 4. Check for existing active invite (no duplicates)
@@ -1059,6 +1131,7 @@ VantaHire Team`;
           sentBy: number;
           fieldSnapshot: string;
           customMessage?: string;
+          organizationId?: number;
         } = {
           formId,
           email,
@@ -1070,6 +1143,9 @@ VantaHire Team`;
         };
         if (jobId !== undefined) invitationData.jobId = jobId;
         if (customMessage !== undefined) invitationData.customMessage = customMessage;
+        // Use job's org if available, otherwise user's org
+        const inviteOrgId = jobOrgId ?? userOrgId;
+        if (inviteOrgId !== undefined) invitationData.organizationId = inviteOrgId;
 
         const invitation = await storage.createExternalFormInvitation(invitationData);
 
@@ -1135,6 +1211,7 @@ VantaHire Team`;
     "/api/forms/invitations",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response) => {
       try {
         const applicationId = parseInt(req.query.applicationId as string, 10);
@@ -1142,6 +1219,10 @@ VantaHire Team`;
         if (!applicationId) {
           return res.status(400).json({ error: 'applicationId query parameter is required' });
         }
+
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
 
         // Verify ownership
         const application = await db.query.applications.findFirst({
@@ -1154,7 +1235,7 @@ VantaHire Team`;
         }
 
         // Use isRecruiterOnJob to check access (includes co-recruiters)
-        const hasAccess = application.job && await storage.isRecruiterOnJob(application.job.id, req.user!.id);
+        const hasAccess = application.job && await storage.isRecruiterOnJob(application.job.id, req.user!.id, userOrgId);
         if (!hasAccess) {
           return res.status(403).json({ error: 'Unauthorized' });
         }
@@ -1181,6 +1262,7 @@ VantaHire Team`;
     "/api/forms/invitations/:id/remind",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     csrf,
     invitationRateLimit,
     async (req: Request, res: Response) => {
@@ -1190,6 +1272,10 @@ VantaHire Team`;
         if (!invitationId || !Number.isFinite(invitationId) || invitationId <= 0) {
           return res.status(400).json({ error: 'Invalid invitation ID' });
         }
+
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
 
         // Fetch the invitation with application and form
         const invitation = await db.query.formInvitations.findFirst({
@@ -1207,7 +1293,7 @@ VantaHire Team`;
         }
 
         // Verify ownership (use isRecruiterOnJob to include co-recruiters)
-        const hasAccess = invitation.application?.job && await storage.isRecruiterOnJob(invitation.application.job.id, req.user!.id);
+        const hasAccess = invitation.application?.job && await storage.isRecruiterOnJob(invitation.application.job.id, req.user!.id, userOrgId);
         if (!hasAccess) {
           return res.status(403).json({ error: 'Unauthorized: You can only send reminders for your own job postings' });
         }
@@ -1495,6 +1581,7 @@ VantaHire Team`;
           const [response] = await tx.insert(formResponses).values({
             invitationId: invitation.id,
             applicationId: invitation.applicationId,
+            ...(invitation.organizationId != null && { organizationId: invitation.organizationId }),
           }).returning();
 
           // Save answers
@@ -1542,6 +1629,7 @@ VantaHire Team`;
     "/api/forms/responses",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response) => {
       try {
         const applicationId = parseInt(req.query.applicationId as string, 10);
@@ -1549,6 +1637,10 @@ VantaHire Team`;
         if (!applicationId) {
           return res.status(400).json({ error: 'applicationId query parameter is required' });
         }
+
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
 
         // Verify ownership: application → job.postedBy === req.user.id
         const application = await db.query.applications.findFirst({
@@ -1561,7 +1653,7 @@ VantaHire Team`;
         }
 
         // Use isRecruiterOnJob to check access (includes co-recruiters)
-        const hasAccess = application.job && await storage.isRecruiterOnJob(application.job.id, req.user!.id);
+        const hasAccess = application.job && await storage.isRecruiterOnJob(application.job.id, req.user!.id, userOrgId);
         if (!hasAccess) {
           return res.status(403).json({ error: 'Unauthorized: You can only view responses for your own job postings' });
         }
@@ -1604,6 +1696,7 @@ VantaHire Team`;
     "/api/forms/:id/responses",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response) => {
       try {
         const formId = parseInt(req.params.id ?? '', 10);
@@ -1669,9 +1762,14 @@ VantaHire Team`;
     "/api/forms/responses/:id",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response) => {
       try {
         const responseId = parseInt(req.params.id ?? '', 10);
+
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
 
         // Fetch response with invitation and answers
         const response = await db.query.formResponses.findFirst({
@@ -1690,7 +1788,7 @@ VantaHire Team`;
         }
 
         // Verify ownership (use isRecruiterOnJob to include co-recruiters)
-        const hasAccess = response.application?.job && await storage.isRecruiterOnJob(response.application.job.id, req.user!.id);
+        const hasAccess = response.application?.job && await storage.isRecruiterOnJob(response.application.job.id, req.user!.id, userOrgId);
         if (!hasAccess) {
           return res.status(403).json({ error: 'Unauthorized: You can only view responses for your own job postings' });
         }
@@ -1734,6 +1832,7 @@ VantaHire Team`;
     "/api/forms/export",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response) => {
       try {
         const applicationId = parseInt(req.query.applicationId as string, 10);
@@ -1747,6 +1846,10 @@ VantaHire Team`;
           return res.status(400).json({ error: 'Only CSV format is supported at this time' });
         }
 
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
+
         // Verify ownership
         const application = await db.query.applications.findFirst({
           where: eq(applications.id, applicationId),
@@ -1758,7 +1861,7 @@ VantaHire Team`;
         }
 
         // Use isRecruiterOnJob to check access (includes co-recruiters)
-        const hasAccess = application.job && await storage.isRecruiterOnJob(application.job.id, req.user!.id);
+        const hasAccess = application.job && await storage.isRecruiterOnJob(application.job.id, req.user!.id, userOrgId);
         if (!hasAccess) {
           return res.status(403).json({ error: 'Unauthorized: You can only export responses for your own job postings' });
         }

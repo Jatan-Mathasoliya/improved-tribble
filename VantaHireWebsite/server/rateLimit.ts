@@ -1,6 +1,9 @@
 import rateLimit, { type RateLimitRequestHandler } from "express-rate-limit";
 import type { Request, Response } from "express";
 
+// Skip rate limiting in test/development environments
+const isTestEnv = process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development';
+
 // Type for rate limit info attached to request by express-rate-limit
 export interface RateLimitInfo {
   limit: number;
@@ -36,6 +39,7 @@ export const aiAnalysisRateLimit: RateLimitRequestHandler = rateLimit({
   max: AI_ANALYSIS_RATE_LIMIT,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTestEnv,
   keyGenerator: (req) => req.user?.id?.toString() || req.ip || 'anonymous',
   handler: createRateLimitHandler(`AI analysis limit reached (${AI_ANALYSIS_RATE_LIMIT}/day). Try again tomorrow.`),
 });
@@ -49,6 +53,7 @@ export const applicationRateLimit: RateLimitRequestHandler = rateLimit({
   max: 10, // 10 applications per day per IP
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTestEnv,
   handler: createRateLimitHandler('Application limit reached (10/day). Try again tomorrow.'),
 });
 
@@ -61,6 +66,7 @@ export const jobPostingRateLimit: RateLimitRequestHandler = rateLimit({
   max: 10, // 10 job posts per day per user
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTestEnv,
   handler: createRateLimitHandler('Job posting limit reached (10/day). Try again tomorrow.'),
 });
 
@@ -73,6 +79,7 @@ export const recruiterAddRateLimit: RateLimitRequestHandler = rateLimit({
   max: 50, // 50 candidates per day per recruiter
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => isTestEnv,
   keyGenerator: (req) => req.user?.id?.toString() || req.ip || 'anonymous',
   handler: createRateLimitHandler('Candidate addition limit reached (50/day). Try again tomorrow.'),
 });

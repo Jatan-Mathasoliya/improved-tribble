@@ -3,17 +3,34 @@ import { useState, useEffect } from "react";
 import { Sparkles, Zap } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
 
-// AI Orb Component with animated rings
-const AiOrb = () => (
-  <div className="ai-orb">
-    <div className="orb-ring"></div>
-    <div className="orb-ring"></div>
-    <div className="orb-ring"></div>
-    <div className="orb-center">
-      <div className="text-center">
-        <span className="text-primary font-bold text-lg block">Human + AI</span>
-        <span className="text-primary font-semibold text-sm">Velocity</span>
-      </div>
+// Hero Video Component - seamless blend with site background
+const HeroVideo = () => (
+  <div className="relative w-full max-w-2xl mx-auto">
+    {/* Video with all-edge fade to blend into #0D0D1A background */}
+    <div
+      className="relative overflow-hidden"
+      style={{
+        maskImage: `
+          radial-gradient(ellipse 80% 70% at 40% 50%, black 50%, transparent 100%)
+        `,
+        WebkitMaskImage: `
+          radial-gradient(ellipse 80% 70% at 40% 50%, black 50%, transparent 100%)
+        `,
+      }}
+    >
+      <video
+        autoPlay
+        loop
+        muted
+        playsInline
+        className="w-full h-auto scale-110"
+        style={{
+          clipPath: 'inset(0 12% 0 0)', // Crop right to hide watermark
+        }}
+      >
+        <source src="/hero-video.mp4" type="video/mp4" />
+        Your browser does not support the video tag.
+      </video>
     </div>
   </div>
 );
@@ -89,9 +106,9 @@ const Hero = () => {
           </div>
         </div>
 
-        {/* Right - AI Orb */}
+        {/* Right - Hero Video */}
         <div className="lg:w-1/2 flex justify-center animate-fade-in-up-delay-2">
-          <AiOrb />
+          <HeroVideo />
         </div>
       </div>
     </section>

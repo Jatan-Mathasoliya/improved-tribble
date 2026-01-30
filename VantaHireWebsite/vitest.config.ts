@@ -19,6 +19,7 @@ export default defineConfig(({ mode }) => ({
       'test/e2e/**',           // Exclude Playwright E2E tests
       '**/*.spec.ts',          // Exclude .spec.ts files (Playwright)
       '**/*.spec.tsx',
+      'server/tests/applicationClaiming.test.ts', // Standalone E2E script (run with ts-node)
     ],
     coverage: {
       provider: 'v8',

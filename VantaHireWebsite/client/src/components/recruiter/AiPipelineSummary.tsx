@@ -4,7 +4,7 @@ import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface AiPipelineSummaryProps {
-  pipelineHealthScore: { score: number; tag: string };
+  pipelineHealthScore: { score: number; tag: string; isEmpty?: boolean };
   preGeneratedSummary?: string | undefined;
   aiLoading?: boolean | undefined;
   generatedAt?: string | undefined;
@@ -16,8 +16,9 @@ export function AiPipelineSummary({
   aiLoading = false,
   generatedAt,
 }: AiPipelineSummaryProps) {
-  const fallback =
-    pipelineHealthScore.score >= 80
+  const fallback = pipelineHealthScore.isEmpty
+    ? "Post your first job to start tracking pipeline health and get AI-powered insights."
+    : pipelineHealthScore.score >= 80
       ? "Pipeline healthy. Keep candidates moving."
       : pipelineHealthScore.score >= 60
         ? "Stable pipeline. Watch slow stages."
@@ -30,6 +31,7 @@ export function AiPipelineSummary({
   return (
     <Card className={cn(
       "shadow-sm border-l-4",
+      pipelineHealthScore.isEmpty ? "border-l-slate-300" :
       pipelineHealthScore.score >= 70 ? "border-l-emerald-400" :
       pipelineHealthScore.score >= 50 ? "border-l-amber-400" : "border-l-red-400"
     )}>

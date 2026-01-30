@@ -17,9 +17,12 @@ import { sql, eq, and, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from './db';
 import { storage } from './storage';
-import { requireAuth, requireRole } from './auth';
+import { requireAuth, requireRole, requireSeat } from './auth';
+import { getUserOrganization } from './lib/organizationService';
 import { calculateAiCost } from './lib/aiMatchingEngine';
 import { syncProfileCompletionStatus } from './lib/profileCompletion';
+import { requireFeatureAccess, FEATURES } from './lib/featureGating';
+import { hasEnoughCredits, useCredits, getCreditCostForOperation } from './lib/creditService';
 import {
   insertApplicationSchema,
   recruiterAddApplicationSchema,
@@ -97,6 +100,22 @@ export function registerApplicationsRoutes(
         return;
       }
 
+      // Check if job is accepting applications
+      if (!job.isActive) {
+        res.status(400).json({ error: 'This job is no longer accepting applications' });
+        return;
+      }
+
+      if (job.status && job.status !== 'published') {
+        res.status(400).json({ error: 'This job is not currently published' });
+        return;
+      }
+
+      if (job.deadline && new Date(job.deadline) < new Date()) {
+        res.status(400).json({ error: 'The application deadline for this job has passed' });
+        return;
+      }
+
       if (!req.file) {
         res.status(400).json({ error: 'Resume file is required' });
         return;
@@ -129,12 +148,21 @@ export function registerApplicationsRoutes(
       let resumeUrl = 'placeholder-resume.pdf';
       let resumeRecordId: number | null = null;
       let resumeCountForCompletion: number | null = null;
+      let extractedResumeText: string | null = null;
       if (req.file) {
         try {
           resumeUrl = await uploadToGCS(req.file.buffer, req.file.originalname);
         } catch (error) {
           console.log('Google Cloud Storage not configured, using placeholder resume URL');
           resumeUrl = `resume-${Date.now()}-${req.file.originalname}`;
+        }
+        try {
+          const extraction = await extractResumeText(req.file.buffer);
+          if (extraction.success && validateResumeText(extraction.text)) {
+            extractedResumeText = extraction.text;
+          }
+        } catch (resumeExtractError) {
+          console.error('Resume extraction failed during application (non-blocking):', resumeExtractError);
         }
       }
 
@@ -148,23 +176,21 @@ export function registerApplicationsRoutes(
           });
           resumeCountForCompletion = existingResumes.length;
 
-          if (existingResumes.length < 3) {
-            const extraction = await extractResumeText(req.file.buffer);
-            if (extraction.success && validateResumeText(extraction.text)) {
-              const shouldBeDefault = !existingResumes.some((r: { isDefault: boolean }) => r.isDefault);
-              const [resume] = await db
-                .insert(candidateResumes)
-                .values({
-                  userId: req.user.id,
-                  label: req.file.originalname || 'Uploaded Resume',
-                  gcsPath: resumeUrl,
-                  extractedText: extraction.text,
-                  isDefault: shouldBeDefault,
-                })
-                .returning();
-              resumeRecordId = resume.id;
-              resumeCountForCompletion = existingResumes.length + 1;
-            }
+          // Reuse already-extracted text instead of extracting again
+          if (existingResumes.length < 3 && extractedResumeText) {
+            const shouldBeDefault = !existingResumes.some((r: { isDefault: boolean }) => r.isDefault);
+            const [resume] = await db
+              .insert(candidateResumes)
+              .values({
+                userId: req.user.id,
+                label: req.file.originalname || 'Uploaded Resume',
+                gcsPath: resumeUrl,
+                extractedText: extractedResumeText,
+                isDefault: shouldBeDefault,
+              })
+              .returning();
+            resumeRecordId = resume.id;
+            resumeCountForCompletion = existingResumes.length + 1;
           }
         } catch (resumeErr) {
           console.error('Resume save/extraction failed (non-blocking):', resumeErr);
@@ -174,7 +200,7 @@ export function registerApplicationsRoutes(
       // Determine default pipeline stage for new applications (if stages are configured)
       let initialStageId: number | null = null;
       try {
-        const stages = await storage.getPipelineStages();
+        const stages = await storage.getPipelineStages(job.organizationId ?? undefined);
         if (stages && stages.length > 0) {
           const explicitDefault = stages.find((s) => s.isDefault);
           const chosen = explicitDefault ?? stages[0]!;
@@ -193,12 +219,14 @@ export function registerApplicationsRoutes(
         resumeUrl,
         resumeFilename: req.file?.originalname ?? null,
         ...(resumeRecordId !== null && { resumeId: resumeRecordId }),
+        ...(extractedResumeText && { extractedResumeText }),
         ...(req.user?.id !== undefined && { userId: req.user.id }),
         ...(initialStageId !== null && {
           currentStage: initialStageId,
           stageChangedAt: now,
           stageChangedBy: job.postedBy,
         }),
+        ...(job.organizationId != null && { organizationId: job.organizationId }),
       });
 
       if (req.user?.id && resumeCountForCompletion !== null) {
@@ -224,7 +252,10 @@ export function registerApplicationsRoutes(
 
       // Send notification email to all recruiters on this job (if enabled)
       try {
-        const shouldNotifyRecruiter = await storage.isAutomationEnabled('notify_recruiter_new_application');
+        const shouldNotifyRecruiter = await storage.isAutomationEnabled(
+          'notify_recruiter_new_application',
+          job.organizationId ?? undefined
+        );
         if (shouldNotifyRecruiter) {
           notifyRecruitersNewApplication(
             application.id,
@@ -271,6 +302,7 @@ export function registerApplicationsRoutes(
   app.post(
     "/api/jobs/:id/applications/recruiter-add",
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     recruiterAddRateLimit,
     csrfProtection,
     upload.single('resume'),
@@ -287,6 +319,10 @@ export function registerApplicationsRoutes(
           return;
         }
 
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
+
         // Permission guard: Verify job access (primary recruiter, co-recruiter, or admin)
         const job = await storage.getJob(jobId);
         if (!job) {
@@ -294,7 +330,7 @@ export function registerApplicationsRoutes(
           return;
         }
 
-        const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id);
+        const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id, userOrgId);
         if (!hasAccess) {
           res.status(403).json({ error: 'Access denied: You can only add candidates to your own jobs' });
           return;
@@ -334,10 +370,21 @@ export function registerApplicationsRoutes(
           resumeUrl = `resume-${Date.now()}-${req.file.originalname}`;
         }
 
+        // Extract resume text for AI summary (recruiter-add has no candidateResumes record)
+        let extractedResumeText: string | null = null;
+        try {
+          const extraction = await extractResumeText(req.file.buffer);
+          if (extraction.success && validateResumeText(extraction.text)) {
+            extractedResumeText = extraction.text;
+          }
+        } catch (resumeExtractError) {
+          console.error('Resume extraction failed during recruiter-add (non-blocking):', resumeExtractError);
+        }
+
         // Determine default pipeline stage for recruiter-added candidates (if stages are configured)
         let defaultStageId: number | null = null;
         try {
-          const stages = await storage.getPipelineStages();
+          const stages = await storage.getPipelineStages(job.organizationId ?? undefined);
           if (stages && stages.length > 0) {
             const explicitDefault = stages.find((s) => s.isDefault);
             const chosen = explicitDefault ?? stages[0]!;
@@ -350,8 +397,11 @@ export function registerApplicationsRoutes(
         // Validate initial stage if provided, otherwise fall back to default (if available)
         let initialStage: number | null = null;
         if (applicationData.currentStage) {
+          const stageWhere = job.organizationId != null
+            ? and(eq(pipelineStages.id, applicationData.currentStage), eq(pipelineStages.organizationId, job.organizationId))
+            : eq(pipelineStages.id, applicationData.currentStage);
           const stageExists = await db.query.pipelineStages.findFirst({
-            where: eq(pipelineStages.id, applicationData.currentStage)
+            where: stageWhere
           });
 
           if (!stageExists) {
@@ -374,6 +424,7 @@ export function registerApplicationsRoutes(
           jobId,
           resumeUrl,
           resumeFilename: req.file.originalname,
+          ...(extractedResumeText && { extractedResumeText }),
           submittedByRecruiter: true,
           createdByUserId: req.user!.id,
           source: applicationData.source,
@@ -383,6 +434,7 @@ export function registerApplicationsRoutes(
             stageChangedAt: new Date(),
             stageChangedBy: req.user!.id,
           }),
+          ...(job.organizationId != null && { organizationId: job.organizationId }),
         });
 
         // Log initial stage assignment to history table
@@ -433,6 +485,7 @@ export function registerApplicationsRoutes(
     "/api/applications/bulk/interview",
     csrfProtection,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         const bodySchema = z.object({
@@ -483,12 +536,15 @@ export function registerApplicationsRoutes(
 
         const results: { id: number; success: boolean; error?: string }[] = [];
 
+        const orgResult = await getUserOrganization(req.user!.id);
+        const organizationId = req.user!.role === 'super_admin' && !orgResult ? undefined : orgResult?.organization.id;
+
         // Preload pipeline stages and map stageId -> order
         let stageOrderMap = new Map<number, number>();
         let targetStageOrder: number | null = null;
         const targetStageId = stageId ?? null;
         if (targetStageId !== null) {
-          const stages = await storage.getPipelineStages();
+          const stages = await storage.getPipelineStages(organizationId);
           stageOrderMap = new Map(stages.map((s) => [s.id, s.order ?? 0]));
           targetStageOrder = stageOrderMap.get(targetStageId) ?? null;
         }
@@ -574,8 +630,8 @@ export function registerApplicationsRoutes(
     }
   );
 
-  // Get applications for a specific job (recruiters only)
-  app.get("/api/jobs/:id/applications", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Get applications for a specific job (recruiters only) - with org verification
+  app.get("/api/jobs/:id/applications", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -585,6 +641,16 @@ export function registerApplicationsRoutes(
       const jobId = Number(idParam);
       if (!Number.isFinite(jobId) || jobId <= 0 || !Number.isInteger(jobId)) {
         res.status(400).json({ error: 'Invalid ID parameter' });
+        return;
+      }
+
+      // Verify user has access to this job (org isolation)
+      const orgResult = await getUserOrganization(req.user!.id);
+      const userOrgId = orgResult?.organization.id;
+      const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id, userOrgId);
+
+      if (!hasAccess && req.user!.role !== 'super_admin') {
+        res.status(403).json({ error: 'Access denied: you do not have access to this job' });
         return;
       }
 
@@ -608,7 +674,7 @@ export function registerApplicationsRoutes(
   });
 
   // Get AI-suggested similar candidates from other jobs
-  app.get("/api/jobs/:id/ai-similar-candidates", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/jobs/:id/ai-similar-candidates", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -674,8 +740,11 @@ export function registerApplicationsRoutes(
       if (role === 'super_admin') {
         // allowed
       } else if (role === 'recruiter') {
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
         // Use isRecruiterOnJob to check access (includes co-recruiters)
-        const hasAccess = await storage.isRecruiterOnJob(appRecord.jobId, req.user!.id);
+        const hasAccess = await storage.isRecruiterOnJob(appRecord.jobId, req.user!.id, userOrgId);
         if (!hasAccess) {
           res.status(403).json({ error: 'Access denied' });
           return;
@@ -733,20 +802,29 @@ export function registerApplicationsRoutes(
 
   // ============= PIPELINE MANAGEMENT ROUTES =============
 
-  // Get pipeline stages
-  app.get("/api/pipeline/stages", requireAuth, async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Get pipeline stages - filtered by organization
+  app.get("/api/pipeline/stages", requireAuth, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const stages = await storage.getPipelineStages();
+      const orgResult = await getUserOrganization(req.user!.id);
+      const organizationId = req.user!.role === 'super_admin' && !orgResult ? undefined : orgResult?.organization.id;
+      const stages = await storage.getPipelineStages(organizationId);
       res.json(stages);
       return;
     } catch (e) { next(e); }
   });
 
-  // Create pipeline stage (recruiters/admin)
-  app.post("/api/pipeline/stages", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Create pipeline stage (recruiters/admin) - requires seat
+  app.post("/api/pipeline/stages", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const orgResult = await getUserOrganization(req.user!.id);
+      const organizationId = orgResult?.organization.id;
+
       const body = insertPipelineStageSchema.parse(req.body);
-      const stage = await storage.createPipelineStage({ ...body, createdBy: req.user!.id });
+      const stage = await storage.createPipelineStage({
+        ...body,
+        createdBy: req.user!.id,
+        ...(organizationId != null && { organizationId }),
+      });
       res.status(201).json(stage);
       return;
     } catch (e) {
@@ -758,8 +836,8 @@ export function registerApplicationsRoutes(
     }
   });
 
-  // Update pipeline stage (recruiters or admin - stages are global)
-  app.patch("/api/pipeline/stages/:id", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Update pipeline stage (recruiters or admin) - requires seat
+  app.patch("/api/pipeline/stages/:id", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -784,20 +862,23 @@ export function registerApplicationsRoutes(
         return;
       }
 
-      // Verify stage exists
-      const stage = await storage.getPipelineStage(stageId);
+      const orgResult = await getUserOrganization(req.user!.id);
+      const organizationId = req.user!.role === 'super_admin' && !orgResult ? undefined : orgResult?.organization.id;
+
+      // Verify stage exists within org
+      const stage = await storage.getPipelineStage(stageId, organizationId);
       if (!stage) {
         res.status(404).json({ error: 'Stage not found' });
         return;
       }
 
-      // Stages are global - all recruiters can edit. Build update object without undefined values.
+      // Build update object without undefined values.
       const updateData: { name?: string; color?: string | null; order?: number } = {};
       if (validation.data.name !== undefined) updateData.name = validation.data.name;
       if (validation.data.color !== undefined) updateData.color = validation.data.color;
       if (validation.data.order !== undefined) updateData.order = validation.data.order;
 
-      const updated = await storage.updatePipelineStage(stageId, updateData);
+      const updated = await storage.updatePipelineStage(stageId, updateData, organizationId);
       res.json(updated);
       return;
     } catch (e) {
@@ -805,8 +886,8 @@ export function registerApplicationsRoutes(
     }
   });
 
-  // Delete pipeline stage (recruiters or admin - stages are global)
-  app.delete("/api/pipeline/stages/:id", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Delete pipeline stage (recruiters or admin) - requires seat
+  app.delete("/api/pipeline/stages/:id", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -819,8 +900,11 @@ export function registerApplicationsRoutes(
         return;
       }
 
-      // Verify stage exists
-      const stage = await storage.getPipelineStage(stageId);
+      const orgResult = await getUserOrganization(req.user!.id);
+      const organizationId = req.user!.role === 'super_admin' && !orgResult ? undefined : orgResult?.organization.id;
+
+      // Verify stage exists within org
+      const stage = await storage.getPipelineStage(stageId, organizationId);
       if (!stage) {
         res.status(404).json({ error: 'Stage not found' });
         return;
@@ -838,7 +922,7 @@ export function registerApplicationsRoutes(
         return;
       }
 
-      await storage.deletePipelineStage(stageId);
+      await storage.deletePipelineStage(stageId, organizationId);
       res.status(204).send();
       return;
     } catch (e) {
@@ -847,7 +931,7 @@ export function registerApplicationsRoutes(
   });
 
   // Move application to a new stage
-  app.patch("/api/applications/:id/stage", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.patch("/api/applications/:id/stage", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -871,7 +955,9 @@ export function registerApplicationsRoutes(
 
       const { stageId, notes } = validation.data;
 
-      const stages = await storage.getPipelineStages();
+      const orgResult = await getUserOrganization(req.user!.id);
+      const organizationId = req.user!.role === 'super_admin' && !orgResult ? undefined : orgResult?.organization.id;
+      const stages = await storage.getPipelineStages(organizationId);
       const targetStage = stages.find(s => s.id === stageId);
       if (!targetStage) {
         res.status(400).json({ error: `Invalid stage ID: ${stageId}` });
@@ -899,7 +985,7 @@ export function registerApplicationsRoutes(
   });
 
   // Get application stage history
-  app.get("/api/applications/:id/history", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/applications/:id/history", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -920,7 +1006,7 @@ export function registerApplicationsRoutes(
   // ============= INTERVIEW MANAGEMENT ROUTES =============
 
   // Download interview calendar invite (ICS file)
-  app.get("/api/applications/:id/interview/ics", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/applications/:id/interview/ics", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -989,7 +1075,7 @@ export function registerApplicationsRoutes(
   });
 
   // Schedule interview
-  app.patch("/api/applications/:id/interview", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.patch("/api/applications/:id/interview", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -1048,7 +1134,7 @@ export function registerApplicationsRoutes(
   // ============= APPLICATION NOTES, RATING, EMAIL HISTORY =============
 
   // Get email history for an application
-  app.get("/api/applications/:id/email-history", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/applications/:id/email-history", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -1076,7 +1162,7 @@ export function registerApplicationsRoutes(
   });
 
   // Add recruiter note
-  app.post("/api/applications/:id/notes", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.post("/api/applications/:id/notes", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -1100,7 +1186,7 @@ export function registerApplicationsRoutes(
   });
 
   // Set rating
-  app.patch("/api/applications/:id/rating", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.patch("/api/applications/:id/rating", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -1125,9 +1211,21 @@ export function registerApplicationsRoutes(
 
   // ============= AI SUMMARY =============
 
-  // Generate AI candidate summary
-  app.post("/api/applications/:id/ai-summary", aiAnalysisRateLimit, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Generate AI candidate summary - requires seat and AI feature access
+  app.post("/api/applications/:id/ai-summary", aiAnalysisRateLimit, requireRole(['recruiter', 'super_admin']), requireSeat(), requireFeatureAccess(FEATURES.AI_CONTENT), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      // Check AI credits for recruiters
+      if (req.user!.role === 'recruiter') {
+        const creditCheck = await hasEnoughCredits(req.user!.id, 1);
+        if (!creditCheck) {
+          res.status(403).json({
+            error: 'Insufficient AI credits',
+            message: 'You have run out of AI credits for this billing period.',
+          });
+          return;
+        }
+      }
+
       const idParam = req.params.id;
       if (!idParam) {
         res.status(400).json({ error: 'Missing ID parameter' });
@@ -1161,7 +1259,9 @@ export function registerApplicationsRoutes(
 
       let resumeText = '';
 
-      if (application.resumeId) {
+      if (application.extractedResumeText) {
+        resumeText = application.extractedResumeText;
+      } else if (application.resumeId) {
         const resumeData = await db.query.candidateResumes.findFirst({
           where: eq(candidateResumes.id, application.resumeId)
         });
@@ -1196,7 +1296,9 @@ export function registerApplicationsRoutes(
         effectiveText,
         job.title,
         job.description,
-        application.name
+        application.name,
+        job.skills || [],
+        job.goodToHaveSkills || []
       );
       const durationMs = Date.now() - startTime;
 
@@ -1210,10 +1312,22 @@ export function registerApplicationsRoutes(
           aiSuggestedAction: summaryResult.suggestedAction,
           aiSuggestedActionReason: summaryResult.suggestedActionReason,
           aiSummaryComputedAt: new Date(),
+          aiSummaryModelVersion: summaryResult.model_version,
+          aiStrengths: summaryResult.strengths,
+          aiConcerns: summaryResult.concerns,
+          aiKeyHighlights: summaryResult.keyHighlights,
+          // Skill analysis fields
+          aiRequiredSkillsMatched: summaryResult.requiredSkillsMatched,
+          aiRequiredSkillsMissing: summaryResult.requiredSkillsMissing,
+          aiRequiredSkillsMatchPercentage: summaryResult.requiredSkillsMatchPercentage,
+          aiRequiredSkillsDepthNotes: summaryResult.requiredSkillsDepthNotes,
+          aiGoodToHaveSkillsMatched: summaryResult.goodToHaveSkillsMatched,
+          aiGoodToHaveSkillsMissing: summaryResult.goodToHaveSkillsMissing,
         })
         .where(eq(applications.id, appId));
 
       await db.insert(userAiUsage).values({
+        organizationId: job.organizationId ?? undefined,
         userId: req.user!.id,
         kind: 'summary',
         tokensIn: summaryResult.tokensUsed.input,
@@ -1227,6 +1341,11 @@ export function registerApplicationsRoutes(
         },
       });
 
+      // Deduct credit for recruiters after successful generation
+      if (req.user!.role === 'recruiter') {
+        await useCredits(req.user!.id, 1);
+      }
+
       res.json({
         message: 'AI summary generated successfully',
         summary: {
@@ -1236,6 +1355,13 @@ export function registerApplicationsRoutes(
           strengths: summaryResult.strengths,
           concerns: summaryResult.concerns,
           keyHighlights: summaryResult.keyHighlights,
+          // Skill analysis
+          requiredSkillsMatched: summaryResult.requiredSkillsMatched,
+          requiredSkillsMissing: summaryResult.requiredSkillsMissing,
+          requiredSkillsMatchPercentage: summaryResult.requiredSkillsMatchPercentage,
+          requiredSkillsDepthNotes: summaryResult.requiredSkillsDepthNotes,
+          goodToHaveSkillsMatched: summaryResult.goodToHaveSkillsMatched,
+          goodToHaveSkillsMissing: summaryResult.goodToHaveSkillsMissing,
           modelVersion: summaryResult.model_version,
           computedAt: new Date(),
           cost: parseFloat(costUsd),
@@ -1272,6 +1398,7 @@ export function registerApplicationsRoutes(
     "/api/ai/summary/limit-status",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         const userId = req.user!.id;
@@ -1331,10 +1458,15 @@ export function registerApplicationsRoutes(
     "/api/applications/bulk/ai-summary/queue",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
+    requireFeatureAccess(FEATURES.AI_CONTENT),
     csrfProtection,
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         const userId = req.user!.id;
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(userId);
+        const userOrgId = orgResult?.organization.id;
 
         // Validate request body
         const bodySchema = z.object({
@@ -1426,7 +1558,7 @@ export function registerApplicationsRoutes(
         type AppWithJob = typeof apps[number];
         const accessibleApps: AppWithJob[] = [];
         for (const app of apps) {
-          const hasAccess = await storage.isRecruiterOnJob(app.jobId, userId);
+          const hasAccess = await storage.isRecruiterOnJob(app.jobId, userId, userOrgId);
           if (hasAccess) {
             accessibleApps.push(app);
           }
@@ -1450,6 +1582,21 @@ export function registerApplicationsRoutes(
             totalCount: 0,
           });
           return;
+        }
+
+        // Check AI credits for recruiters before queueing
+        if (req.user!.role === 'recruiter') {
+          const creditsPerSummary = getCreditCostForOperation('summary');
+          const requiredCredits = appsNeedingSummary.length * creditsPerSummary;
+          const creditCheck = await hasEnoughCredits(userId, requiredCredits);
+          if (!creditCheck) {
+            res.status(403).json({
+              error: 'Insufficient AI credits',
+              message: 'You do not have enough AI credits to process this batch.',
+              requiredCredits,
+            });
+            return;
+          }
         }
 
         // Check rate limit against applications needing summaries
@@ -1633,7 +1780,7 @@ export function registerApplicationsRoutes(
   // ============= APPLICATION FEEDBACK =============
 
   // Get feedback for an application
-  app.get("/api/applications/:id/feedback", requireRole(['recruiter', 'super_admin', 'hiring_manager']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/applications/:id/feedback", requireRole(['recruiter', 'super_admin', 'hiring_manager']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -1685,7 +1832,7 @@ export function registerApplicationsRoutes(
   });
 
   // Add feedback to an application
-  app.post("/api/applications/:id/feedback", csrfProtection, requireRole(['recruiter', 'super_admin', 'hiring_manager']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.post("/api/applications/:id/feedback", csrfProtection, requireRole(['recruiter', 'super_admin', 'hiring_manager']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -1746,7 +1893,7 @@ export function registerApplicationsRoutes(
   // ============= APPLICATION STATUS MANAGEMENT =============
 
   // Update single application status (recruiters/admins only)
-  app.patch("/api/applications/:id/status", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.patch("/api/applications/:id/status", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -1769,6 +1916,10 @@ export function registerApplicationsRoutes(
       }
 
       if (req.user!.role !== 'super_admin') {
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
+
         const application = await storage.getApplication(applicationId);
         if (!application) {
           res.status(404).json({ error: "Application not found" });
@@ -1776,7 +1927,7 @@ export function registerApplicationsRoutes(
         }
 
         // Use isRecruiterOnJob to check access (includes co-recruiters)
-        const hasAccess = await storage.isRecruiterOnJob(application.jobId, req.user!.id);
+        const hasAccess = await storage.isRecruiterOnJob(application.jobId, req.user!.id, userOrgId);
         if (!hasAccess) {
           res.status(403).json({ error: "Access denied" });
           return;
@@ -1798,7 +1949,7 @@ export function registerApplicationsRoutes(
   });
 
   // Bulk update application statuses (recruiters/admins only)
-  app.patch("/api/applications/bulk", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.patch("/api/applications/bulk", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { applicationIds, status, notes } = req.body;
 
@@ -1815,6 +1966,10 @@ export function registerApplicationsRoutes(
       }
 
       if (req.user!.role !== 'super_admin') {
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
+
         const applicationsList = await Promise.all(
           applicationIds.map(id => storage.getApplication(parseInt(id)))
         );
@@ -1827,7 +1982,7 @@ export function registerApplicationsRoutes(
 
         // Check access to each unique job (includes co-recruiters)
         const accessChecks = await Promise.all(
-          jobIds.map(jobId => storage.isRecruiterOnJob(jobId, req.user!.id))
+          jobIds.map(jobId => storage.isRecruiterOnJob(jobId, req.user!.id, userOrgId))
         );
 
         if (accessChecks.includes(false)) {
@@ -1854,7 +2009,7 @@ export function registerApplicationsRoutes(
   });
 
   // Mark application as viewed (automatically updates status to 'reviewed')
-  app.patch("/api/applications/:id/view", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.patch("/api/applications/:id/view", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -1869,6 +2024,10 @@ export function registerApplicationsRoutes(
       }
 
       if (req.user!.role !== 'super_admin') {
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
+
         const application = await storage.getApplication(applicationId);
         if (!application) {
           res.status(404).json({ error: "Application not found" });
@@ -1876,7 +2035,7 @@ export function registerApplicationsRoutes(
         }
 
         // Use isRecruiterOnJob to check access (includes co-recruiters)
-        const hasAccess = await storage.isRecruiterOnJob(application.jobId, req.user!.id);
+        const hasAccess = await storage.isRecruiterOnJob(application.jobId, req.user!.id, userOrgId);
         if (!hasAccess) {
           res.status(403).json({ error: "Access denied" });
           return;
@@ -1898,7 +2057,7 @@ export function registerApplicationsRoutes(
   });
 
   // Mark application as downloaded (when resume is downloaded)
-  app.patch("/api/applications/:id/download", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.patch("/api/applications/:id/download", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -1913,6 +2072,10 @@ export function registerApplicationsRoutes(
       }
 
       if (req.user!.role !== 'super_admin') {
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
+
         const application = await storage.getApplication(applicationId);
         if (!application) {
           res.status(404).json({ error: "Application not found" });
@@ -1920,7 +2083,7 @@ export function registerApplicationsRoutes(
         }
 
         // Use isRecruiterOnJob to check access (includes co-recruiters)
-        const hasAccess = await storage.isRecruiterOnJob(application.jobId, req.user!.id);
+        const hasAccess = await storage.isRecruiterOnJob(application.jobId, req.user!.id, userOrgId);
         if (!hasAccess) {
           res.status(403).json({ error: "Access denied" });
           return;
@@ -1976,7 +2139,7 @@ export function registerApplicationsRoutes(
   });
 
   // Get applications received for recruiter's jobs
-  app.get("/api/my-applications-received", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/my-applications-received", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const applicationsList = await storage.getRecruiterApplications(req.user!.id);
       res.json(applicationsList);
@@ -1987,7 +2150,7 @@ export function registerApplicationsRoutes(
   });
 
   // Get global candidates view (aggregated by email)
-  app.get("/api/candidates", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/candidates", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { q: search, minRating, tags } = req.query;
 

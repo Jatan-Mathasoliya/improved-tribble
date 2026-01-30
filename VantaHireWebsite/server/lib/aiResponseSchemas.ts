@@ -63,6 +63,17 @@ export const CandidateSummaryResponseSchema = z.object({
   suggestedAction: z.enum(['advance', 'hold', 'reject']).default('hold'),
   suggestedActionReason: z.string().default(''),
   keyHighlights: z.array(z.string()).default([]),
+  // Skill analysis fields
+  requiredSkillsAnalysis: z.object({
+    matched: z.array(z.string()).default([]),
+    missing: z.array(z.string()).default([]),
+    matchPercentage: z.number().min(0).max(100).transform(val => Math.round(val)).default(0),
+    depthNotes: z.string().default(''),
+  }).optional().default({ matched: [], missing: [], matchPercentage: 0, depthNotes: '' }),
+  goodToHaveSkillsAnalysis: z.object({
+    matched: z.array(z.string()).default([]),
+    missing: z.array(z.string()).default([]),
+  }).optional().default({ matched: [], missing: [] }),
 });
 export type CandidateSummaryResponse = z.infer<typeof CandidateSummaryResponseSchema>;
 

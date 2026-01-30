@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { useAIFeatures } from "@/hooks/use-ai-features";
 import { useAsyncFitScoring } from "@/hooks/use-async-fit-scoring";
-import { Redirect } from "wouter";
+import { Redirect, Link } from "wouter";
 import { 
   User, 
   MapPin, 
@@ -80,12 +80,13 @@ export default function CandidateDashboard() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Redirect if not authenticated
+  // Redirect if not authenticated - candidates go to candidate auth page
   if (!user) {
-    return <Redirect to="/auth" />;
+    return <Redirect to="/candidate-auth" />;
   }
 
-  const { data: profile, isLoading: profileLoading } = useQuery<UserProfile | null>({
+  // API returns { user, profile } structure - extract the profile part
+  const { data: profileResponse, isLoading: profileLoading } = useQuery<{ user: any; profile: UserProfile } | null>({
     queryKey: ["/api/profile"],
     queryFn: async () => {
       const response = await fetch("/api/profile");
@@ -93,6 +94,7 @@ export default function CandidateDashboard() {
       return response.json();
     },
   });
+  const profile = profileResponse?.profile ?? null;
 
   const { data: applications, isLoading: applicationsLoading } = useQuery<ApplicationWithJob[]>({
     queryKey: ["/api/my-applications"],
@@ -999,9 +1001,11 @@ export default function CandidateDashboard() {
                     <p className="text-muted-foreground mb-4">
                       Start applying to jobs to track your progress here.
                     </p>
-                    <Button className="bg-primary hover:bg-primary/80">
-                      Browse Jobs
-                    </Button>
+                    <Link href="/jobs">
+                      <Button className="bg-primary hover:bg-primary/80">
+                        Browse Jobs
+                      </Button>
+                    </Link>
                   </CardContent>
                 </Card>
               )}

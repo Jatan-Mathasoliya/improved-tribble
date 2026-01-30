@@ -25,6 +25,12 @@ const AdminConsultantsPage = lazy(() => import("@/pages/admin-consultants-page")
 const AdminAIUsagePage = lazy(() => import("@/pages/admin-ai-usage-page"));
 const AdminAIJobsPage = lazy(() => import("@/pages/admin-ai-jobs-page"));
 const AdminFeedbackPage = lazy(() => import("@/pages/admin-feedback-page"));
+const AdminDomainClaimsPage = lazy(() => import("@/pages/admin-domain-claims-page"));
+const AdminOrganizationsPage = lazy(() => import("@/pages/admin-organizations-page"));
+const AdminOrganizationDetailPage = lazy(() => import("@/pages/admin-organization-detail-page"));
+const AdminFeaturesPage = lazy(() => import("@/pages/admin-features-page"));
+const AdminOrgControlsPage = lazy(() => import("@/pages/admin-org-controls-page"));
+const AdminSubscriptionsPage = lazy(() => import("@/pages/admin-subscriptions-page"));
 const ApplicationManagementPage = lazy(() => import("@/pages/application-management-page"));
 const JobEditPage = lazy(() => import("@/pages/job-edit-page"));
 const JobPipelinePage = lazy(() => import("@/pages/job-pipeline-page"));
@@ -52,10 +58,23 @@ const RegisterHiringManager = lazy(() => import("@/pages/register-hiring-manager
 const AcceptCoRecruiter = lazy(() => import("@/pages/accept-co-recruiter"));
 const RegisterCoRecruiter = lazy(() => import("@/pages/register-co-recruiter"));
 
+// Organization pages
+const OrgChoicePage = lazy(() => import("@/pages/org-choice-page"));
+const OrgSettingsPage = lazy(() => import("@/pages/org-settings-page"));
+const OrgTeamPage = lazy(() => import("@/pages/org-team-page"));
+const OrgBillingPage = lazy(() => import("@/pages/org-billing-page"));
+const OrgDomainRequestPage = lazy(() => import("@/pages/org-domain-request-page"));
+const OrgAnalyticsPage = lazy(() => import("@/pages/org-analytics-page"));
+const SeatRemovedPage = lazy(() => import("@/pages/seat-removed-page"));
+
+// Onboarding
+const OnboardingPage = lazy(() => import("@/pages/onboarding-page"));
+
 // Marketing pages
 const ProductPage = lazy(() => import("@/pages/product-page"));
 const FeaturesPage = lazy(() => import("@/pages/features-page"));
 const PricingPage = lazy(() => import("@/pages/pricing-page"));
+const ClaimPage = lazy(() => import("@/pages/claim-page"));
 const ComparePage = lazy(() => import("@/pages/compare-page"));
 const UseCasesPage = lazy(() => import("@/pages/use-cases-page"));
 const DemoPage = lazy(() => import("@/pages/demo-page"));
@@ -75,6 +94,7 @@ function Router() {
       <Route path="/product" component={ProductPage} />
       <Route path="/features" component={FeaturesPage} />
       <Route path="/pricing" component={PricingPage} />
+      <Route path="/claim/:token" component={ClaimPage} />
       <Route path="/compare" component={ComparePage} />
       <Route path="/use-cases" component={UseCasesPage} />
       <Route path="/demo" component={DemoPage} />
@@ -82,6 +102,7 @@ function Router() {
       <Route path="/auth" component={AuthPage} />
       <Route path="/recruiter-auth" component={RecruiterAuth} />
       <Route path="/candidate-auth" component={CandidateAuth} />
+      <ProtectedRoute path="/onboarding" component={OnboardingPage} requiredRole={['recruiter']} />
       <Route path="/form/:token" component={PublicFormPage} />
       <Route path="/client-shortlist/:token" component={ClientShortlistPage} />
       <Route path="/privacy-policy" component={PrivacyPolicyPage} />
@@ -122,7 +143,21 @@ function Router() {
       <ProtectedRoute path="/admin/ai-usage" component={AdminAIUsagePage} requiredRole={['super_admin']} />
       <ProtectedRoute path="/admin/ai-jobs" component={AdminAIJobsPage} requiredRole={['super_admin']} />
       <ProtectedRoute path="/admin/feedback" component={AdminFeedbackPage} requiredRole={['super_admin']} />
+      <ProtectedRoute path="/admin/domain-claims" component={AdminDomainClaimsPage} requiredRole={['super_admin']} />
+      <ProtectedRoute path="/admin/organizations/:id" component={AdminOrganizationDetailPage} requiredRole={['super_admin']} />
+      <ProtectedRoute path="/admin/organizations" component={AdminOrganizationsPage} requiredRole={['super_admin']} />
+      <ProtectedRoute path="/admin/subscriptions" component={AdminSubscriptionsPage} requiredRole={['super_admin']} />
+      <ProtectedRoute path="/admin/org-controls" component={AdminOrgControlsPage} requiredRole={['super_admin']} />
+      <Route path="/admin/features">{() => <Redirect to="/admin/org-controls" />}</Route>
       <ProtectedRoute path="/analytics" component={JobAnalyticsDashboard} requiredRole={['recruiter', 'super_admin']} />
+      {/* Organization management routes */}
+      <ProtectedRoute path="/org/choice" component={OrgChoicePage} requiredRole={['recruiter']} />
+      <ProtectedRoute path="/org/settings" component={OrgSettingsPage} requiredRole={['recruiter']} />
+      <ProtectedRoute path="/org/team" component={OrgTeamPage} requiredRole={['recruiter']} />
+      <ProtectedRoute path="/org/billing" component={OrgBillingPage} requiredRole={['recruiter']} />
+      <ProtectedRoute path="/org/domain" component={OrgDomainRequestPage} requiredRole={['recruiter']} />
+      <ProtectedRoute path="/org/analytics" component={OrgAnalyticsPage} requiredRole={['recruiter']} />
+      <ProtectedRoute path="/blocked/seat-removed" component={SeatRemovedPage} requiredRole={['recruiter']} />
       {/* Dev-only UI gallery route */}
       {DevUIGallery && (
         <Route path="/dev/ui-gallery">

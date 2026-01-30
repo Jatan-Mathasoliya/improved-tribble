@@ -1,4 +1,5 @@
 import { storage } from './storage';
+import { getUserOrganization } from './lib/organizationService';
 
 export async function createTestJobs() {
   try {
@@ -8,6 +9,14 @@ export async function createTestJobs() {
       console.log('Test recruiter not found, skipping job creation');
       return;
     }
+
+    // Get recruiter's organization
+    const orgResult = await getUserOrganization(recruiter.id);
+    if (!orgResult) {
+      console.log('Test recruiter not in an organization, skipping job creation');
+      return;
+    }
+    const organizationId = orgResult.organization.id;
 
     // Check if test jobs already exist
     const existingJobs = await storage.getJobsByUser(recruiter.id);
@@ -24,7 +33,8 @@ export async function createTestJobs() {
       description: "We're looking for an experienced full stack developer to join our growing team. You'll work on cutting-edge web applications using React, Node.js, and modern cloud technologies. The ideal candidate has 5+ years of experience and a passion for building scalable solutions.",
       skills: ["React", "Node.js", "TypeScript", "AWS", "PostgreSQL", "GraphQL"],
       deadline: new Date("2025-02-15"),
-      postedBy: recruiter.id
+      postedBy: recruiter.id,
+      organizationId,
     });
 
     // Create test job 2 - Pending
@@ -35,7 +45,8 @@ export async function createTestJobs() {
       description: "Join our design team to create beautiful and intuitive user experiences. We need someone who can take complex problems and turn them into simple, elegant solutions. Experience with Figma, user research, and design systems is essential.",
       skills: ["Figma", "User Research", "Prototyping", "Design Systems", "Adobe Creative Suite"],
       deadline: new Date("2025-01-30"),
-      postedBy: recruiter.id
+      postedBy: recruiter.id,
+      organizationId,
     });
 
     // Create test job 3 - Pending
@@ -46,7 +57,8 @@ export async function createTestJobs() {
       description: "We're seeking a DevOps engineer to help us scale our infrastructure and improve our deployment processes. You'll work with Kubernetes, Docker, and cloud platforms to ensure our applications run smoothly at scale.",
       skills: ["Kubernetes", "Docker", "AWS", "Terraform", "CI/CD", "Monitoring"],
       deadline: new Date("2025-02-28"),
-      postedBy: recruiter.id
+      postedBy: recruiter.id,
+      organizationId,
     });
 
     console.log('Test jobs created successfully:');

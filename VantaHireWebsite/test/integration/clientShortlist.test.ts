@@ -232,10 +232,10 @@ describe('Client Shortlist API Integration Tests', () => {
 
   // ==================== View Shortlist Endpoint (Public) ====================
 
-  describe('GET /client-shortlist/:token', () => {
+  describe('GET /api/client-shortlist/:token', () => {
     it('should not require authentication', async () => {
       const response = await request(app)
-        .get('/client-shortlist/invalidtoken123');
+        .get('/api/client-shortlist/invalidtoken123');
 
       // Should not be 401 (public endpoint)
       expect(response.status).not.toBe(401);
@@ -247,7 +247,7 @@ describe('Client Shortlist API Integration Tests', () => {
       const fakeToken = 'a'.repeat(64); // Valid format but doesn't exist
 
       const response = await request(app)
-        .get(`/client-shortlist/${fakeToken}`);
+        .get(`/api/client-shortlist/${fakeToken}`);
 
       // Should be 410 (not found) or 500 (db error if schema not migrated)
       expect([410, 500]).toContain(response.status);
@@ -258,7 +258,7 @@ describe('Client Shortlist API Integration Tests', () => {
 
     it('should return 400 for malformed token', async () => {
       const response = await request(app)
-        .get('/client-shortlist/short-token');
+        .get('/api/client-shortlist/short-token');
 
       // Should be 400/410 or 500 (db error if schema not migrated)
       expect([400, 410, 500]).toContain(response.status);
@@ -268,7 +268,7 @@ describe('Client Shortlist API Integration Tests', () => {
       // This test assumes a shortlist exists in the database
       // In real scenario, you'd create one first or use a known test token
       const response = await request(app)
-        .get('/client-shortlist/validtokenhere123456789012345678901234567890123456789012');
+        .get('/api/client-shortlist/validtokenhere123456789012345678901234567890123456789012');
 
       if (response.status === 200) {
         // Verify response structure
@@ -299,7 +299,7 @@ describe('Client Shortlist API Integration Tests', () => {
       // This would require creating an expired shortlist in the test setup
       // For now, verify the endpoint handles expiry correctly
       const response = await request(app)
-        .get('/client-shortlist/expiredtoken12345678901234567890123456789012345678901');
+        .get('/api/client-shortlist/expiredtoken12345678901234567890123456789012345678901');
 
       // Should be 410 for expired or not found (or 500 if schema not migrated)
       expect([410, 404, 500]).toContain(response.status);
@@ -307,7 +307,7 @@ describe('Client Shortlist API Integration Tests', () => {
 
     it('should not expose sensitive candidate data', async () => {
       const response = await request(app)
-        .get('/client-shortlist/validtokenhere123456789012345678901234567890123456789012');
+        .get('/api/client-shortlist/validtokenhere123456789012345678901234567890123456789012');
 
       if (response.status === 200) {
         // Candidates should not have internal IDs, user IDs, etc.
@@ -323,10 +323,10 @@ describe('Client Shortlist API Integration Tests', () => {
 
   // ==================== Submit Feedback Endpoint (Public) ====================
 
-  describe('POST /client-shortlist/:token/feedback', () => {
+  describe('POST /api/client-shortlist/:token/feedback', () => {
     it('should not require authentication', async () => {
       const response = await request(app)
-        .post('/client-shortlist/invalidtoken123/feedback')
+        .post('/api/client-shortlist/invalidtoken123/feedback')
         .send({
           applicationId: 1,
           recommendation: 'advance',
@@ -342,7 +342,7 @@ describe('Client Shortlist API Integration Tests', () => {
       const fakeToken = 'b'.repeat(64);
 
       const response = await request(app)
-        .post(`/client-shortlist/${fakeToken}/feedback`)
+        .post(`/api/client-shortlist/${fakeToken}/feedback`)
         .send({
           applicationId: 1,
           recommendation: 'advance',
@@ -354,7 +354,7 @@ describe('Client Shortlist API Integration Tests', () => {
 
     it('should validate feedback schema', async () => {
       const response = await request(app)
-        .post('/client-shortlist/validtoken/feedback')
+        .post('/api/client-shortlist/validtoken/feedback')
         .send({
           // Missing required fields
         });
@@ -369,7 +369,7 @@ describe('Client Shortlist API Integration Tests', () => {
 
     it('should validate recommendation is enum value', async () => {
       const response = await request(app)
-        .post('/client-shortlist/validtoken/feedback')
+        .post('/api/client-shortlist/validtoken/feedback')
         .send({
           applicationId: 1,
           recommendation: 'invalid-value',
@@ -384,7 +384,7 @@ describe('Client Shortlist API Integration Tests', () => {
 
       for (const recommendation of validRecommendations) {
         const response = await request(app)
-          .post('/client-shortlist/validtoken/feedback')
+          .post('/api/client-shortlist/validtoken/feedback')
           .send({
             applicationId: 1,
             recommendation,
@@ -397,7 +397,7 @@ describe('Client Shortlist API Integration Tests', () => {
 
     it('should accept optional notes and rating', async () => {
       const response = await request(app)
-        .post('/client-shortlist/validtoken/feedback')
+        .post('/api/client-shortlist/validtoken/feedback')
         .send({
           applicationId: 1,
           recommendation: 'advance',
@@ -416,7 +416,7 @@ describe('Client Shortlist API Integration Tests', () => {
 
     it('should validate rating is between 1-5', async () => {
       const response = await request(app)
-        .post('/client-shortlist/validtoken/feedback')
+        .post('/api/client-shortlist/validtoken/feedback')
         .send({
           applicationId: 1,
           recommendation: 'advance',
@@ -429,7 +429,7 @@ describe('Client Shortlist API Integration Tests', () => {
 
     it('should accept bulk feedback submission', async () => {
       const response = await request(app)
-        .post('/client-shortlist/validtoken/feedback')
+        .post('/api/client-shortlist/validtoken/feedback')
         .send([
           {
             applicationId: 1,
@@ -453,7 +453,7 @@ describe('Client Shortlist API Integration Tests', () => {
 
     it('should validate application is in the shortlist', async () => {
       const response = await request(app)
-        .post('/client-shortlist/validtoken/feedback')
+        .post('/api/client-shortlist/validtoken/feedback')
         .send({
           applicationId: 999999, // Not in shortlist
           recommendation: 'advance',
@@ -467,7 +467,7 @@ describe('Client Shortlist API Integration Tests', () => {
       const longNotes = 'a'.repeat(2001);
 
       const response = await request(app)
-        .post('/client-shortlist/validtoken/feedback')
+        .post('/api/client-shortlist/validtoken/feedback')
         .send({
           applicationId: 1,
           recommendation: 'advance',
@@ -861,7 +861,7 @@ describe('Client Shortlist API Integration Tests', () => {
       const sqlInjectionToken = "' OR '1'='1";
 
       const response = await request(app)
-        .get(`/client-shortlist/${sqlInjectionToken}`);
+        .get(`/api/client-shortlist/${sqlInjectionToken}`);
 
       // Should safely handle and return 410, 400, or 500 (db error if schema not migrated)
       expect([400, 410, 500]).toContain(response.status);
@@ -871,7 +871,7 @@ describe('Client Shortlist API Integration Tests', () => {
       const shortToken = 'abc123';
 
       const response = await request(app)
-        .get(`/client-shortlist/${shortToken}`);
+        .get(`/api/client-shortlist/${shortToken}`);
 
       // Should reject malformed token (or 500 if schema not migrated)
       expect([400, 410, 500]).toContain(response.status);
@@ -880,7 +880,7 @@ describe('Client Shortlist API Integration Tests', () => {
     it('should respond to shortlist endpoints within reasonable time', async () => {
       const start = Date.now();
       const response = await request(app)
-        .get('/client-shortlist/validtoken123456789012345678901234567890123456789012');
+        .get('/api/client-shortlist/validtoken123456789012345678901234567890123456789012');
       const duration = Date.now() - start;
 
       // Should respond within 5 seconds
@@ -893,13 +893,13 @@ describe('Client Shortlist API Integration Tests', () => {
       // Simulate concurrent submissions
       const promises = [
         request(app)
-          .post(`/client-shortlist/${token}/feedback`)
+          .post(`/api/client-shortlist/${token}/feedback`)
           .send({ applicationId: 1, recommendation: 'advance' }),
         request(app)
-          .post(`/client-shortlist/${token}/feedback`)
+          .post(`/api/client-shortlist/${token}/feedback`)
           .send({ applicationId: 2, recommendation: 'hold' }),
         request(app)
-          .post(`/client-shortlist/${token}/feedback`)
+          .post(`/api/client-shortlist/${token}/feedback`)
           .send({ applicationId: 3, recommendation: 'reject' }),
       ];
 
@@ -913,7 +913,7 @@ describe('Client Shortlist API Integration Tests', () => {
 
     it('should not leak internal application IDs in public shortlist', async () => {
       const response = await request(app)
-        .get('/client-shortlist/validtoken123456789012345678901234567890123456789012');
+        .get('/api/client-shortlist/validtoken123456789012345678901234567890123456789012');
 
       if (response.status === 200) {
         // Check that we're not exposing too much data

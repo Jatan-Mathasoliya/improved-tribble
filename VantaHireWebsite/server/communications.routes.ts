@@ -8,11 +8,14 @@
  */
 
 import type { Express, Request, Response, NextFunction } from 'express';
-import { eq } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from './db';
 import { storage } from './storage';
-import { requireRole } from './auth';
+import { requireRole, requireSeat } from './auth';
+import { getUserOrganization } from './lib/organizationService';
+import { requireFeatureAccess, FEATURES } from './lib/featureGating';
+import { hasEnoughCredits, useCredits } from './lib/creditService';
 import {
   insertEmailTemplateSchema,
   type InsertEmailTemplate,
@@ -49,20 +52,29 @@ export function registerCommunicationsRoutes(
 ): void {
   // ============= EMAIL TEMPLATE ROUTES =============
 
-  // Get all email templates
-  app.get("/api/email-templates", requireRole(['recruiter', 'super_admin']), async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Get all email templates - filtered by organization
+  app.get("/api/email-templates", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const list = await storage.getEmailTemplates();
+      const orgResult = await getUserOrganization(req.user!.id);
+      const organizationId = req.user!.role === 'super_admin' && !orgResult ? undefined : orgResult?.organization.id;
+      const list = await storage.getEmailTemplates(organizationId);
       res.json(list);
       return;
     } catch (e) { next(e); }
   });
 
-  // Create email template
-  app.post("/api/email-templates", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Create email template - with organizationId
+  app.post("/api/email-templates", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const orgResult = await getUserOrganization(req.user!.id);
+      const organizationId = orgResult?.organization.id;
+
       const body = insertEmailTemplateSchema.parse(req.body as InsertEmailTemplate);
-      const tpl = await storage.createEmailTemplate({ ...body, createdBy: req.user!.id });
+      const tpl = await storage.createEmailTemplate({
+        ...body,
+        createdBy: req.user!.id,
+        ...(organizationId != null && { organizationId }),
+      });
       res.status(201).json(tpl);
       return;
     } catch (e) {
@@ -74,9 +86,12 @@ export function registerCommunicationsRoutes(
     }
   });
 
-  // Update email template (admin-only approval for default flag)
-  app.patch("/api/email-templates/:id", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Update email template (admin-only approval for default flag) - requires seat
+  app.patch("/api/email-templates/:id", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const orgResult = await getUserOrganization(req.user!.id);
+      const organizationId = req.user!.role === 'super_admin' && !orgResult ? undefined : orgResult?.organization.id;
+
       const idParam = req.params.id;
       if (!idParam) {
         res.status(400).json({ error: "Missing ID parameter" });
@@ -116,10 +131,14 @@ export function registerCommunicationsRoutes(
         return;
       }
 
+      const updateWhere = organizationId == null
+        ? eq(emailTemplates.id, templateId)
+        : and(eq(emailTemplates.id, templateId), eq(emailTemplates.organizationId, organizationId));
+
       const [updated] = await db
         .update(emailTemplates)
         .set(updates)
-        .where(eq(emailTemplates.id, templateId))
+        .where(updateWhere)
         .returning();
 
       if (!updated) {
@@ -136,8 +155,8 @@ export function registerCommunicationsRoutes(
 
   // ============= EMAIL SENDING ROUTES =============
 
-  // Send email using template
-  app.post("/api/applications/:id/send-email", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Send email using template - requires seat
+  app.post("/api/applications/:id/send-email", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -159,7 +178,7 @@ export function registerCommunicationsRoutes(
         res.status(404).json({ error: 'application not found' });
         return;
       }
-      const [tpl] = (await storage.getEmailTemplates()).filter(t => t.id === templateId);
+      const [tpl] = (await storage.getEmailTemplates(appData.organizationId ?? undefined)).filter(t => t.id === templateId);
       if (!tpl) {
         res.status(404).json({ error: 'template not found' });
         return;
@@ -172,13 +191,25 @@ export function registerCommunicationsRoutes(
 
   // ============= AI EMAIL DRAFT ROUTES =============
 
-  // Generate AI-drafted email from template
-  app.post("/api/email/draft", aiAnalysisRateLimit, csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Generate AI-drafted email from template - requires seat, AI feature access, and credits
+  app.post("/api/email/draft", aiAnalysisRateLimit, csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), requireFeatureAccess(FEATURES.AI_CONTENT), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       // Check if AI features are enabled
       if (!isAIEnabled()) {
         res.status(503).json({ error: 'AI features are not enabled. Please configure GROQ_API_KEY.' });
         return;
+      }
+
+      // Check AI credits for recruiters
+      if (req.user!.role === 'recruiter') {
+        const creditCheck = await hasEnoughCredits(req.user!.id, 1);
+        if (!creditCheck) {
+          res.status(403).json({
+            error: 'Insufficient AI credits',
+            message: 'You have run out of AI credits for this billing period.',
+          });
+          return;
+        }
       }
 
       // Validate request body
@@ -191,25 +222,25 @@ export function registerCommunicationsRoutes(
       const { templateId, applicationId, tone } = parsed.data;
       const startTime = Date.now();
 
-      // 1. Fetch email template
-      const templates = await storage.getEmailTemplates();
-      const template = templates.find((t: any) => t.id === templateId);
-      if (!template) {
-        res.status(404).json({ error: 'Email template not found' });
-        return;
-      }
-
-      // 2. Fetch application
+      // 1. Fetch application
       const application = await storage.getApplication(applicationId);
       if (!application) {
         res.status(404).json({ error: 'Application not found' });
         return;
       }
 
-      // 3. Fetch job details
+      // 2. Fetch job details
       const job = await storage.getJob(application.jobId);
       if (!job) {
         res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+
+      // 3. Fetch email template
+      const templates = await storage.getEmailTemplates(job.organizationId ?? undefined);
+      const template = templates.find((t: any) => t.id === templateId);
+      if (!template) {
+        res.status(404).json({ error: 'Email template not found' });
         return;
       }
 
@@ -244,9 +275,15 @@ export function registerCommunicationsRoutes(
           tone,
           durationMs,
         },
+        ...(job.organizationId != null && { organizationId: job.organizationId }),
       });
 
-      // 7. Return the drafted email
+      // 7. Deduct credit for recruiters
+      if (req.user!.role === 'recruiter') {
+        await useCredits(req.user!.id, 1);
+      }
+
+      // 8. Return the drafted email
       res.json({
         subject: draftResult.subject,
         body: draftResult.body,

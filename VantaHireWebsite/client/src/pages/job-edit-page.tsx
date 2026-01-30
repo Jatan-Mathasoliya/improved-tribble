@@ -3,7 +3,7 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Redirect } from "wouter";
-import { ArrowLeft, Save, AlertCircle, IndianRupee, GraduationCap, Sparkles, Briefcase, Tag, Plus, X } from "lucide-react";
+import { ArrowLeft, Save, AlertCircle, IndianRupee, GraduationCap, Sparkles, Briefcase, Tag, Plus, X, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { Client, Job } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -279,7 +280,17 @@ export default function JobEditPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="description">Description</Label>
+                  <Label htmlFor="description" className="flex items-center gap-2">
+                    Description
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>A detailed job description improves AI candidate matching. Include responsibilities, team culture, and specific requirements for best results.</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </Label>
                   <Textarea
                     id="description"
                     value={formData.description}
@@ -307,6 +318,14 @@ export default function JobEditPage() {
                   <Label className="flex items-center gap-2">
                     <IndianRupee className="h-4 w-4 text-muted-foreground" />
                     Salary / Pay (Optional)
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Providing salary range helps attract candidates with matching expectations. This remains private unless you choose to share it.</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </Label>
                   <div className="flex gap-3">
                     <div className="flex-1">
@@ -350,6 +369,14 @@ export default function JobEditPage() {
                   <Label className="flex items-center gap-2">
                     <Tag className="h-4 w-4 text-muted-foreground" />
                     Required Skills (Non-negotiable)
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>AI will recommend "hold" or "reject" for candidates missing these skills. Only add truly non-negotiable skills here.</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </Label>
                   <div className="flex gap-2 mb-3">
                     <Input
@@ -393,6 +420,14 @@ export default function JobEditPage() {
                   <Label className="flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-muted-foreground" />
                     Good to Have Skills (Optional)
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>These give candidates bonus points but won't disqualify them. Great for nice-to-have technologies or soft skills.</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </Label>
                   <div className="flex gap-2 mb-3">
                     <Input
@@ -436,6 +471,14 @@ export default function JobEditPage() {
                   <Label className="flex items-center gap-2">
                     <GraduationCap className="h-4 w-4 text-muted-foreground" />
                     Education Requirement (Optional)
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>Specify education requirements to help AI assess candidate qualifications more accurately.</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </Label>
                   <Input
                     type="text"
@@ -450,6 +493,14 @@ export default function JobEditPage() {
                   <Label className="flex items-center gap-2">
                     <Briefcase className="h-4 w-4 text-muted-foreground" />
                     Preferred Experience (Years)
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Info className="h-4 w-4 text-muted-foreground cursor-help" />
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs">
+                        <p>AI uses experience requirements to match candidates at the right seniority level for this role.</p>
+                      </TooltipContent>
+                    </Tooltip>
                   </Label>
                   <Input
                     type="number"

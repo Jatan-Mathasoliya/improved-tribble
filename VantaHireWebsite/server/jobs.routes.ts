@@ -11,9 +11,12 @@
 import type { Express, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { storage } from './storage';
-import { requireAuth, requireRole } from './auth';
+import { requireAuth, requireRole, requireSeat } from './auth';
 import { insertJobSchema, applications, applicationStageHistory, jobs, pipelineStages, users, jobRecruiters } from '@shared/schema';
+import { getUserOrganization } from './lib/organizationService';
+import { updateMemberActivity } from './lib/membershipService';
 import { getHiringMetrics } from './lib/analyticsHelper';
+import { requireFeatureAccess, FEATURES } from './lib/featureGating';
 import {
   analyzeJobDescription,
   generateJobScore,
@@ -69,7 +72,7 @@ export function registerJobsRoutes(
   // ============= JOB CRUD ROUTES =============
 
   // Create a new job posting (recruiters/admins only)
-  app.post("/api/jobs", jobPostingRateLimit, csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.post("/api/jobs", jobPostingRateLimit, csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       // Block unverified recruiters from posting jobs
       if (req.user!.role === 'recruiter' && !req.user!.emailVerified) {
@@ -80,10 +83,22 @@ export function registerJobsRoutes(
         return;
       }
 
+      // Get user's organization - required for all job creation
+      const orgResult = await getUserOrganization(req.user!.id);
+      if (!orgResult) {
+        res.status(400).json({ error: 'You must be part of an organization to create jobs' });
+        return;
+      }
+      const organizationId = orgResult.organization.id;
+
+      // Update member activity
+      await updateMemberActivity(req.user!.id);
+
       const jobData = insertJobSchema.parse(req.body);
       const job = await storage.createJob({
         ...jobData,
-        postedBy: req.user!.id
+        postedBy: req.user!.id,
+        organizationId,
       });
 
       res.status(201).json(job);
@@ -178,8 +193,25 @@ export function registerJobsRoutes(
       const isExpired = job.expiresAt && new Date(job.expiresAt) < new Date();
       const isInactive = !job.isActive || job.status !== 'approved';
 
-      // For expired/inactive jobs, return 410 Gone with job info for SEO transition
-      if (isExpired || isInactive) {
+      // Allow owners/admins/org members to view inactive jobs
+      let isOwnerOrAdmin = false;
+      if (req.user) {
+        if (req.user.role === 'super_admin') {
+          isOwnerOrAdmin = true;
+        } else if (req.user.role === 'recruiter') {
+          if (job.postedBy === req.user.id) {
+            isOwnerOrAdmin = true;
+          } else if (job.organizationId != null) {
+            const orgResult = await getUserOrganization(req.user.id);
+            if (orgResult?.organization.id === job.organizationId) {
+              isOwnerOrAdmin = true;
+            }
+          }
+        }
+      }
+
+      // For expired/inactive jobs, return 410 Gone only for public visitors
+      if ((isExpired || isInactive) && !isOwnerOrAdmin) {
         res.status(410).json({
           error: 'Job is no longer available',
           code: isExpired ? 'EXPIRED' : 'INACTIVE',
@@ -229,7 +261,7 @@ export function registerJobsRoutes(
   });
 
   // Update a job (recruiters can only edit their own jobs)
-  app.patch("/api/jobs/:id", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.patch("/api/jobs/:id", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -249,8 +281,13 @@ export function registerJobsRoutes(
         return;
       }
 
+      // Get user's organization for access control
+      const orgResult = await getUserOrganization(req.user!.id);
+      const userOrgId = orgResult?.organization.id;
+
       // Verify user has access (primary recruiter, co-recruiter, or super_admin)
-      const hasAccess = await storage.isRecruiterOnJob(existingJob.id, req.user!.id);
+      // Also checks that the job belongs to the user's current organization
+      const hasAccess = await storage.isRecruiterOnJob(existingJob.id, req.user!.id, userOrgId);
       if (!hasAccess) {
         res.status(403).json({ error: 'Access denied' });
         return;
@@ -430,7 +467,7 @@ export function registerJobsRoutes(
   });
 
   // Get audit log for a job
-  app.get("/api/jobs/:id/audit-log", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/jobs/:id/audit-log", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -450,7 +487,11 @@ export function registerJobsRoutes(
         return;
       }
 
-      const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id);
+      // Get user's organization for access control
+      const orgResult = await getUserOrganization(req.user!.id);
+      const userOrgId = orgResult?.organization.id;
+
+      const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id, userOrgId);
       if (!hasAccess) {
         res.status(403).json({ error: 'Access denied' });
         return;
@@ -464,11 +505,33 @@ export function registerJobsRoutes(
     }
   });
 
-  // Get jobs posted by current user (recruiters only)
-  app.get("/api/my-jobs", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Get jobs accessible to current user (own + co-recruiter assigned)
+  // Per plan: All org members see own jobs + co-recruiter assigned, super_admin sees all
+  app.get("/api/my-jobs", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const jobs = await storage.getJobsByUser(req.user!.id);
-      res.json(jobs);
+      const user = req.user!;
+
+      // Super admin sees all jobs across all orgs
+      if (user.role === 'super_admin') {
+        const allJobs = await storage.getAllJobsWithDetails();
+        res.json(allJobs);
+        return;
+      }
+
+      // Get user's organization to filter jobs and update activity
+      const orgResult = await getUserOrganization(user.id);
+      const organizationId = orgResult?.organization.id;
+
+      // Update member activity
+      if (orgResult) {
+        await updateMemberActivity(user.id);
+      }
+
+      // For recruiters, get jobs they own + are co-recruited on
+      // Only shows jobs from their current organization (enforces data isolation after leaving)
+      const userJobs = await storage.getJobsByUser(user.id, organizationId);
+
+      res.json(userJobs);
       return;
     } catch (error) {
       next(error);
@@ -476,7 +539,7 @@ export function registerJobsRoutes(
   });
 
   // Update job status (activate/deactivate)
-  app.patch("/api/jobs/:id/status", csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.patch("/api/jobs/:id/status", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -496,8 +559,12 @@ export function registerJobsRoutes(
         return;
       }
 
+      // Get user's organization for access control
+      const orgResult = await getUserOrganization(req.user!.id);
+      const userOrgId = orgResult?.organization.id;
+
       // Verify user has access to this job
-      const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id);
+      const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id, userOrgId);
       if (!hasAccess) {
         res.status(403).json({ error: 'Access denied' });
         return;
@@ -522,8 +589,9 @@ export function registerJobsRoutes(
   /**
    * GET /api/analytics/hiring-metrics
    * Get comprehensive hiring metrics: time-to-fill, time-in-stage, conversion rates
+   * Restricted to organization owners and admins only (super_admin sees all)
    */
-  app.get("/api/analytics/hiring-metrics", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/analytics/hiring-metrics", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { startDate, endDate, jobId } = req.query;
 
@@ -556,8 +624,31 @@ export function registerJobsRoutes(
         }
       }
 
-      // Get metrics from analytics helper
-      const metrics = await getHiringMetrics(parsedStartDate, parsedEndDate, parsedJobId);
+      // Super admin can see platform-wide analytics (pass 0 to skip org filter)
+      if (req.user!.role === 'super_admin') {
+        // For super_admin, use a special call that doesn't filter by org
+        const metrics = await getHiringMetrics(0, parsedStartDate, parsedEndDate, parsedJobId);
+        res.json(metrics);
+        return;
+      }
+
+      // Get user's organization and verify owner/admin role
+      const orgResult = await getUserOrganization(req.user!.id);
+      if (!orgResult) {
+        res.status(403).json({ error: 'You must belong to an organization to view analytics' });
+        return;
+      }
+
+      const { organization, membership } = orgResult;
+
+      // Restrict analytics to owner/admin only
+      if (membership.role !== 'owner' && membership.role !== 'admin') {
+        res.status(403).json({ error: 'Analytics are only available to organization owners and admins' });
+        return;
+      }
+
+      // Get metrics from analytics helper, scoped to organization
+      const metrics = await getHiringMetrics(organization.id, parsedStartDate, parsedEndDate, parsedJobId);
 
       res.json(metrics);
       return;
@@ -569,12 +660,34 @@ export function registerJobsRoutes(
 
   /**
    * GET /api/analytics/job-health
-   * Returns health summaries for all jobs for the current user.
+   * Returns health summaries for all jobs for the organization.
+   * Restricted to organization owners and admins only.
    */
-  app.get("/api/analytics/job-health", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/analytics/job-health", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const userId = req.user!.role === 'super_admin' ? undefined : req.user!.id;
-      const jobHealth = await storage.getJobHealthSummary(userId);
+      // Super admin can see all
+      if (req.user!.role === 'super_admin') {
+        const jobHealth = await storage.getJobHealthSummary();
+        res.json(jobHealth);
+        return;
+      }
+
+      // Get user's organization and verify owner/admin role
+      const orgResult = await getUserOrganization(req.user!.id);
+      if (!orgResult) {
+        res.status(403).json({ error: 'You must belong to an organization to view analytics' });
+        return;
+      }
+
+      const { organization, membership } = orgResult;
+
+      // Restrict analytics to owner/admin only
+      if (membership.role !== 'owner' && membership.role !== 'admin') {
+        res.status(403).json({ error: 'Analytics are only available to organization owners and admins' });
+        return;
+      }
+
+      const jobHealth = await storage.getJobHealthSummary(undefined, organization.id);
       res.json(jobHealth);
       return;
     } catch (error) {
@@ -585,12 +698,34 @@ export function registerJobsRoutes(
 
   /**
    * GET /api/analytics/nudges
-   * Returns jobs needing attention and stale candidate counts for the current user.
+   * Returns jobs needing attention and stale candidate counts for the organization.
+   * Restricted to organization owners and admins only.
    */
-  app.get("/api/analytics/nudges", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/analytics/nudges", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const userId = req.user!.role === 'super_admin' ? undefined : req.user!.id;
-      const nudges = await storage.getAnalyticsNudges(userId);
+      // Super admin can see all
+      if (req.user!.role === 'super_admin') {
+        const nudges = await storage.getAnalyticsNudges();
+        res.json(nudges);
+        return;
+      }
+
+      // Get user's organization and verify owner/admin role
+      const orgResult = await getUserOrganization(req.user!.id);
+      if (!orgResult) {
+        res.status(403).json({ error: 'You must belong to an organization to view analytics' });
+        return;
+      }
+
+      const { organization, membership } = orgResult;
+
+      // Restrict analytics to owner/admin only
+      if (membership.role !== 'owner' && membership.role !== 'admin') {
+        res.status(403).json({ error: 'Analytics are only available to organization owners and admins' });
+        return;
+      }
+
+      const nudges = await storage.getAnalyticsNudges(undefined, organization.id);
       res.json(nudges);
       return;
     } catch (error) {
@@ -602,11 +737,33 @@ export function registerJobsRoutes(
   /**
    * GET /api/analytics/clients
    * Returns aggregated metrics per client (roles, applications, placements)
+   * Restricted to organization owners and admins only.
    */
-  app.get("/api/analytics/clients", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/analytics/clients", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const userId = req.user!.role === 'super_admin' ? undefined : req.user!.id;
-      const metrics = await storage.getClientAnalytics(userId);
+      // Super admin can see all
+      if (req.user!.role === 'super_admin') {
+        const metrics = await storage.getClientAnalytics();
+        res.json(metrics);
+        return;
+      }
+
+      // Get user's organization and verify owner/admin role
+      const orgResult = await getUserOrganization(req.user!.id);
+      if (!orgResult) {
+        res.status(403).json({ error: 'You must belong to an organization to view analytics' });
+        return;
+      }
+
+      const { organization, membership } = orgResult;
+
+      // Restrict analytics to owner/admin only
+      if (membership.role !== 'owner' && membership.role !== 'admin') {
+        res.status(403).json({ error: 'Analytics are only available to organization owners and admins' });
+        return;
+      }
+
+      const metrics = await storage.getClientAnalytics(undefined, organization.id);
       res.json(metrics);
       return;
     } catch (error) {
@@ -616,10 +773,32 @@ export function registerJobsRoutes(
   });
 
   // Get job analytics for admin/recruiter
-  app.get("/api/analytics/jobs", requireAuth, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Restricted to organization owners and admins only.
+  app.get("/api/analytics/jobs", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const userId = req.user!.role === 'super_admin' ? undefined : req.user!.id;
-      const jobsWithAnalytics = await storage.getJobsWithAnalytics(userId);
+      // Super admin can see all
+      if (req.user!.role === 'super_admin') {
+        const jobsWithAnalytics = await storage.getJobsWithAnalytics();
+        res.json(jobsWithAnalytics);
+        return;
+      }
+
+      // Get user's organization and verify owner/admin role
+      const orgResult = await getUserOrganization(req.user!.id);
+      if (!orgResult) {
+        res.status(403).json({ error: 'You must belong to an organization to view analytics' });
+        return;
+      }
+
+      const { organization, membership } = orgResult;
+
+      // Restrict analytics to owner/admin only
+      if (membership.role !== 'owner' && membership.role !== 'admin') {
+        res.status(403).json({ error: 'Analytics are only available to organization owners and admins' });
+        return;
+      }
+
+      const jobsWithAnalytics = await storage.getJobsWithAnalytics(undefined, organization.id);
       res.json(jobsWithAnalytics);
       return;
     } catch (error) {
@@ -628,7 +807,7 @@ export function registerJobsRoutes(
   });
 
   // Get analytics for a specific job
-  app.get("/api/analytics/jobs/:id", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/analytics/jobs/:id", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -641,11 +820,29 @@ export function registerJobsRoutes(
         return;
       }
 
-      // Verify user has access (primary recruiter, co-recruiter, or super_admin)
-      const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id);
-      if (!hasAccess) {
-        res.status(403).json({ error: "Access denied" });
-        return;
+      if (req.user!.role !== 'super_admin') {
+        const orgResult = await getUserOrganization(req.user!.id);
+        if (!orgResult) {
+          res.status(403).json({ error: 'You must belong to an organization to view analytics' });
+          return;
+        }
+
+        const { organization, membership } = orgResult;
+        if (membership.role !== 'owner' && membership.role !== 'admin') {
+          res.status(403).json({ error: 'Analytics are only available to organization owners and admins' });
+          return;
+        }
+
+        const job = await storage.getJob(jobId);
+        if (!job) {
+          res.status(404).json({ error: 'Job not found' });
+          return;
+        }
+
+        if (job.organizationId !== organization.id) {
+          res.status(403).json({ error: 'Access denied' });
+          return;
+        }
       }
 
       const analytics = await storage.getJobAnalytics(jobId);
@@ -662,12 +859,34 @@ export function registerJobsRoutes(
   });
 
   // Export analytics data as CSV
-  app.get("/api/analytics/export", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  // Restricted to organization owners and admins only.
+  app.get("/api/analytics/export", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { format = 'json', dateRange = '30' } = req.query;
-      const userId = req.user!.role === 'super_admin' ? undefined : req.user!.id;
 
-      const jobs = await storage.getJobsWithAnalytics(userId);
+      let jobs;
+
+      // Super admin can export all
+      if (req.user!.role === 'super_admin') {
+        jobs = await storage.getJobsWithAnalytics();
+      } else {
+        // Get user's organization and verify owner/admin role
+        const orgResult = await getUserOrganization(req.user!.id);
+        if (!orgResult) {
+          res.status(403).json({ error: 'You must belong to an organization to export analytics' });
+          return;
+        }
+
+        const { organization, membership } = orgResult;
+
+        // Restrict analytics export to owner/admin only
+        if (membership.role !== 'owner' && membership.role !== 'admin') {
+          res.status(403).json({ error: 'Analytics export is only available to organization owners and admins' });
+          return;
+        }
+
+        jobs = await storage.getJobsWithAnalytics(undefined, organization.id);
+      }
 
       // Filter by date range
       const days = parseInt(dateRange as string) || 30;
@@ -739,8 +958,9 @@ export function registerJobsRoutes(
   /**
    * GET /api/analytics/dropoff
    * Returns stage counts and conversion rates for the selected window.
+   * Restricted to organization owners and admins only.
    */
-  app.get("/api/analytics/dropoff", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/analytics/dropoff", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { startDate, endDate, jobId } = req.query;
 
@@ -761,15 +981,28 @@ export function registerJobsRoutes(
         if (!Number.isNaN(idNum) && idNum > 0) parsedJobId = idNum;
       }
 
-      // Fetch relevant applications (scoped to recruiter if not admin)
+      // Fetch relevant applications (scoped by organization)
       const whereClauses: any[] = [];
       if (parsedStart) whereClauses.push(gte(applications.appliedAt, parsedStart));
       if (parsedEnd) whereClauses.push(lte(applications.appliedAt, parsedEnd));
       if (parsedJobId) whereClauses.push(eq(applications.jobId, parsedJobId));
+
+      // Super admin sees all; others must be org owner/admin
+      let organizationId: number | undefined;
       if (req.user!.role !== 'super_admin') {
-        // Include jobs where user is primary OR co-recruiter
-        const coRecruiterJobIds = db.select({ id: jobRecruiters.jobId }).from(jobRecruiters).where(eq(jobRecruiters.recruiterId, req.user!.id));
-        whereClauses.push(or(eq(jobs.postedBy, req.user!.id), inArray(jobs.id, coRecruiterJobIds)));
+        const orgResult = await getUserOrganization(req.user!.id);
+        if (!orgResult) {
+          res.status(403).json({ error: 'You must belong to an organization to view analytics' });
+          return;
+        }
+        const { organization, membership } = orgResult;
+        if (membership.role !== 'owner' && membership.role !== 'admin') {
+          res.status(403).json({ error: 'Analytics are only available to organization owners and admins' });
+          return;
+        }
+        // Filter by organization
+        organizationId = organization.id;
+        whereClauses.push(eq(jobs.organizationId, organization.id));
       }
 
       let appsQuery = db
@@ -789,8 +1022,8 @@ export function registerJobsRoutes(
         appliedAt: Date;
       }>;
 
-      // Load stages in order
-      const stages = await db.select().from(pipelineStages).orderBy(pipelineStages.order);
+      // Load stages in order (scoped to org when applicable)
+      const stages = await storage.getPipelineStages(organizationId);
 
       const counts = stages.map((stage: typeof stages[number]) => ({
         stageId: stage.id,
@@ -822,8 +1055,9 @@ export function registerJobsRoutes(
   /**
    * GET /api/analytics/source-performance
    * Applications, shortlist/interview, hires grouped by source.
+   * Restricted to organization owners and admins only.
    */
-  app.get("/api/analytics/source-performance", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/analytics/source-performance", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { startDate, endDate, jobId } = req.query;
       let parsedStart: Date | undefined;
@@ -846,10 +1080,21 @@ export function registerJobsRoutes(
       if (parsedStart) whereClauses.push(gte(applications.appliedAt, parsedStart));
       if (parsedEnd) whereClauses.push(lte(applications.appliedAt, parsedEnd));
       if (parsedJobId) whereClauses.push(eq(applications.jobId, parsedJobId));
+
+      // Super admin sees all; others must be org owner/admin
       if (req.user!.role !== 'super_admin') {
-        // Include jobs where user is primary OR co-recruiter
-        const coRecruiterJobIds = db.select({ id: jobRecruiters.jobId }).from(jobRecruiters).where(eq(jobRecruiters.recruiterId, req.user!.id));
-        whereClauses.push(or(eq(jobs.postedBy, req.user!.id), inArray(jobs.id, coRecruiterJobIds)));
+        const orgResult = await getUserOrganization(req.user!.id);
+        if (!orgResult) {
+          res.status(403).json({ error: 'You must belong to an organization to view analytics' });
+          return;
+        }
+        const { organization, membership } = orgResult;
+        if (membership.role !== 'owner' && membership.role !== 'admin') {
+          res.status(403).json({ error: 'Analytics are only available to organization owners and admins' });
+          return;
+        }
+        // Filter by organization
+        whereClauses.push(eq(jobs.organizationId, organization.id));
       }
 
       let sourceQuery = db
@@ -892,7 +1137,7 @@ export function registerJobsRoutes(
    * GET /api/analytics/hm-feedback
    * Approximate Hiring Manager feedback latency from review stage entry to next movement.
    */
-  app.get("/api/analytics/hm-feedback", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/analytics/hm-feedback", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { startDate, endDate, jobId, reviewStageIds, nextStageIds, waitBuckets } = req.query;
       let parsedStart: Date | undefined;
@@ -927,8 +1172,33 @@ export function registerJobsRoutes(
       const explicitNextIds = parseIds(nextStageIds);
       const bucketDefs = parseIds(waitBuckets).sort((a, b) => a - b); // e.g., [2,3,5]
 
-      // Identify review stages by name match
-      const stages = await db.select().from(pipelineStages);
+      let organizationId: number | undefined;
+
+      const whereClauses: any[] = [];
+      if (parsedStart) whereClauses.push(gte(applicationStageHistory.changedAt, parsedStart));
+      if (parsedEnd) whereClauses.push(lte(applicationStageHistory.changedAt, parsedEnd));
+      if (parsedJobId) whereClauses.push(eq(applications.jobId, parsedJobId));
+
+      // Super admin sees all; others must be org owner/admin
+      if (req.user!.role !== 'super_admin') {
+        const orgResult = await getUserOrganization(req.user!.id);
+        if (!orgResult) {
+          res.status(403).json({ error: 'You must belong to an organization to view analytics' });
+          return;
+        }
+        const { organization, membership } = orgResult;
+        if (membership.role !== 'owner' && membership.role !== 'admin') {
+          res.status(403).json({ error: 'Analytics are only available to organization owners and admins' });
+          return;
+        }
+        // Filter by organization - owners/admins see all org jobs
+        organizationId = organization.id;
+        whereClauses.push(eq(jobs.organizationId, organization.id));
+      }
+
+      // Identify review stages by name match (scoped to org when applicable)
+      const stages = await storage.getPipelineStages(organizationId);
+
       const reviewStageIdsResolved = explicitReviewIds.length
         ? explicitReviewIds
         : stages
@@ -938,16 +1208,6 @@ export function registerJobsRoutes(
       if (reviewStageIdsResolved.length === 0) {
         res.json({ averageDays: null, waitingCount: 0, sampleSize: 0, buckets: [] });
         return;
-      }
-
-      const whereClauses: any[] = [];
-      if (parsedStart) whereClauses.push(gte(applicationStageHistory.changedAt, parsedStart));
-      if (parsedEnd) whereClauses.push(lte(applicationStageHistory.changedAt, parsedEnd));
-      if (parsedJobId) whereClauses.push(eq(applications.jobId, parsedJobId));
-      if (req.user!.role !== 'super_admin') {
-        // Include jobs where user is primary OR co-recruiter
-        const coRecruiterJobIds = db.select({ id: jobRecruiters.jobId }).from(jobRecruiters).where(eq(jobRecruiters.recruiterId, req.user!.id));
-        whereClauses.push(or(eq(jobs.postedBy, req.user!.id), inArray(jobs.id, coRecruiterJobIds)));
       }
 
       let historyQuery = db
@@ -1036,8 +1296,9 @@ export function registerJobsRoutes(
   /**
    * GET /api/analytics/performance
    * Recruiter & hiring manager performance metrics.
+   * Restricted to organization owners and admins only.
    */
-  app.get("/api/analytics/performance", requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/analytics/performance", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { startDate, endDate, jobId } = req.query;
       let parsedStart: Date | undefined;
@@ -1056,13 +1317,24 @@ export function registerJobsRoutes(
         if (!Number.isNaN(idNum) && idNum > 0) parsedJobId = idNum;
       }
 
-      // Scoped jobs for current user (recruiter sees own or co-recruited jobs)
+      // Scoped jobs by organization
       const jobFilters: any[] = [];
       if (parsedJobId) jobFilters.push(eq(jobs.id, parsedJobId));
+
+      // Super admin sees all; others must be org owner/admin
       if (req.user!.role !== 'super_admin') {
-        // Include jobs where user is primary OR co-recruiter
-        const coRecruiterJobIds = db.select({ id: jobRecruiters.jobId }).from(jobRecruiters).where(eq(jobRecruiters.recruiterId, req.user!.id));
-        jobFilters.push(or(eq(jobs.postedBy, req.user!.id), inArray(jobs.id, coRecruiterJobIds)));
+        const orgResult = await getUserOrganization(req.user!.id);
+        if (!orgResult) {
+          res.status(403).json({ error: 'You must belong to an organization to view analytics' });
+          return;
+        }
+        const { organization, membership } = orgResult;
+        if (membership.role !== 'owner' && membership.role !== 'admin') {
+          res.status(403).json({ error: 'Analytics are only available to organization owners and admins' });
+          return;
+        }
+        // Filter by organization
+        jobFilters.push(eq(jobs.organizationId, organization.id));
       }
 
       let jobsQuery = db
@@ -1294,7 +1566,7 @@ export function registerJobsRoutes(
 
   // AI-powered job description analysis
   // Note: CSRF removed - endpoint is auth-protected, role-protected, rate-limited, and read-only
-  app.post("/api/ai/analyze-job-description", aiAnalysisRateLimit, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.post("/api/ai/analyze-job-description", aiAnalysisRateLimit, requireRole(['recruiter', 'super_admin']), requireSeat(), requireFeatureAccess(FEATURES.AI_CONTENT), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       // Check if AI features are enabled
       if (!isAIEnabled()) {
@@ -1339,7 +1611,7 @@ export function registerJobsRoutes(
   });
 
   // AI-powered job scoring
-  app.post("/api/ai/score-job", aiAnalysisRateLimit, csrfProtection, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.post("/api/ai/score-job", aiAnalysisRateLimit, csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), requireFeatureAccess(FEATURES.AI_CONTENT), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       // Check if AI features are enabled
       if (!isAIEnabled()) {
@@ -1396,7 +1668,7 @@ export function registerJobsRoutes(
   });
 
   // AI-enhanced pipeline action suggestions
-  app.post("/api/ai/enhance-pipeline-actions", aiAnalysisRateLimit, requireRole(['recruiter', 'super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.post("/api/ai/enhance-pipeline-actions", aiAnalysisRateLimit, requireRole(['recruiter', 'super_admin']), requireSeat(), requireFeatureAccess(FEATURES.AI_CONTENT), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       // Check if AI features are enabled
       if (!isAIEnabled()) {

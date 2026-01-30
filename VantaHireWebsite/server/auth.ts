@@ -11,6 +11,7 @@ import { pool } from "./db";
 import { getEmailService } from "./simpleEmailService";
 import rateLimit from "express-rate-limit";
 import { computeProfileCompletion } from "./lib/profileCompletion";
+import { getOrganizationInviteByToken } from "./lib/organizationService";
 
 declare global {
   namespace Express {
@@ -51,7 +52,12 @@ const passwordResetLimiter = rateLimit({
 });
 
 // Send verification email
-async function sendVerificationEmail(email: string, token: string, firstName?: string | null): Promise<boolean> {
+async function sendVerificationEmail(
+  email: string,
+  token: string,
+  firstName?: string | null,
+  inviteToken?: string | null
+): Promise<boolean> {
   const emailService = await getEmailService();
   if (!emailService) {
     console.error('Email service not available');
@@ -59,7 +65,9 @@ async function sendVerificationEmail(email: string, token: string, firstName?: s
   }
 
   const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
-  const verifyUrl = `${baseUrl}/verify-email/${token}`;
+  const verifyUrl = inviteToken
+    ? `${baseUrl}/verify-email/${token}?invite=${inviteToken}`
+    : `${baseUrl}/verify-email/${token}`;
   const name = firstName || 'there';
 
   try {
@@ -103,7 +111,7 @@ async function hashPassword(password: string) {
   return `${buf.toString("hex")}.${salt}`;
 }
 
-async function comparePasswords(supplied: string, stored: string) {
+export async function comparePasswords(supplied: string, stored: string) {
   const parts = stored.split(".");
   if (parts.length !== 2 || !parts[0] || !parts[1]) {
     throw new Error("Invalid stored password format");
@@ -133,6 +141,80 @@ export function requireAuth(req: any, res: any, next: any) {
     return res.status(401).json({ error: 'Authentication required' });
   }
   next();
+}
+
+// Organization context middleware - attaches org info to request
+// Use after requireAuth for routes that need org context
+export function withOrgContext() {
+  return async (req: any, res: any, next: any) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Skip org check for non-recruiter roles
+    if (req.user.role !== 'recruiter') {
+      return next();
+    }
+
+    try {
+      // Lazy import to avoid circular dependency
+      const { getUserOrganization } = await import('./lib/organizationService');
+      const orgResult = await getUserOrganization(req.user.id);
+
+      if (orgResult) {
+        req.organization = orgResult.organization;
+        req.membership = orgResult.membership;
+      }
+
+      next();
+    } catch (error) {
+      console.error('Error loading org context:', error);
+      next();
+    }
+  };
+}
+
+// Middleware to require an active seat (blocks unseated members)
+export function requireSeat() {
+  return async (req: any, res: any, next: any) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    // Skip seat check for non-recruiter roles
+    if (req.user.role !== 'recruiter') {
+      return next();
+    }
+
+    try {
+      const { getUserOrganization } = await import('./lib/organizationService');
+      const orgResult = await getUserOrganization(req.user.id);
+
+      if (!orgResult) {
+        // User not in org - block access, require onboarding first
+        return res.status(403).json({
+          error: 'Organization required',
+          code: 'NO_ORGANIZATION',
+          message: 'You must create or join an organization to continue.',
+        });
+      }
+
+      if (!orgResult.membership.seatAssigned) {
+        return res.status(403).json({
+          error: 'Seat required',
+          code: 'NO_SEAT',
+          message: 'Your seat has been removed. Contact your organization owner.',
+        });
+      }
+
+      req.organization = orgResult.organization;
+      req.membership = orgResult.membership;
+      next();
+    } catch (error) {
+      console.error('Error checking seat:', error);
+      res.status(500).json({ error: 'Failed to verify seat status' });
+    }
+  };
 }
 
 export function setupAuth(app: Express) {
@@ -195,7 +277,7 @@ export function setupAuth(app: Express) {
 
   app.post("/api/register", async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { username, password, firstName, lastName, role = 'recruiter', invitationToken, coRecruiterInvitationToken } = req.body;
+      const { username, password, firstName, lastName, role = 'recruiter', invitationToken, coRecruiterInvitationToken, inviteToken } = req.body;
 
       if (!username || !password) {
         res.status(400).json({ error: "Email and password are required" });
@@ -341,26 +423,72 @@ export function setupAuth(app: Express) {
         console.log(`Hiring manager invitation accepted: ${hiringManagerInvitation.email} registered as user ${user.id}`);
       } else if (coRecruiterInvitation) {
         // Add user to the job's recruiters and mark invitation as accepted
-        await storage.addJobRecruiter(coRecruiterInvitation.jobId, user.id, coRecruiterInvitation.invitedBy);
+        await storage.addJobRecruiter(coRecruiterInvitation.jobId, user.id, coRecruiterInvitation.invitedBy, coRecruiterInvitation.organizationId ?? undefined);
         await storage.updateCoRecruiterInvitationStatus(coRecruiterInvitation.id, 'accepted');
         console.log(`Co-recruiter invitation accepted: ${coRecruiterInvitation.email} registered as user ${user.id}, added to job ${coRecruiterInvitation.jobId}`);
       }
 
-      // Generate verification token and save hash
-      const { token, hash } = generateVerificationToken();
-      const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-      await storage.setVerificationToken(user.id, hash, expires);
+      // Check if user is registering via a valid organization invite
+      // If so, auto-verify them since receiving the invite proves email ownership
+      let validOrgInvite = false;
+      if (inviteToken) {
+        try {
+          const orgInvite = await getOrganizationInviteByToken(inviteToken);
+          if (orgInvite &&
+              new Date() <= orgInvite.expiresAt &&
+              orgInvite.email.toLowerCase() === username.toLowerCase()) {
+            validOrgInvite = true;
+            // Auto-verify user - they proved email ownership by receiving the invite
+            await storage.verifyUserEmail(user.id);
+            console.log(`Auto-verified user ${user.id} via org invite (invite proves email ownership)`);
+          }
+        } catch (err) {
+          // If invite validation fails, fall through to normal verification flow
+          console.log('Org invite validation failed, requiring email verification:', err);
+        }
+      }
 
-      // Send verification email (fire-and-forget, don't block registration)
-      sendVerificationEmail(username, token, firstName).catch((err) => {
-        console.error('Failed to send verification email:', err);
-      });
+      if (validOrgInvite) {
+        // Auto-login since they're verified
+        req.login(user, (err) => {
+          if (err) {
+            console.error('Auto-login failed after org invite registration:', err);
+            res.status(201).json({
+              message: 'Registration successful. Please log in to continue.',
+              requiresVerification: false,
+            });
+            return;
+          }
+          res.status(201).json({
+            message: 'Registration successful.',
+            requiresVerification: false,
+            user: {
+              id: user.id,
+              username: user.username,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              role: user.role,
+              emailVerified: true,
+            },
+          });
+        });
+      } else {
+        // Normal flow: require email verification
+        const { token, hash } = generateVerificationToken();
+        const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        await storage.setVerificationToken(user.id, hash, expires);
 
-      // Don't auto-login - require email verification first
-      res.status(201).json({
-        message: 'Registration successful. Please check your email to verify your account.',
-        requiresVerification: true,
-      });
+        // Send verification email (fire-and-forget, don't block registration)
+        // Pass inviteToken for organization invites to preserve it through verification flow
+        sendVerificationEmail(username, token, firstName, inviteToken).catch((err) => {
+          console.error('Failed to send verification email:', err);
+        });
+
+        res.status(201).json({
+          message: 'Registration successful. Please check your email to verify your account.',
+          requiresVerification: true,
+        });
+      }
     } catch (error) {
       next(error);
     }
@@ -573,7 +701,7 @@ export function setupAuth(app: Express) {
   // Resend verification email endpoint (rate-limited)
   app.post("/api/resend-verification", resendVerificationLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { email } = req.body;
+      const { email, inviteToken } = req.body;
       if (!email) {
         res.status(400).json({ error: "Email is required" });
         return;
@@ -596,8 +724,8 @@ export function setupAuth(app: Express) {
       const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
       await storage.setVerificationToken(user.id, hash, expires);
 
-      // Send verification email
-      await sendVerificationEmail(email, token, user.firstName);
+      // Send verification email - pass inviteToken to preserve org invite through verification
+      await sendVerificationEmail(email, token, user.firstName, inviteToken);
 
       res.json({ message: "If an account exists with this email, a verification link has been sent." });
     } catch (error) {

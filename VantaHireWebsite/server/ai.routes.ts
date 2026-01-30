@@ -10,7 +10,7 @@
  */
 
 import type { Express, Request, Response, NextFunction } from 'express';
-import { requireAuth, requireRole } from './auth';
+import { requireAuth, requireRole, requireSeat } from './auth';
 import { doubleCsrfProtection } from './csrf';
 import rateLimit from 'express-rate-limit';
 import { db } from './db';
@@ -29,6 +29,9 @@ import { z } from 'zod';
 import { getGroqClient } from './lib/groqClient';
 import { getDashboardAiInsights, DashboardAiPayload } from "./lib/aiDashboard";
 import { randomUUID } from 'crypto';
+import { getUserOrganization } from './lib/organizationService';
+import { getMemberCreditBalance, useCredits, hasEnoughCredits } from './lib/creditService';
+import { requireFeatureAccess, FEATURES } from './lib/featureGating';
 
 const AI_MATCH_ENABLED = process.env.AI_MATCH_ENABLED === 'true';
 const AI_RESUME_ENABLED = process.env.AI_RESUME_ENABLED === 'true';
@@ -179,6 +182,8 @@ export function registerAIRoutes(app: Express): void {
     "/api/ai/generate",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
+    requireFeatureAccess(FEATURES.AI_CONTENT),
     genericGenerationLimiter,
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
@@ -186,6 +191,21 @@ export function registerAIRoutes(app: Express): void {
           res.status(503).json({ error: "AI service unavailable" });
           return;
         }
+
+        // Check AI credits for recruiters (super_admin bypasses credit check)
+        if (req.user!.role === 'recruiter') {
+          const creditCheck = await hasEnoughCredits(req.user!.id, 1);
+          if (!creditCheck) {
+            res.status(403).json({
+              error: 'Insufficient AI credits',
+              message: 'You have run out of AI credits for this billing period.',
+            });
+            return;
+          }
+          // Deduct 1 credit for AI generation
+          await useCredits(req.user!.id, 1);
+        }
+
         const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt : '';
         if (!prompt) {
           res.status(400).json({ error: 'Prompt is required' });
@@ -219,9 +239,25 @@ export function registerAIRoutes(app: Express): void {
     "/api/ai/dashboard-insights",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
+    requireFeatureAccess(FEATURES.AI_CONTENT),
     genericGenerationLimiter,
     async (req: Request, res: Response): Promise<void> => {
       try {
+        // Check AI credits for recruiters (super_admin bypasses credit check)
+        if (req.user!.role === 'recruiter') {
+          const creditCheck = await hasEnoughCredits(req.user!.id, 1);
+          if (!creditCheck) {
+            res.status(403).json({
+              error: 'Insufficient AI credits',
+              message: 'You have run out of AI credits for this billing period.',
+            });
+            return;
+          }
+          // Deduct 1 credit for dashboard insights
+          await useCredits(req.user!.id, 1);
+        }
+
         const payload = req.body as DashboardAiPayload;
         if (!payload || !payload.pipelineHealthScore || !Array.isArray(payload.jobsNeedingAttention)) {
           res.status(400).json({ error: "Invalid payload" });
@@ -595,7 +631,13 @@ export function registerAIRoutes(app: Express): void {
         }
 
         // Compute fit score
-        const result = await computeFitScore(resumeText, jdDigest, userId, applicationId);
+        const result = await computeFitScore(
+          resumeText,
+          jdDigest,
+          userId,
+          applicationId,
+          application.job.organizationId ?? undefined
+        );
 
         // Update application with fit score
         await db
@@ -806,7 +848,13 @@ export function registerAIRoutes(app: Express): void {
                 .where(eq(jobs.id, app.job.id));
             }
 
-            const result = await computeFitScore(resumeText, jdDigest, userId, appId);
+            const result = await computeFitScore(
+              resumeText,
+              jdDigest,
+              userId,
+              appId,
+              app.job.organizationId ?? undefined
+            );
 
             // Update application
             await db

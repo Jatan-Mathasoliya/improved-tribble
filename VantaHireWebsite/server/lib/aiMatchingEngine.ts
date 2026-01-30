@@ -164,7 +164,8 @@ async function recordUsage(
   tokensIn: number,
   tokensOut: number,
   costUsd: number,
-  metadata: Record<string, any>
+  metadata: Record<string, any>,
+  organizationId?: number
 ): Promise<void> {
   await db.insert(userAiUsage).values({
     userId,
@@ -173,6 +174,7 @@ async function recordUsage(
     tokensOut,
     costUsd: costUsd.toFixed(8),
     metadata,
+    ...(organizationId != null && { organizationId }),
   });
 }
 
@@ -189,7 +191,8 @@ export async function computeFitScore(
   resumeText: string,
   jdDigest: JDDigest,
   userId: number,
-  applicationId: number
+  applicationId: number,
+  organizationId?: number
 ): Promise<FitComputationResult> {
   const startTime = Date.now();
 
@@ -269,7 +272,7 @@ Be objective and concise. Provide 3-5 specific reasons.`;
       durationMs,
       score,
       label,
-    });
+    }, organizationId);
 
     return {
       score,

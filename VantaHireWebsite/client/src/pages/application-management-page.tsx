@@ -1321,10 +1321,29 @@ export default function ApplicationManagementPage() {
             </p>
           </div>
 
+          {/* Pending Approval Alert */}
+          {job.status === 'pending' && (
+            <Alert className="mb-4 border-warning/50 bg-warning/10">
+              <Clock className="h-4 w-4 text-warning" />
+              <AlertTitle className="text-warning-foreground">Pending Approval</AlertTitle>
+              <AlertDescription className="text-muted-foreground">
+                This job is waiting for admin approval. It will become visible to candidates once approved.
+                You can still prepare by setting up pipeline stages and reviewing any existing applications.
+              </AlertDescription>
+            </Alert>
+          )}
+
           {/* Job Header */}
           <Card className="mb-4 shadow-sm">
             <CardHeader>
-              <CardTitle className="text-foreground text-xl">{job.title}</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-foreground text-xl">{job.title}</CardTitle>
+                {job.status === 'pending' && (
+                  <Badge className="bg-warning/10 text-warning-foreground border-warning/30">
+                    Pending Approval
+                  </Badge>
+                )}
+              </div>
               <CardDescription>
                 <div className="flex items-center gap-4 flex-wrap">
                   <span className="flex items-center gap-1">

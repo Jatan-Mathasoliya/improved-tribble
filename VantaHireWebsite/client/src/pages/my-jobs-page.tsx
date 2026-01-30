@@ -161,17 +161,44 @@ export default function MyJobsPage() {
               <div className="space-y-4">
                 {filteredJobs.length === 0 ? (
                   <div className="text-center py-8">
-                    <Briefcase className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
-                    <p className="text-muted-foreground mb-2">
-                      {searchQuery || activeTab !== "all"
-                        ? "No jobs match your filters"
-                        : "No job postings yet"}
-                    </p>
-                    {!searchQuery && activeTab === "all" && (
-                      <Button className="mt-4" onClick={() => setLocation("/jobs/post")}>
-                        <Plus className="h-4 w-4 mr-2" />
-                        Post Your First Job
-                      </Button>
+                    {/* Show pending approval message when user has pending jobs but none in current filter */}
+                    {pendingCount > 0 && activeTab !== "pending" && !searchQuery ? (
+                      <>
+                        <Clock className="h-12 w-12 text-warning/50 mx-auto mb-4" />
+                        <p className="text-foreground font-medium mb-2">
+                          {pendingCount === 1
+                            ? "Your job is pending approval"
+                            : `You have ${pendingCount} jobs pending approval`}
+                        </p>
+                        <p className="text-muted-foreground text-sm mb-4">
+                          Jobs will appear here once approved by an admin. You'll be notified when they're ready.
+                        </p>
+                        <div className="flex gap-3 justify-center">
+                          <Button variant="outline" onClick={() => setActiveTab("pending")}>
+                            <Clock className="h-4 w-4 mr-2" />
+                            View Pending Jobs
+                          </Button>
+                          <Button onClick={() => setLocation("/jobs/post")}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Post Another Job
+                          </Button>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <Briefcase className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
+                        <p className="text-muted-foreground mb-2">
+                          {searchQuery || activeTab !== "all"
+                            ? "No jobs match your filters"
+                            : "No job postings yet"}
+                        </p>
+                        {!searchQuery && activeTab === "all" && (
+                          <Button className="mt-4" onClick={() => setLocation("/jobs/post")}>
+                            <Plus className="h-4 w-4 mr-2" />
+                            Post Your First Job
+                          </Button>
+                        )}
+                      </>
                     )}
                   </div>
                 ) : (

@@ -1,6 +1,7 @@
 import type { Express, Request, Response, NextFunction } from "express";
-import { requireAuth, requireRole } from "./auth";
+import { requireAuth, requireRole, requireSeat } from "./auth";
 import { storage } from "./storage";
+import { getUserOrganization } from "./lib/organizationService";
 import { z } from "zod";
 import { insertTalentPoolSchema } from "@shared/schema";
 
@@ -98,6 +99,9 @@ export function registerTalentPoolRoutes(app: Express) {
 
         const { email, name, phone, source, notes, resumeUrl } = validation.data;
 
+        // Get user's organization
+        const orgResult = await getUserOrganization(req.user!.id);
+
         // Check for duplicate
         const existing = await storage.getTalentPoolByEmail(req.user!.id, email);
         if (existing) {
@@ -116,6 +120,7 @@ export function registerTalentPoolRoutes(app: Express) {
           notes,
           resumeUrl,
           recruiterId: req.user!.id,
+          ...(orgResult?.organization.id != null && { organizationId: orgResult.organization.id }),
         });
 
         res.status(201).json(candidate);
@@ -262,6 +267,7 @@ export function registerTalentPoolRoutes(app: Express) {
     "/api/talent-pool/:id/convert",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     csrf,
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
@@ -275,6 +281,10 @@ export function registerTalentPoolRoutes(app: Express) {
           res.status(400).json({ error: 'Invalid candidate ID' });
           return;
         }
+
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
 
         const bodySchema = z.object({
           jobId: z.number().int().positive(),
@@ -309,7 +319,7 @@ export function registerTalentPoolRoutes(app: Express) {
         }
 
         // Use isRecruiterOnJob to check access (includes co-recruiters)
-        const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id);
+        const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id, userOrgId);
         if (!hasAccess) {
           res.status(403).json({ error: 'Not authorized to add applications to this job' });
           return;
@@ -358,6 +368,7 @@ export function registerTalentPoolRoutes(app: Express) {
     "/api/jobs/:jobId/talent-pool/suggestions",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat(),
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         const jobIdParam = req.params.jobId;
@@ -371,6 +382,10 @@ export function registerTalentPoolRoutes(app: Express) {
           return;
         }
 
+        // Get user's organization for access control
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
+
         // Verify job exists and user has access
         const job = await storage.getJob(jobId);
         if (!job) {
@@ -379,7 +394,7 @@ export function registerTalentPoolRoutes(app: Express) {
         }
 
         // Use isRecruiterOnJob to check access (includes co-recruiters)
-        const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id);
+        const hasAccess = await storage.isRecruiterOnJob(jobId, req.user!.id, userOrgId);
         if (!hasAccess) {
           res.status(403).json({ error: 'Not authorized to view suggestions for this job' });
           return;

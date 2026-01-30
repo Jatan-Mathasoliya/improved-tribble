@@ -5,7 +5,7 @@
 
 import { db } from './db';
 import { emailTemplates, applications, emailAuditLog, automationEvents } from '../shared/schema';
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, and, or, isNull } from 'drizzle-orm';
 import { getEmailService } from './simpleEmailService';
 import type { EmailTemplate } from '../shared/schema';
 
@@ -21,6 +21,7 @@ export async function logAutomationEvent(
     errorMessage?: string;
     metadata?: Record<string, any>;
     triggeredBy?: number;
+    organizationId?: number | undefined;
   }
 ): Promise<void> {
   try {
@@ -32,11 +33,47 @@ export async function logAutomationEvent(
       errorMessage: options?.errorMessage || null,
       metadata: options?.metadata || null,
       triggeredBy: options?.triggeredBy || null,
+      ...(options?.organizationId != null && { organizationId: options.organizationId }),
     });
   } catch (error) {
     console.error('[AutomationEvent] Failed to log event:', error);
     // Don't throw - logging should not break the main flow
   }
+}
+
+async function getOrganizationIdForApplication(applicationId: number): Promise<number | undefined> {
+  const application = await db.query.applications.findFirst({
+    where: eq(applications.id, applicationId),
+    with: { job: true },
+  });
+  return application?.job?.organizationId ?? undefined;
+}
+
+async function getTemplateByTypeForOrg(
+  templateType: string,
+  organizationId?: number
+): Promise<EmailTemplate | undefined> {
+  if (organizationId != null) {
+    const [orgTemplate] = await db
+      .select()
+      .from(emailTemplates)
+      .where(and(
+        eq(emailTemplates.templateType, templateType),
+        eq(emailTemplates.organizationId, organizationId)
+      ))
+      .limit(1);
+    if (orgTemplate) return orgTemplate;
+  }
+
+  const [globalTemplate] = await db
+    .select()
+    .from(emailTemplates)
+    .where(and(
+      eq(emailTemplates.templateType, templateType),
+      isNull(emailTemplates.organizationId)
+    ))
+    .limit(1);
+  return globalTemplate;
 }
 
 export interface TemplateVariables {
@@ -115,9 +152,16 @@ export async function sendTemplatedEmail(
     throw new Error(`Application ${applicationId} not found`);
   }
 
-  // Fetch email template
+  const organizationId = application.job?.organizationId ?? undefined;
+  // Fetch email template scoped to org (or global default)
+  const templateWhere = organizationId != null
+    ? and(
+      eq(emailTemplates.id, templateId),
+      or(eq(emailTemplates.organizationId, organizationId), isNull(emailTemplates.organizationId))
+    )
+    : eq(emailTemplates.id, templateId);
   const template = await db.query.emailTemplates.findFirst({
-    where: eq(emailTemplates.id, templateId),
+    where: templateWhere,
   });
 
   if (!template) {
@@ -197,13 +241,13 @@ export async function sendInterviewInvitation(
   }
 ): Promise<void> {
   // Find the interview invitation template
-  const template = await db.query.emailTemplates.findFirst({
-    where: eq(emailTemplates.templateType, 'interview_invite'),
-  });
+  const organizationId = await getOrganizationIdForApplication(applicationId);
+  const template = await getTemplateByTypeForOrg('interview_invite', organizationId);
 
   if (!template) {
     await logAutomationEvent('email.interview_invite', 'application', applicationId, 'failed', {
       errorMessage: 'Interview invitation template not found',
+      organizationId,
     });
     throw new Error('Interview invitation template not found. Run seed script.');
   }
@@ -216,10 +260,12 @@ export async function sendInterviewInvitation(
     });
     await logAutomationEvent('email.interview_invite', 'application', applicationId, 'success', {
       metadata: { templateId: template.id, ...interviewDetails },
+      organizationId,
     });
   } catch (error: any) {
     await logAutomationEvent('email.interview_invite', 'application', applicationId, 'failed', {
       errorMessage: error?.message || 'Unknown error',
+      organizationId,
     });
     throw error;
   }
@@ -232,15 +278,15 @@ export async function sendStatusUpdateEmail(
   applicationId: number,
   newStatus: string
 ): Promise<void> {
-  const template = await db.query.emailTemplates.findFirst({
-    where: eq(emailTemplates.templateType, 'status_update'),
-  });
+  const organizationId = await getOrganizationIdForApplication(applicationId);
+  const template = await getTemplateByTypeForOrg('status_update', organizationId);
 
   if (!template) {
     console.warn('Status update template not found, skipping email');
     await logAutomationEvent('email.status_update', 'application', applicationId, 'skipped', {
       errorMessage: 'Status update template not found',
       metadata: { newStatus },
+      organizationId,
     });
     return;
   }
@@ -251,11 +297,13 @@ export async function sendStatusUpdateEmail(
     });
     await logAutomationEvent('email.status_update', 'application', applicationId, 'success', {
       metadata: { templateId: template.id, newStatus },
+      organizationId,
     });
   } catch (error: any) {
     await logAutomationEvent('email.status_update', 'application', applicationId, 'failed', {
       errorMessage: error?.message || 'Unknown error',
       metadata: { newStatus },
+      organizationId,
     });
   }
 }
@@ -266,14 +314,14 @@ export async function sendStatusUpdateEmail(
 export async function sendApplicationReceivedEmail(
   applicationId: number
 ): Promise<void> {
-  const template = await db.query.emailTemplates.findFirst({
-    where: eq(emailTemplates.templateType, 'application_received'),
-  });
+  const organizationId = await getOrganizationIdForApplication(applicationId);
+  const template = await getTemplateByTypeForOrg('application_received', organizationId);
 
   if (!template) {
     console.warn('Application received template not found, skipping email');
     await logAutomationEvent('email.application_received', 'application', applicationId, 'skipped', {
       errorMessage: 'Application received template not found',
+      organizationId,
     });
     return;
   }
@@ -282,10 +330,12 @@ export async function sendApplicationReceivedEmail(
     await sendTemplatedEmail(applicationId, template.id);
     await logAutomationEvent('email.application_received', 'application', applicationId, 'success', {
       metadata: { templateId: template.id },
+      organizationId,
     });
   } catch (error: any) {
     await logAutomationEvent('email.application_received', 'application', applicationId, 'failed', {
       errorMessage: error?.message || 'Unknown error',
+      organizationId,
     });
   }
 }
@@ -296,14 +346,14 @@ export async function sendApplicationReceivedEmail(
 export async function sendOfferEmail(
   applicationId: number
 ): Promise<void> {
-  const template = await db.query.emailTemplates.findFirst({
-    where: eq(emailTemplates.templateType, 'offer_extended'),
-  });
+  const organizationId = await getOrganizationIdForApplication(applicationId);
+  const template = await getTemplateByTypeForOrg('offer_extended', organizationId);
 
   if (!template) {
     console.warn('Offer template not found, skipping email');
     await logAutomationEvent('email.offer_extended', 'application', applicationId, 'skipped', {
       errorMessage: 'Offer template not found',
+      organizationId,
     });
     return;
   }
@@ -312,10 +362,12 @@ export async function sendOfferEmail(
     await sendTemplatedEmail(applicationId, template.id);
     await logAutomationEvent('email.offer_extended', 'application', applicationId, 'success', {
       metadata: { templateId: template.id },
+      organizationId,
     });
   } catch (error: any) {
     await logAutomationEvent('email.offer_extended', 'application', applicationId, 'failed', {
       errorMessage: error?.message || 'Unknown error',
+      organizationId,
     });
   }
 }
@@ -326,14 +378,14 @@ export async function sendOfferEmail(
 export async function sendRejectionEmail(
   applicationId: number
 ): Promise<void> {
-  const template = await db.query.emailTemplates.findFirst({
-    where: eq(emailTemplates.templateType, 'rejection'),
-  });
+  const organizationId = await getOrganizationIdForApplication(applicationId);
+  const template = await getTemplateByTypeForOrg('rejection', organizationId);
 
   if (!template) {
     console.warn('Rejection template not found, skipping email');
     await logAutomationEvent('email.rejection', 'application', applicationId, 'skipped', {
       errorMessage: 'Rejection template not found',
+      organizationId,
     });
     return;
   }
@@ -342,10 +394,12 @@ export async function sendRejectionEmail(
     await sendTemplatedEmail(applicationId, template.id);
     await logAutomationEvent('email.rejection', 'application', applicationId, 'success', {
       metadata: { templateId: template.id },
+      organizationId,
     });
   } catch (error: any) {
     await logAutomationEvent('email.rejection', 'application', applicationId, 'failed', {
       errorMessage: error?.message || 'Unknown error',
+      organizationId,
     });
   }
 }
@@ -361,6 +415,7 @@ export async function sendCoRecruiterInvitationEmail(
     jobTitle: string;
     acceptUrl: string;
     expiryDays: number;
+    organizationId?: number | undefined;
   }
 ): Promise<boolean> {
   const svc = await getEmailService();
@@ -369,10 +424,8 @@ export async function sendCoRecruiterInvitationEmail(
     return false;
   }
 
-  // Try to find the template
-  const template = await db.query.emailTemplates.findFirst({
-    where: eq(emailTemplates.templateType, 'co_recruiter_invitation'),
-  });
+  // Try to find the template (org-specific, else global)
+  const template = await getTemplateByTypeForOrg('co_recruiter_invitation', opts.organizationId);
 
   const greeting = opts.inviteeName ? `Hi ${opts.inviteeName},` : 'Hi,';
 
@@ -440,6 +493,7 @@ export async function sendCoRecruiterAddedEmail(
     recruiterFirstName?: string | null;
     jobTitle: string;
     dashboardUrl: string;
+    organizationId?: number | undefined;
   }
 ): Promise<boolean> {
   const svc = await getEmailService();
@@ -448,10 +502,8 @@ export async function sendCoRecruiterAddedEmail(
     return false;
   }
 
-  // Try to find the template
-  const template = await db.query.emailTemplates.findFirst({
-    where: eq(emailTemplates.templateType, 'co_recruiter_added'),
-  });
+  // Try to find the template (org-specific, else global)
+  const template = await getTemplateByTypeForOrg('co_recruiter_added', opts.organizationId);
 
   const greeting = opts.recruiterFirstName ? `Hi ${opts.recruiterFirstName},` : 'Hi,';
 
@@ -594,20 +646,18 @@ export async function notifyRecruitersNewApplication(
 
   // Log automation event with detailed results
   const outcome = failedCount === 0 ? 'success' : (successCount === 0 ? 'failed' : 'success');
-  const logOpts: Parameters<typeof logAutomationEvent>[4] = {
+  const jobRecord = await storage.getJob(jobId);
+  const logOpts: NonNullable<Parameters<typeof logAutomationEvent>[4]> = {
     metadata: {
       jobId,
       totalRecruiters: recruiters.length,
       successCount,
       failedCount,
+      ...(failedEmails.length > 0 ? { failedEmails } : {}),
     },
+    organizationId: jobRecord?.organizationId ?? undefined,
+    ...(failedCount > 0 ? { errorMessage: `Failed to notify ${failedCount} recruiter(s)` } : {}),
   };
-  if (failedEmails.length > 0) {
-    logOpts.metadata!.failedEmails = failedEmails;
-  }
-  if (failedCount > 0) {
-    logOpts.errorMessage = `Failed to notify ${failedCount} recruiter(s)`;
-  }
   await logAutomationEvent('email.notify_recruiters_new_application', 'application', applicationId, outcome, logOpts);
 }
 

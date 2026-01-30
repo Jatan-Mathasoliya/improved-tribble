@@ -1,0 +1,504 @@
+import { db } from "../db";
+import {
+  organizations,
+  organizationMembers,
+  organizationInvites,
+  organizationJoinRequests,
+  domainClaimRequests,
+  organizationSubscriptions,
+  subscriptionPlans,
+  users,
+  type Organization,
+  type InsertOrganization,
+  type OrganizationMember,
+  type OrganizationInvite,
+  type OrganizationJoinRequest,
+  type DomainClaimRequest,
+  type OrganizationRole,
+  type User,
+} from "@shared/schema";
+import { eq, and, desc, sql, or, isNull } from "drizzle-orm";
+import slugify from "slugify";
+import crypto from "crypto";
+import { hasAvailableSeats } from "./seatService";
+
+// Public email domains that cannot claim domain verification
+const PUBLIC_EMAIL_DOMAINS = [
+  'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'live.com',
+  'aol.com', 'icloud.com', 'mail.com', 'protonmail.com', 'zoho.com',
+  'yandex.com', 'gmx.com', 'fastmail.com', 'tutanota.com',
+];
+
+export function isPublicEmailDomain(email: string): boolean {
+  const domain = email.split('@')[1]?.toLowerCase();
+  return domain ? PUBLIC_EMAIL_DOMAINS.includes(domain) : false;
+}
+
+export function getEmailDomain(email: string): string | null {
+  const domain = email.split('@')[1]?.toLowerCase();
+  return domain || null;
+}
+
+export async function generateUniqueSlug(name: string): Promise<string> {
+  const baseSlug = slugify(name, { lower: true, strict: true });
+  let slug = baseSlug;
+  let counter = 1;
+
+  while (true) {
+    const existing = await db.query.organizations.findFirst({
+      where: eq(organizations.slug, slug),
+    });
+    if (!existing) break;
+    slug = `${baseSlug}-${counter}`;
+    counter++;
+  }
+
+  return slug;
+}
+
+// Organization CRUD
+export async function createOrganization(
+  data: Omit<InsertOrganization, 'slug'> & { slug?: string },
+  ownerId: number
+): Promise<Organization> {
+  const slug = data.slug || await generateUniqueSlug(data.name);
+
+  const [org] = await db.insert(organizations).values({
+    ...data,
+    slug,
+  }).returning();
+
+  // Add owner as first member
+  await db.insert(organizationMembers).values({
+    organizationId: org.id,
+    userId: ownerId,
+    role: 'owner',
+    seatAssigned: true,
+    joinedAt: new Date(),
+  });
+
+  return org;
+}
+
+export async function getOrganization(id: number): Promise<Organization | undefined> {
+  return db.query.organizations.findFirst({
+    where: eq(organizations.id, id),
+  });
+}
+
+export async function getOrganizationBySlug(slug: string): Promise<Organization | undefined> {
+  return db.query.organizations.findFirst({
+    where: eq(organizations.slug, slug),
+  });
+}
+
+export async function getOrganizationByDomain(domain: string): Promise<Organization | undefined> {
+  return db.query.organizations.findFirst({
+    where: and(
+      eq(organizations.domain, domain.toLowerCase()),
+      eq(organizations.domainVerified, true)
+    ),
+  });
+}
+
+export async function updateOrganization(
+  id: number,
+  updates: Partial<InsertOrganization>
+): Promise<Organization | undefined> {
+  const [updated] = await db.update(organizations)
+    .set({ ...updates, updatedAt: new Date() })
+    .where(eq(organizations.id, id))
+    .returning();
+  return updated;
+}
+
+export async function deleteOrganization(id: number): Promise<void> {
+  await db.delete(organizations).where(eq(organizations.id, id));
+}
+
+// Get user's current organization
+export async function getUserOrganization(userId: number): Promise<{
+  organization: Organization;
+  membership: OrganizationMember;
+} | null> {
+  const membership = await db.query.organizationMembers.findFirst({
+    where: eq(organizationMembers.userId, userId),
+    with: {
+      organization: true,
+    },
+  });
+
+  if (!membership || !membership.organization) return null;
+
+  return {
+    organization: membership.organization,
+    membership: membership as OrganizationMember,
+  };
+}
+
+// Check if user is in any organization
+export async function isUserInOrganization(userId: number): Promise<boolean> {
+  const membership = await db.query.organizationMembers.findFirst({
+    where: eq(organizationMembers.userId, userId),
+  });
+  return !!membership;
+}
+
+// Get organization with subscription info
+export async function getOrganizationWithSubscription(orgId: number): Promise<{
+  organization: Organization;
+  subscription: typeof organizationSubscriptions.$inferSelect | null;
+  plan: typeof subscriptionPlans.$inferSelect | null;
+} | null> {
+  const org = await db.query.organizations.findFirst({
+    where: eq(organizations.id, orgId),
+    with: {
+      subscription: {
+        with: {
+          plan: true,
+        },
+      },
+    },
+  });
+
+  if (!org) return null;
+
+  return {
+    organization: org,
+    subscription: org.subscription || null,
+    plan: org.subscription?.plan || null,
+  };
+}
+
+// Invite token generation
+export function generateInviteToken(): string {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// Organization invites
+export async function createOrganizationInvite(
+  organizationId: number,
+  email: string,
+  role: OrganizationRole,
+  invitedBy: number
+): Promise<OrganizationInvite> {
+  const token = generateInviteToken();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+  // Check if user already in another org
+  const existingUser = await db.query.users.findFirst({
+    where: eq(users.username, email.toLowerCase()),
+  });
+
+  if (existingUser) {
+    const inOrg = await isUserInOrganization(existingUser.id);
+    if (inOrg) {
+      throw new Error('User is already a member of another organization');
+    }
+  }
+
+  // Delete any existing pending invite for this email in this org
+  await db.delete(organizationInvites)
+    .where(and(
+      eq(organizationInvites.organizationId, organizationId),
+      eq(organizationInvites.email, email.toLowerCase()),
+      isNull(organizationInvites.acceptedAt)
+    ));
+
+  const [invite] = await db.insert(organizationInvites).values({
+    organizationId,
+    email: email.toLowerCase(),
+    role,
+    token,
+    expiresAt,
+    invitedBy,
+  }).returning();
+
+  return invite;
+}
+
+export async function getOrganizationInviteByToken(token: string): Promise<(OrganizationInvite & { organization: Organization; invitedByUser: User | null }) | undefined> {
+  return db.query.organizationInvites.findFirst({
+    where: and(
+      eq(organizationInvites.token, token),
+      isNull(organizationInvites.acceptedAt)
+    ),
+    with: {
+      organization: true,
+      invitedByUser: true,  // Get inviter details
+    },
+  });
+}
+
+export async function getPendingInvitesForOrganization(orgId: number): Promise<OrganizationInvite[]> {
+  return db.query.organizationInvites.findMany({
+    where: and(
+      eq(organizationInvites.organizationId, orgId),
+      isNull(organizationInvites.acceptedAt)
+    ),
+    orderBy: desc(organizationInvites.createdAt),
+  });
+}
+
+export async function acceptOrganizationInvite(
+  token: string,
+  userId: number,
+  userEmail: string
+): Promise<OrganizationMember> {
+  const invite = await getOrganizationInviteByToken(token);
+  if (!invite) {
+    throw new Error('Invalid or expired invite');
+  }
+
+  if (new Date() > invite.expiresAt) {
+    throw new Error('Invite has expired');
+  }
+
+  // Validate email matches invite
+  if (invite.email.toLowerCase() !== userEmail.toLowerCase()) {
+    throw new Error('This invite was sent to a different email address. Please use the correct email to accept this invite.');
+  }
+
+  // Check if user is already in another org
+  const inOrg = await isUserInOrganization(userId);
+  if (inOrg) {
+    throw new Error('You must leave your current organization first');
+  }
+
+  // Check seat availability
+  const seatsAvailable = await hasAvailableSeats(invite.organizationId);
+  if (!seatsAvailable) {
+    throw new Error('No seats available in this organization. Please contact the organization owner to add more seats.');
+  }
+
+  // Update invite as accepted
+  await db.update(organizationInvites)
+    .set({
+      acceptedAt: new Date(),
+      acceptedBy: userId,
+    })
+    .where(eq(organizationInvites.id, invite.id));
+
+  // Add user to organization
+  const [member] = await db.insert(organizationMembers).values({
+    organizationId: invite.organizationId,
+    userId,
+    role: invite.role as OrganizationRole,
+    seatAssigned: true,
+    invitedBy: invite.invitedBy,
+    joinedAt: new Date(),
+  }).returning();
+
+  return member;
+}
+
+export async function cancelOrganizationInvite(inviteId: number): Promise<void> {
+  await db.delete(organizationInvites).where(eq(organizationInvites.id, inviteId));
+}
+
+// Join requests (for domain-based joining)
+export async function createJoinRequest(
+  organizationId: number,
+  userId: number
+): Promise<OrganizationJoinRequest> {
+  // Check if already in org
+  const inOrg = await isUserInOrganization(userId);
+  if (inOrg) {
+    throw new Error('You are already a member of an organization');
+  }
+
+  // Check if pending request exists
+  const existing = await db.query.organizationJoinRequests.findFirst({
+    where: and(
+      eq(organizationJoinRequests.organizationId, organizationId),
+      eq(organizationJoinRequests.userId, userId),
+      eq(organizationJoinRequests.status, 'pending')
+    ),
+  });
+
+  if (existing) {
+    throw new Error('You already have a pending request to join this organization');
+  }
+
+  const [request] = await db.insert(organizationJoinRequests).values({
+    organizationId,
+    userId,
+    status: 'pending',
+  }).returning();
+
+  return request;
+}
+
+export async function getPendingJoinRequests(orgId: number): Promise<(OrganizationJoinRequest & { user: typeof users.$inferSelect })[]> {
+  const requests = await db.query.organizationJoinRequests.findMany({
+    where: and(
+      eq(organizationJoinRequests.organizationId, orgId),
+      eq(organizationJoinRequests.status, 'pending')
+    ),
+    with: {
+      user: true,
+    },
+    orderBy: desc(organizationJoinRequests.requestedAt),
+  });
+
+  return requests as (OrganizationJoinRequest & { user: typeof users.$inferSelect })[];
+}
+
+export async function respondToJoinRequest(
+  requestId: number,
+  status: 'approved' | 'rejected',
+  respondedBy: number,
+  rejectionReason?: string
+): Promise<OrganizationMember | null> {
+  const request = await db.query.organizationJoinRequests.findFirst({
+    where: eq(organizationJoinRequests.id, requestId),
+  });
+
+  if (!request) {
+    throw new Error('Join request not found');
+  }
+
+  if (request.status !== 'pending') {
+    throw new Error('Join request has already been processed');
+  }
+
+  await db.update(organizationJoinRequests)
+    .set({
+      status,
+      respondedAt: new Date(),
+      respondedBy,
+      rejectionReason: rejectionReason || null,
+    })
+    .where(eq(organizationJoinRequests.id, requestId));
+
+  if (status === 'approved') {
+    // Check if user is still not in any org
+    const inOrg = await isUserInOrganization(request.userId);
+    if (inOrg) {
+      throw new Error('User has already joined another organization');
+    }
+
+    // Add user to organization
+    const [member] = await db.insert(organizationMembers).values({
+      organizationId: request.organizationId,
+      userId: request.userId,
+      role: 'member',
+      seatAssigned: true,
+      joinedAt: new Date(),
+    }).returning();
+
+    return member;
+  }
+
+  return null;
+}
+
+// Domain claim requests (admin-approved)
+export async function createDomainClaimRequest(
+  organizationId: number,
+  domain: string,
+  requestedBy: number
+): Promise<DomainClaimRequest> {
+  // Check if domain is public email domain
+  if (PUBLIC_EMAIL_DOMAINS.includes(domain.toLowerCase())) {
+    throw new Error('Cannot claim a public email domain');
+  }
+
+  // Check if domain is already claimed
+  const existingOrg = await getOrganizationByDomain(domain);
+  if (existingOrg) {
+    throw new Error('Domain is already claimed by another organization');
+  }
+
+  // Check if there's already a pending request for this domain
+  const pendingRequest = await db.query.domainClaimRequests.findFirst({
+    where: and(
+      eq(domainClaimRequests.domain, domain.toLowerCase()),
+      eq(domainClaimRequests.status, 'pending')
+    ),
+  });
+
+  if (pendingRequest) {
+    throw new Error('There is already a pending claim for this domain');
+  }
+
+  const [request] = await db.insert(domainClaimRequests).values({
+    organizationId,
+    domain: domain.toLowerCase(),
+    requestedBy,
+    status: 'pending',
+  }).returning();
+
+  return request;
+}
+
+export async function getPendingDomainClaimRequests(): Promise<(DomainClaimRequest & {
+  organization: Organization;
+  requestedByUser: typeof users.$inferSelect;
+})[]> {
+  const requests = await db.query.domainClaimRequests.findMany({
+    where: eq(domainClaimRequests.status, 'pending'),
+    with: {
+      organization: true,
+      requestedByUser: true,
+    },
+    orderBy: desc(domainClaimRequests.requestedAt),
+  });
+
+  return requests as (DomainClaimRequest & {
+    organization: Organization;
+    requestedByUser: typeof users.$inferSelect;
+  })[];
+}
+
+export async function respondToDomainClaim(
+  claimId: number,
+  status: 'approved' | 'rejected',
+  reviewedBy: number,
+  rejectionReason?: string
+): Promise<void> {
+  const claim = await db.query.domainClaimRequests.findFirst({
+    where: eq(domainClaimRequests.id, claimId),
+  });
+
+  if (!claim) {
+    throw new Error('Domain claim request not found');
+  }
+
+  if (claim.status !== 'pending') {
+    throw new Error('Domain claim has already been processed');
+  }
+
+  await db.update(domainClaimRequests)
+    .set({
+      status,
+      reviewedBy,
+      reviewedAt: new Date(),
+      rejectionReason: rejectionReason || null,
+    })
+    .where(eq(domainClaimRequests.id, claimId));
+
+  if (status === 'approved') {
+    // Update organization with verified domain
+    await db.update(organizations)
+      .set({
+        domain: claim.domain,
+        domainVerified: true,
+        domainApprovedBy: reviewedBy,
+        domainApprovedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(organizations.id, claim.organizationId));
+  }
+}
+
+// Find organization by user's email domain (for "Request to Join" flow)
+export async function findOrganizationByUserEmailDomain(email: string): Promise<Organization | null> {
+  const domain = getEmailDomain(email);
+  if (!domain || isPublicEmailDomain(email)) {
+    return null;
+  }
+
+  const org = await getOrganizationByDomain(domain);
+  return org || null;
+}

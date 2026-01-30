@@ -51,7 +51,7 @@ import {
 
 interface PipelineActionChecklistProps {
   pipelineData: PipelineData;
-  pipelineHealthScore: { score: number; tag: string };
+  pipelineHealthScore: { score: number; tag: string; isEmpty?: boolean };
   onRefreshData?: () => void;
 }
 
@@ -560,7 +560,9 @@ export function PipelineActionChecklist({
       ? Math.round((completedIds.size / items.length) * 100)
       : 100;
 
-  const healthColor = getHealthColor(pipelineHealthScore.score);
+  const healthColor = pipelineHealthScore.isEmpty
+    ? { text: "text-muted-foreground", bg: "bg-muted/50", border: "border-muted", badge: "bg-muted text-muted-foreground" }
+    : getHealthColor(pipelineHealthScore.score);
 
   // Calculate projected score after completing all items
   const projectedScore = Math.min(
@@ -589,13 +591,15 @@ export function PipelineActionChecklist({
                   </Badge>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  All caught up! Your pipeline is optimized for better hiring.
+                  {pipelineHealthScore.isEmpty
+                    ? "Post your first job to get personalized action items."
+                    : "All caught up! Your pipeline is optimized for better hiring."}
                 </p>
               </div>
             </div>
             <div className="text-right">
               <div className={cn("text-3xl font-bold", healthColor.text)}>
-                {pipelineHealthScore.score}%
+                {pipelineHealthScore.isEmpty ? "—" : `${pipelineHealthScore.score}%`}
               </div>
               <Badge className={healthColor.badge}>
                 {pipelineHealthScore.tag}
@@ -607,7 +611,9 @@ export function PipelineActionChecklist({
           <div className="flex flex-col items-center gap-4">
             <Sparkles className="h-8 w-8 text-success" />
             <p className="text-muted-foreground">
-              Great job! No action items at this time.
+              {pipelineHealthScore.isEmpty
+                ? "Create a job posting to start tracking your hiring pipeline."
+                : "Great job! No action items at this time."}
             </p>
             <Button
               variant="outline"
@@ -660,9 +666,9 @@ export function PipelineActionChecklist({
           <div className="text-right">
             <div className="flex items-center gap-2">
               <span className={cn("text-3xl font-bold", healthColor.text)}>
-                {pipelineHealthScore.score}%
+                {pipelineHealthScore.isEmpty ? "—" : `${pipelineHealthScore.score}%`}
               </span>
-              {projectedScore > pipelineHealthScore.score && (
+              {!pipelineHealthScore.isEmpty && projectedScore > pipelineHealthScore.score && (
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>

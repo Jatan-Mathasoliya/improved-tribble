@@ -11,10 +11,23 @@
 import type { Express, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { storage } from './storage';
+import { db } from './db';
+import { users, organizationMembers } from '@shared/schema';
+import { eq } from 'drizzle-orm';
 import { requireAuth, requireRole } from './auth';
 import type { CsrfMiddleware } from './types/routes';
-import { syncProfileCompletionStatus } from './lib/profileCompletion';
+import { syncProfileCompletionStatus, computeProfileCompletion } from './lib/profileCompletion';
 import { generatePublicId, isValidPublicId, isNumericId } from './lib/publicId';
+import { getEmailService } from './simpleEmailService';
+import { initializeMemberCredits } from './lib/creditService';
+import { getOrganizationSubscription } from './lib/subscriptionService';
+import crypto from 'crypto';
+
+// Validation schema for user updates (firstName, lastName)
+const updateUserSchema = z.object({
+  firstName: z.string().max(100).optional(),
+  lastName: z.string().max(100).optional(),
+});
 
 // Validation schema for profile updates
 const updateProfileSchema = z.object({
@@ -27,6 +40,30 @@ const updateProfileSchema = z.object({
   location: z.string().max(200).optional().nullable(),
   isPublic: z.boolean().optional(),
 });
+
+// Validation schema for email change request
+const emailChangeRequestSchema = z.object({
+  newEmail: z.string().email().max(255),
+  password: z.string().min(1), // Current password for verification
+});
+
+// Validation schema for email change verification
+const emailChangeVerifySchema = z.object({
+  token: z.string().min(1),
+});
+
+// In-memory store for email change tokens (in production, use Redis or database)
+const emailChangeTokens = new Map<string, { userId: number; newEmail: string; expiresAt: Date }>();
+
+// Clean up expired tokens periodically
+setInterval(() => {
+  const now = new Date();
+  for (const [token, data] of emailChangeTokens.entries()) {
+    if (data.expiresAt < now) {
+      emailChangeTokens.delete(token);
+    }
+  }
+}, 60000); // Every minute
 
 /**
  * Register all profile-related routes
@@ -77,6 +114,71 @@ export function registerProfileRoutes(
           location: profile.location,
           isPublic: profile.isPublic,
           publicId: profile.publicId,
+        },
+      });
+      return;
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * PATCH /api/user
+   * Update the current user's basic info (firstName, lastName)
+   */
+  app.patch("/api/user", csrfProtection, requireAuth, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user!.id;
+
+      // Validate input
+      const parseResult = updateUserSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        res.status(400).json({
+          error: 'Validation error',
+          details: parseResult.error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message,
+          })),
+        });
+        return;
+      }
+
+      const updates = parseResult.data;
+
+      // Build update object
+      const updateData: Partial<{ firstName: string | null; lastName: string | null }> = {};
+      if (updates.firstName !== undefined) {
+        updateData.firstName = updates.firstName.trim() || null;
+      }
+      if (updates.lastName !== undefined) {
+        updateData.lastName = updates.lastName.trim() || null;
+      }
+
+      if (Object.keys(updateData).length === 0) {
+        res.status(400).json({ error: 'No valid fields to update' });
+        return;
+      }
+
+      // Update user
+      const [updatedUser] = await db
+        .update(users)
+        .set(updateData)
+        .where(eq(users.id, userId))
+        .returning();
+
+      if (!updatedUser) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+
+      res.json({
+        message: 'User updated successfully',
+        user: {
+          id: updatedUser.id,
+          username: updatedUser.username,
+          firstName: updatedUser.firstName,
+          lastName: updatedUser.lastName,
+          role: updatedUser.role,
         },
       });
       return;
@@ -300,6 +402,437 @@ export function registerProfileRoutes(
     try {
       const publicRecruiters = await storage.getPublicRecruiters();
       res.json({ recruiters: publicRecruiters });
+      return;
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // ============= EMAIL CHANGE =============
+
+  /**
+   * POST /api/profile/email/change
+   * Request an email change - sends verification to new email
+   */
+  app.post("/api/profile/email/change", csrfProtection, requireAuth, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user!.id;
+
+      // Validate input
+      const parseResult = emailChangeRequestSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        res.status(400).json({
+          error: 'Validation error',
+          details: parseResult.error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message,
+          })),
+        });
+        return;
+      }
+
+      const { newEmail, password } = parseResult.data;
+      const normalizedEmail = newEmail.toLowerCase().trim();
+
+      // Verify current password
+      const user = await storage.getUser(userId);
+      if (!user) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
+
+      const { comparePasswords } = await import('./auth');
+      const isValidPassword = await comparePasswords(password, user.password);
+      if (!isValidPassword) {
+        res.status(401).json({ error: 'Invalid password' });
+        return;
+      }
+
+      // Check if new email is already taken
+      const existingUser = await storage.getUserByUsername(normalizedEmail);
+      if (existingUser && existingUser.id !== userId) {
+        res.status(409).json({ error: 'Email already in use' });
+        return;
+      }
+
+      // Check if new email is same as current
+      if (user.username === normalizedEmail) {
+        res.status(400).json({ error: 'New email must be different from current email' });
+        return;
+      }
+
+      // Generate verification token
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+      // Store token (invalidate any existing tokens for this user)
+      for (const [existingToken, data] of emailChangeTokens.entries()) {
+        if (data.userId === userId) {
+          emailChangeTokens.delete(existingToken);
+        }
+      }
+      emailChangeTokens.set(token, { userId, newEmail: normalizedEmail, expiresAt });
+
+      // Send verification email
+      const emailService = await getEmailService();
+      if (!emailService) {
+        res.status(500).json({ error: 'Email service not configured' });
+        return;
+      }
+
+      const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+      const verifyUrl = `${baseUrl}/verify-email-change?token=${token}`;
+
+      await emailService.sendEmail({
+        to: normalizedEmail,
+        subject: 'Verify your new email address - VantaHire',
+        html: `
+          <h2>Email Change Request</h2>
+          <p>Hello ${user.firstName || user.username},</p>
+          <p>You requested to change your email address to <strong>${normalizedEmail}</strong>.</p>
+          <p>Click the link below to verify this email address:</p>
+          <p><a href="${verifyUrl}" style="display: inline-block; padding: 12px 24px; background-color: #2563eb; color: white; text-decoration: none; border-radius: 6px;">Verify Email</a></p>
+          <p>Or copy and paste this link: <br/>${verifyUrl}</p>
+          <p>This link expires in 24 hours.</p>
+          <p>If you didn't request this change, you can ignore this email.</p>
+        `
+      });
+
+      res.json({
+        message: 'Verification email sent to the new address',
+        newEmail: normalizedEmail,
+      });
+      return;
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/profile/email/verify
+   * Verify and complete the email change
+   */
+  app.post("/api/profile/email/verify", csrfProtection, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      // Validate input
+      const parseResult = emailChangeVerifySchema.safeParse(req.body);
+      if (!parseResult.success) {
+        res.status(400).json({
+          error: 'Validation error',
+          details: parseResult.error.errors.map(e => ({
+            field: e.path.join('.'),
+            message: e.message,
+          })),
+        });
+        return;
+      }
+
+      const { token } = parseResult.data;
+
+      // Look up token
+      const tokenData = emailChangeTokens.get(token);
+      if (!tokenData) {
+        res.status(400).json({ error: 'Invalid or expired token' });
+        return;
+      }
+
+      // Check expiration
+      if (tokenData.expiresAt < new Date()) {
+        emailChangeTokens.delete(token);
+        res.status(400).json({ error: 'Token has expired' });
+        return;
+      }
+
+      // Final check that new email isn't taken (could have been registered while waiting)
+      const existingUser = await storage.getUserByUsername(tokenData.newEmail);
+      if (existingUser && existingUser.id !== tokenData.userId) {
+        emailChangeTokens.delete(token);
+        res.status(409).json({ error: 'Email is already in use' });
+        return;
+      }
+
+      // Update user's email
+      await db
+        .update(users)
+        .set({
+          username: tokenData.newEmail,
+          emailVerified: true, // Mark as verified since they clicked the link
+        })
+        .where(eq(users.id, tokenData.userId));
+
+      // Remove used token
+      emailChangeTokens.delete(token);
+
+      // Send confirmation to old email
+      const user = await storage.getUser(tokenData.userId);
+      const emailService = await getEmailService();
+      if (user && emailService) {
+        // We don't have the old email anymore, but we can still notify the user
+        console.log(`Email changed for user ${tokenData.userId} to ${tokenData.newEmail}`);
+      }
+
+      res.json({
+        message: 'Email address changed successfully',
+        newEmail: tokenData.newEmail,
+      });
+      return;
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * GET /api/profile/email/pending
+   * Check if there's a pending email change for the current user
+   */
+  app.get("/api/profile/email/pending", requireAuth, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user!.id;
+
+      // Find pending token for this user
+      for (const [token, data] of emailChangeTokens.entries()) {
+        if (data.userId === userId && data.expiresAt > new Date()) {
+          res.json({
+            hasPending: true,
+            newEmail: data.newEmail,
+            expiresAt: data.expiresAt,
+          });
+          return;
+        }
+      }
+
+      res.json({ hasPending: false });
+      return;
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * DELETE /api/profile/email/pending
+   * Cancel a pending email change request
+   */
+  app.delete("/api/profile/email/pending", csrfProtection, requireAuth, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const userId = req.user!.id;
+
+      // Remove any pending tokens for this user
+      for (const [token, data] of emailChangeTokens.entries()) {
+        if (data.userId === userId) {
+          emailChangeTokens.delete(token);
+        }
+      }
+
+      res.json({ message: 'Pending email change cancelled' });
+      return;
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // ============= ONBOARDING STATUS =============
+
+  /**
+   * GET /api/onboarding-status
+   * Get the current user's onboarding status (for recruiters only)
+   * Returns which step they should be on and whether they need onboarding
+   */
+  app.get("/api/onboarding-status", requireAuth, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const user = req.user!;
+      let creditsLazyInit = false;
+
+      // Only recruiters go through onboarding
+      if (user.role !== 'recruiter') {
+        res.json({
+          needsOnboarding: false,
+          currentStep: 'complete',
+          hasOrganization: false,
+          profileComplete: true,
+          creditsLazyInit,
+        });
+        return;
+      }
+
+      // Check if onboarding already completed
+      if (user.onboardingCompletedAt) {
+        res.json({
+          needsOnboarding: false,
+          currentStep: 'complete',
+          hasOrganization: true,
+          profileComplete: true,
+          creditsLazyInit,
+        });
+        return;
+      }
+
+      // Check if user has an organization
+      const membership = await db.query.organizationMembers.findFirst({
+        where: eq(organizationMembers.userId, user.id),
+      });
+      const hasOrganization = !!membership;
+
+      // Lazy-init credits if member exists but credits weren't initialized
+      // (fallback for failed credit init during invite acceptance)
+      // Only for seated members with missing credit period markers; 0 credits can be intentional.
+      if (
+        membership
+        && membership.seatAssigned
+        && (membership.creditsPeriodStart === null || membership.creditsPeriodEnd === null)
+      ) {
+        try {
+          await initializeMemberCredits(membership.id, membership.organizationId);
+          creditsLazyInit = true;
+          console.info('[metrics] credits_lazy_init', {
+            userId: user.id,
+            memberId: membership.id,
+            orgId: membership.organizationId,
+            via: 'onboarding-status',
+          });
+        } catch (creditError) {
+          // Still don't block onboarding - log and continue
+          console.warn('[metrics] credits_lazy_init_failed', {
+            userId: user.id,
+            memberId: membership.id,
+            orgId: membership.organizationId,
+            via: 'onboarding-status',
+            error: creditError instanceof Error ? creditError.message : String(creditError),
+          });
+        }
+      }
+
+      // Check profile completion
+      const profile = await storage.getUserProfile(user.id);
+      const profileStatus = await computeProfileCompletion(user, { profile: profile || null });
+      const profileComplete = profileStatus.complete;
+
+      // Determine current step
+      // Profile can be skipped - if skipped, move to plan even if incomplete
+      const profileSkipped = !!user.profileSkippedAt;
+      let currentStep: 'org' | 'profile' | 'plan';
+
+      if (!hasOrganization) {
+        currentStep = 'org';
+      } else if (!profileComplete && !profileSkipped) {
+        currentStep = 'profile';
+      } else {
+        currentStep = 'plan';
+      }
+
+      // Skip plan step for invited members if org already has a plan (paid or admin-assigned)
+      let skipPlanForMember = false;
+      if (currentStep === 'plan' && membership) {
+        const subscription = await getOrganizationSubscription(membership.organizationId);
+        const hasNonFreePlan = !!subscription && subscription.plan?.name !== 'free';
+        const planIsActiveOrAdmin = !!subscription && (subscription.status === 'active' || subscription.adminOverride);
+        const invitedMember = membership.role !== 'owner';
+
+        if (invitedMember && membership.seatAssigned && hasNonFreePlan && planIsActiveOrAdmin) {
+          skipPlanForMember = true;
+        }
+      }
+
+      // For existing users with org + complete profile, check if they should skip onboarding
+      // (i.e., they're existing users who predate the onboarding feature)
+      // We consider onboarding complete if they've been a member for more than 24 hours (established users)
+      let needsOnboarding = true;
+      if (skipPlanForMember) {
+        needsOnboarding = false;
+
+        // Mark onboarding as complete in the database (fire-and-forget, don't block response)
+        db.update(users)
+          .set({ onboardingCompletedAt: new Date() })
+          .where(eq(users.id, user.id))
+          .catch((err: unknown) => {
+            console.error('Failed to auto-complete onboarding for invited member:', err);
+          });
+      } else if (hasOrganization && profileComplete && membership) {
+        // Check if user joined more than 24 hours ago (established user, skip onboarding)
+        const joinedAt = new Date(membership.joinedAt);
+        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        if (joinedAt < oneDayAgo) {
+          // This is an established user who predates onboarding
+          // Persist onboardingCompletedAt so we don't need to check again on future logins
+          needsOnboarding = false;
+
+          // Mark onboarding as complete in the database (fire-and-forget, don't block response)
+          db.update(users)
+            .set({ onboardingCompletedAt: new Date() })
+            .where(eq(users.id, user.id))
+            .catch((err: unknown) => {
+              console.error('Failed to auto-complete onboarding for established user:', err);
+            });
+        }
+      }
+
+      res.json({
+        needsOnboarding,
+        currentStep: needsOnboarding ? currentStep : 'complete',
+        hasOrganization,
+        profileComplete,
+        creditsLazyInit,
+      });
+      return;
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/onboarding/complete
+   * Mark onboarding as complete for the current user
+   */
+  app.post("/api/onboarding/complete", csrfProtection, requireAuth, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const user = req.user!;
+
+      // Only allow recruiters to complete onboarding
+      if (user.role !== 'recruiter') {
+        res.status(403).json({ error: 'Onboarding is only for recruiters' });
+        return;
+      }
+
+      // Mark onboarding as complete
+      await db
+        .update(users)
+        .set({ onboardingCompletedAt: new Date() })
+        .where(eq(users.id, user.id));
+
+      res.json({
+        message: 'Onboarding completed',
+        onboardingCompletedAt: new Date().toISOString(),
+      });
+      return;
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/onboarding/skip-profile
+   * Skip the profile step during onboarding (user acknowledged the warning)
+   * This doesn't mark onboarding complete, just advances to the plan step
+   */
+  app.post("/api/onboarding/skip-profile", csrfProtection, requireAuth, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const user = req.user!;
+
+      // Only allow recruiters
+      if (user.role !== 'recruiter') {
+        res.status(403).json({ error: 'Onboarding is only for recruiters' });
+        return;
+      }
+
+      // Persist the skip so the server knows to advance to plan step on next status check
+      await db
+        .update(users)
+        .set({ profileSkippedAt: new Date() })
+        .where(eq(users.id, user.id));
+
+      res.json({
+        message: 'Profile step skipped',
+        nextStep: 'plan',
+      });
       return;
     } catch (error) {
       next(error);

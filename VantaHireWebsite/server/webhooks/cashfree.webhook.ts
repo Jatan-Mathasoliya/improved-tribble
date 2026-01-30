@@ -1,0 +1,636 @@
+import { Router } from "express";
+import type { Express, Request, Response } from "express";
+import { db } from "../db";
+import { webhookEvents, organizationSubscriptions, organizations, organizationMembers, users, checkoutIntents, type WebhookStatus } from "@shared/schema";
+import { eq, and } from "drizzle-orm";
+import { randomBytes } from "crypto";
+import {
+  verifyWebhookSignature,
+  parseWebhookEvent,
+  getOrderStatus,
+  type CashfreeWebhookPayload,
+} from "../lib/cashfreeClient";
+import {
+  updatePaymentTransaction,
+  getTransactionByCashfreeOrder,
+  generateInvoiceNumber,
+} from "../lib/invoiceService";
+import { generateAndStoreInvoicePdf } from "../lib/invoicePdfService";
+import {
+  createPaidSubscription,
+  clearPaymentFailure,
+  recordPaymentFailure,
+  renewSubscription,
+  downgradeToFree,
+  getOrganizationSubscription,
+  updateSubscriptionSeats,
+} from "../lib/subscriptionService";
+import { bulkAllocateCreditsForUpgrade } from "../lib/creditService";
+import { executeAutoDowngrade } from "../lib/seatService";
+import { getEmailService } from "../simpleEmailService";
+
+async function getOrganizationBillingContact(orgId: number): Promise<{
+  organizationName: string;
+  billingEmail: string | null;
+  billingName: string | null;
+} | null> {
+  const org = await db.query.organizations.findFirst({
+    where: eq(organizations.id, orgId),
+  });
+
+  if (!org) {
+    return null;
+  }
+
+  let billingEmail = org.billingContactEmail || null;
+  let billingName = org.billingContactName || null;
+
+  if (!billingEmail) {
+    const owner = await db
+      .select({
+        email: users.username,
+        firstName: users.firstName,
+      })
+      .from(organizationMembers)
+      .innerJoin(users, eq(organizationMembers.userId, users.id))
+      .where(
+        and(
+          eq(organizationMembers.organizationId, orgId),
+          eq(organizationMembers.role, 'owner')
+        )
+      )
+      .limit(1);
+
+    if (owner.length > 0) {
+      billingEmail = owner[0].email;
+      billingName = billingName || owner[0].firstName || null;
+    }
+  }
+
+  return {
+    organizationName: org.name,
+    billingEmail,
+    billingName,
+  };
+}
+
+// Check if webhook event has already been processed
+async function isEventProcessed(provider: string, eventId: string): Promise<boolean> {
+  const existing = await db.query.webhookEvents.findFirst({
+    where: and(
+      eq(webhookEvents.provider, provider),
+      eq(webhookEvents.eventId, eventId)
+    ),
+  });
+  return !!existing;
+}
+
+// Record webhook event
+async function recordWebhookEvent(
+  provider: string,
+  eventId: string,
+  eventType: string,
+  payload: any,
+  status: WebhookStatus,
+  errorMessage?: string
+): Promise<void> {
+  await db.insert(webhookEvents).values({
+    provider,
+    eventId,
+    eventType,
+    payload,
+    status,
+    errorMessage,
+  }).onConflictDoNothing();
+}
+
+// Handle successful payment
+async function handlePaymentSuccess(
+  orderId: string,
+  paymentId: string,
+  paymentAmount: number,
+  paymentMethod: string
+): Promise<void> {
+  // Get transaction
+  const transaction = await getTransactionByCashfreeOrder(orderId);
+
+  // If no transaction, check if this is a public checkout intent (no transaction created)
+  if (!transaction) {
+    // Check for checkout intent by orderId
+    const intent = await db.query.checkoutIntents.findFirst({
+      where: eq(checkoutIntents.cashfreeOrderId, orderId),
+    });
+
+    if (intent) {
+      console.log(`No transaction for order ${orderId}, but found checkout intent ${intent.id}`);
+      await handleCheckoutIntentPayment(intent.id, paymentId, paymentAmount);
+      return;
+    }
+
+    console.error(`Transaction not found for order ${orderId}`);
+    return;
+  }
+
+  // Skip if already completed
+  if (transaction.status === 'completed') {
+    console.log(`Transaction ${transaction.id} already completed, skipping`);
+    return;
+  }
+
+  // Update transaction with invoice number
+  const invoiceNumber = generateInvoiceNumber(transaction.organizationId);
+  await updatePaymentTransaction(transaction.id, {
+    status: 'completed',
+    cashfreePaymentId: paymentId,
+    cashfreePaymentMethod: paymentMethod,
+    invoiceNumber,
+    completedAt: new Date(),
+  });
+
+  // Generate invoice PDF asynchronously (don't block the webhook)
+  generateAndStoreInvoicePdf(transaction.id).catch(err => {
+    console.error(`Failed to generate invoice PDF for transaction ${transaction.id}:`, err);
+  });
+
+  // If subscription type, activate subscription
+  if (transaction.type === 'subscription') {
+    const metadata = transaction.metadata as {
+      planId: number;
+      seats: number;
+      billingCycle: 'monthly' | 'annual';
+      checkoutIntentId?: number;
+    };
+
+    // Handle checkout intent flow (public checkout)
+    if (metadata?.checkoutIntentId) {
+      await handleCheckoutIntentPayment(metadata.checkoutIntentId, paymentId, paymentAmount);
+      return;
+    }
+
+    if (metadata?.planId && metadata?.seats) {
+      // Create paid subscription
+      await createPaidSubscription(
+        transaction.organizationId,
+        metadata.planId,
+        metadata.seats,
+        metadata.billingCycle
+      );
+
+      // Allocate credits to all members
+      const subscription = await getOrganizationSubscription(transaction.organizationId);
+      if (subscription) {
+        const creditsPerSeat = subscription.plan.aiCreditsPerSeatMonthly;
+        const maxRollover = subscription.plan.maxCreditRolloverMonths || 3;
+        const cap = creditsPerSeat * maxRollover;
+
+        await bulkAllocateCreditsForUpgrade(
+          transaction.organizationId,
+          creditsPerSeat,
+          cap
+        );
+
+        const emailService = await getEmailService();
+        if (emailService) {
+          const contact = await getOrganizationBillingContact(transaction.organizationId);
+          if (contact?.billingEmail) {
+            const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+            const subject = `Subscription activated - ${contact.organizationName}`;
+            const html = `
+              <h2>Subscription Activated</h2>
+              <p>Hello${contact.billingName ? ` ${contact.billingName}` : ''},</p>
+              <p>Your <strong>${subscription.plan.displayName}</strong> subscription is now active.</p>
+              <ul>
+                <li><strong>Seats:</strong> ${subscription.seats}</li>
+                <li><strong>Billing Cycle:</strong> ${subscription.billingCycle}</li>
+                <li><strong>Amount Paid:</strong> ₹${(paymentAmount / 100).toFixed(2)}</li>
+              </ul>
+              <p>You can manage billing here: <a href="${baseUrl}/org/billing">${baseUrl}/org/billing</a></p>
+            `;
+            const text = `Subscription activated for ${contact.organizationName}.\nPlan: ${subscription.plan.displayName}\nSeats: ${subscription.seats}\nBilling cycle: ${subscription.billingCycle}\nAmount paid: ₹${(paymentAmount / 100).toFixed(2)}\n\nManage billing: ${baseUrl}/org/billing`;
+            await emailService.sendEmail({
+              to: contact.billingEmail,
+              subject,
+              html,
+              text,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // If seat addition, update seats
+  if (transaction.type === 'seat_addition') {
+    const metadata = transaction.metadata as { additionalSeats?: number; proratedAmount?: number } | null;
+    const subscription = await getOrganizationSubscription(transaction.organizationId);
+
+    if (subscription && metadata?.additionalSeats) {
+      // Calculate new seat count and update subscription
+      const newSeats = subscription.seats + metadata.additionalSeats;
+      await updateSubscriptionSeats(subscription.id, newSeats);
+
+      console.log(`Seat addition completed: org ${transaction.organizationId} now has ${newSeats} seats (+${metadata.additionalSeats})`);
+
+      const emailService = await getEmailService();
+      if (emailService) {
+        const contact = await getOrganizationBillingContact(transaction.organizationId);
+        if (contact?.billingEmail) {
+          const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+          const subject = `Seats added - ${contact.organizationName}`;
+          const html = `
+            <h2>Seats Added</h2>
+            <p>Hello${contact.billingName ? ` ${contact.billingName}` : ''},</p>
+            <p>${metadata.additionalSeats} seat(s) were added to your subscription.</p>
+            <ul>
+              <li><strong>New total seats:</strong> ${newSeats}</li>
+              <li><strong>Amount Paid:</strong> ₹${(paymentAmount / 100).toFixed(2)}</li>
+            </ul>
+            <p>Manage billing here: <a href="${baseUrl}/org/billing">${baseUrl}/org/billing</a></p>
+          `;
+          const text = `Seats added for ${contact.organizationName}.\nAdded seats: ${metadata.additionalSeats}\nNew total seats: ${newSeats}\nAmount paid: ₹${(paymentAmount / 100).toFixed(2)}\n\nManage billing: ${baseUrl}/org/billing`;
+          await emailService.sendEmail({
+            to: contact.billingEmail,
+            subject,
+            html,
+            text,
+          });
+        }
+      }
+    }
+  }
+
+  console.log(`Payment success processed for order ${orderId}`);
+}
+
+// Handle checkout intent payment (public checkout flow)
+async function handleCheckoutIntentPayment(
+  intentId: number,
+  paymentId: string,
+  paymentAmount: number
+): Promise<void> {
+  // Get checkout intent
+  const intent = await db.query.checkoutIntents.findFirst({
+    where: eq(checkoutIntents.id, intentId),
+    with: {
+      plan: true,
+    },
+  });
+
+  if (!intent) {
+    console.error(`Checkout intent not found: ${intentId}`);
+    return;
+  }
+
+  if (intent.status === 'paid' || intent.status === 'claimed') {
+    console.log(`Checkout intent ${intentId} already processed, skipping`);
+    return;
+  }
+
+  // Update intent to paid
+  await db.update(checkoutIntents)
+    .set({
+      status: 'paid',
+      paidAt: new Date(),
+    })
+    .where(eq(checkoutIntents.id, intentId));
+
+  // If org already exists (checkout-create-org flow), create subscription
+  if (intent.organizationId) {
+    await createPaidSubscription(
+      intent.organizationId,
+      intent.planId,
+      intent.seats,
+      intent.billingCycle as 'monthly' | 'annual'
+    );
+
+    // Allocate credits
+    const subscription = await getOrganizationSubscription(intent.organizationId);
+    if (subscription) {
+      const creditsPerSeat = subscription.plan.aiCreditsPerSeatMonthly;
+      const maxRollover = subscription.plan.maxCreditRolloverMonths || 3;
+      const cap = creditsPerSeat * maxRollover;
+
+      await bulkAllocateCreditsForUpgrade(
+        intent.organizationId,
+        creditsPerSeat,
+        cap
+      );
+    }
+
+    console.log(`Checkout intent ${intentId} completed for existing org ${intent.organizationId}`);
+    return;
+  }
+
+  // For public checkout (no org yet), send claim email
+  const emailService = await getEmailService();
+  if (emailService && intent.claimToken) {
+    const baseUrl = process.env.BASE_URL || process.env.APP_URL || 'http://localhost:5000';
+    const claimUrl = `${baseUrl}/claim/${intent.claimToken}`;
+    const subject = `Complete your VantaHire subscription`;
+    const html = `
+      <h2>Payment Successful!</h2>
+      <p>Thank you for subscribing to VantaHire!</p>
+      <p>Your payment of ₹${(paymentAmount / 100).toFixed(2)} has been received.</p>
+      <p><strong>Organization Name:</strong> ${intent.orgName}</p>
+      <p><strong>Plan:</strong> ${intent.plan?.displayName || 'Pro'}</p>
+      <p><strong>Seats:</strong> ${intent.seats}</p>
+      <h3>Next Steps</h3>
+      <p>Click the button below to set up your account and access your organization:</p>
+      <p style="margin: 20px 0;">
+        <a href="${claimUrl}" style="background-color: #4F46E5; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+          Complete Setup
+        </a>
+      </p>
+      <p>Or copy this link: ${claimUrl}</p>
+      <p><em>This link will expire in 7 days.</em></p>
+    `;
+    const text = `Payment Successful!\n\nThank you for subscribing to VantaHire.\nYour payment of ₹${(paymentAmount / 100).toFixed(2)} has been received.\n\nOrganization: ${intent.orgName}\nPlan: ${intent.plan?.displayName || 'Pro'}\nSeats: ${intent.seats}\n\nComplete your setup: ${claimUrl}\n\nThis link will expire in 7 days.`;
+
+    await emailService.sendEmail({
+      to: intent.email,
+      subject,
+      html,
+      text,
+    });
+
+    console.log(`Claim email sent to ${intent.email} for checkout intent ${intentId}`);
+  }
+
+  console.log(`Checkout intent ${intentId} paid, awaiting claim`);
+}
+
+// Handle payment failure
+async function handlePaymentFailure(
+  orderId: string,
+  failureReason?: string
+): Promise<void> {
+  const transaction = await getTransactionByCashfreeOrder(orderId);
+  if (!transaction) {
+    console.error(`Transaction not found for order ${orderId}`);
+    return;
+  }
+
+  // Update transaction
+  const updateData: { status: 'failed'; failureReason?: string } = {
+    status: 'failed',
+  };
+  if (failureReason) {
+    updateData.failureReason = failureReason;
+  }
+  await updatePaymentTransaction(transaction.id, updateData);
+
+  // Record payment failure for subscription
+  if (transaction.subscriptionId) {
+    const updated = await recordPaymentFailure(transaction.subscriptionId);
+
+    const emailService = await getEmailService();
+    if (emailService) {
+      const contact = await getOrganizationBillingContact(transaction.organizationId);
+      if (contact?.billingEmail) {
+        const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+        const graceEnd = updated.gracePeriodEndDate
+          ? new Date(updated.gracePeriodEndDate).toLocaleDateString()
+          : 'in 3 days';
+        const subject = `Payment failed - ${contact.organizationName}`;
+        const html = `
+          <h2>Payment Failed</h2>
+          <p>Hello${contact.billingName ? ` ${contact.billingName}` : ''},</p>
+          <p>We couldn't process your subscription payment for <strong>${contact.organizationName}</strong>.</p>
+          <p>Your grace period ends on <strong>${graceEnd}</strong>.</p>
+          <p>Please update your payment method to avoid a downgrade.</p>
+          <p>Manage billing here: <a href="${baseUrl}/org/billing">${baseUrl}/org/billing</a></p>
+          ${failureReason ? `<p>Reason: ${failureReason}</p>` : ''}
+        `;
+        const text = `Payment failed for ${contact.organizationName}. Grace period ends on ${graceEnd}. Update payment to avoid downgrade.\n\nManage billing: ${baseUrl}/org/billing${failureReason ? `\nReason: ${failureReason}` : ''}`;
+        await emailService.sendEmail({
+          to: contact.billingEmail,
+          subject,
+          html,
+          text,
+        });
+      }
+    }
+
+    console.log(`Payment failure recorded for subscription ${transaction.subscriptionId}`);
+  }
+}
+
+// Handle subscription renewal
+async function handleSubscriptionRenewal(
+  subscriptionId: string,
+  status: string
+): Promise<void> {
+  // Find subscription by Cashfree ID
+  const subscription = await db.query.organizationSubscriptions.findFirst({
+    where: eq(organizationSubscriptions.cashfreeSubscriptionId, subscriptionId),
+  });
+
+  if (!subscription) {
+    console.error(`Subscription not found for Cashfree ID ${subscriptionId}`);
+    return;
+  }
+
+  if (status === 'ACTIVE') {
+    const renewed = await renewSubscription(subscription.id);
+    await clearPaymentFailure(subscription.id);
+    console.log(`Subscription ${subscription.id} renewed`);
+
+    const emailService = await getEmailService();
+    if (emailService) {
+      const contact = await getOrganizationBillingContact(subscription.organizationId);
+      if (contact?.billingEmail) {
+        const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+        const renewalDate = renewed.currentPeriodEnd
+          ? new Date(renewed.currentPeriodEnd).toLocaleDateString()
+          : '';
+        const subject = `Subscription renewed - ${contact.organizationName}`;
+        const html = `
+          <h2>Subscription Renewed</h2>
+          <p>Hello${contact.billingName ? ` ${contact.billingName}` : ''},</p>
+          <p>Your subscription for <strong>${contact.organizationName}</strong> has been renewed.</p>
+          ${renewalDate ? `<p>Next renewal date: ${renewalDate}</p>` : ''}
+          <p>Manage billing here: <a href="${baseUrl}/org/billing">${baseUrl}/org/billing</a></p>
+        `;
+        const text = `Subscription renewed for ${contact.organizationName}.${renewalDate ? ` Next renewal date: ${renewalDate}.` : ''}\n\nManage billing: ${baseUrl}/org/billing`;
+        await emailService.sendEmail({
+          to: contact.billingEmail,
+          subject,
+          html,
+          text,
+        });
+      }
+    }
+  } else if (status === 'PAST_DUE' || status === 'CANCELLED') {
+    const updated = await recordPaymentFailure(subscription.id);
+    console.log(`Subscription ${subscription.id} payment issue: ${status}`);
+
+    const emailService = await getEmailService();
+    if (emailService) {
+      const contact = await getOrganizationBillingContact(subscription.organizationId);
+      if (contact?.billingEmail) {
+        const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+        const graceEnd = updated.gracePeriodEndDate
+          ? new Date(updated.gracePeriodEndDate).toLocaleDateString()
+          : 'in 3 days';
+        const subject = `Payment issue - ${contact.organizationName}`;
+        const html = `
+          <h2>Payment Issue</h2>
+          <p>Hello${contact.billingName ? ` ${contact.billingName}` : ''},</p>
+          <p>We couldn't process your subscription renewal for <strong>${contact.organizationName}</strong>.</p>
+          <p>Your grace period ends on <strong>${graceEnd}</strong>.</p>
+          <p>Please update your payment method to avoid a downgrade.</p>
+          <p>Manage billing here: <a href="${baseUrl}/org/billing">${baseUrl}/org/billing</a></p>
+        `;
+        const text = `Payment issue for ${contact.organizationName}. Grace period ends on ${graceEnd}. Update payment to avoid downgrade.\n\nManage billing: ${baseUrl}/org/billing`;
+        await emailService.sendEmail({
+          to: contact.billingEmail,
+          subject,
+          html,
+          text,
+        });
+      }
+    }
+  }
+}
+
+export function registerCashfreeWebhook(app: Express) {
+  // Cashfree webhook endpoint (no CSRF, raw body needed for signature verification)
+  app.post("/api/webhooks/cashfree", async (req: Request & { rawBody?: string }, res: Response) => {
+    try {
+      const signature = req.headers['x-webhook-signature'] as string;
+      const timestamp = req.headers['x-webhook-timestamp'] as string;
+
+      // Get raw body for signature verification (captured by express.json verify option)
+      const rawBody = req.rawBody || JSON.stringify(req.body);
+
+      // Verify signature (if webhook secret is configured)
+      if (process.env.CASHFREE_WEBHOOK_SECRET) {
+        if (!signature || !timestamp) {
+          console.error('Missing webhook signature headers');
+          res.status(400).json({ error: 'Missing signature' });
+          return;
+        }
+
+        const isValid = verifyWebhookSignature(rawBody, signature, timestamp);
+        if (!isValid) {
+          console.error('Invalid webhook signature');
+          res.status(401).json({ error: 'Invalid signature' });
+          return;
+        }
+      }
+
+      const payload = req.body as CashfreeWebhookPayload;
+
+      // Log the raw payload for debugging
+      console.log('Cashfree webhook raw payload:', JSON.stringify(payload, null, 2));
+
+      const event = parseWebhookEvent(payload);
+
+      console.log(`Received Cashfree webhook: ${event.eventType}`, {
+        eventId: event.eventId,
+        orderId: event.orderId,
+        paymentStatus: event.paymentStatus,
+      });
+
+      // Check idempotency - skip if already processed
+      if (await isEventProcessed('cashfree', event.eventId)) {
+        console.log(`Webhook event ${event.eventId} already processed, skipping`);
+        res.json({ success: true, message: 'Already processed' });
+        return;
+      }
+
+      // Process based on event type
+      let status: WebhookStatus = 'processed';
+      let errorMessage: string | undefined;
+
+      try {
+        switch (event.eventType) {
+          case 'PAYMENT_SUCCESS_WEBHOOK':
+          case 'PAYMENT_CAPTURED':
+            if (event.orderId && event.paymentId) {
+              await handlePaymentSuccess(
+                event.orderId,
+                event.paymentId,
+                event.paymentAmount || 0,
+                event.paymentMethod || 'unknown'
+              );
+            }
+            break;
+
+          case 'PAYMENT_FAILED_WEBHOOK':
+          case 'PAYMENT_DECLINED':
+          case 'PAYMENT_USER_DROPPED':
+            if (event.orderId) {
+              await handlePaymentFailure(event.orderId, event.errorReason || event.paymentStatus);
+            }
+            break;
+
+          case 'SUBSCRIPTION_STATUS_CHANGED':
+            if (event.subscriptionId && event.subscriptionStatus) {
+              await handleSubscriptionRenewal(event.subscriptionId, event.subscriptionStatus);
+            }
+            break;
+
+          default:
+            console.log(`Unhandled webhook event type: ${event.eventType}`);
+            status = 'skipped';
+        }
+      } catch (processingError: any) {
+        console.error(`Error processing webhook ${event.eventId}:`, processingError);
+        status = 'failed';
+        errorMessage = processingError.message;
+      }
+
+      // Record the webhook event
+      await recordWebhookEvent(
+        'cashfree',
+        event.eventId,
+        event.eventType,
+        payload,
+        status,
+        errorMessage
+      );
+
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Webhook processing error:', error);
+      res.status(500).json({ error: 'Webhook processing failed' });
+    }
+  });
+
+  // Manual order status check endpoint (for polling/return URL)
+  app.get("/api/webhooks/cashfree/verify/:orderId", async (req: Request, res: Response) => {
+    try {
+      const orderId = req.params.orderId ?? '';
+      if (!orderId) {
+        res.status(400).json({ error: 'Order ID is required' });
+        return;
+      }
+
+      const orderStatus = await getOrderStatus(orderId);
+
+      if (orderStatus.status === 'PAID') {
+        // Process as successful if not already processed
+        const transaction = await getTransactionByCashfreeOrder(orderId);
+        if (transaction && transaction.status !== 'completed') {
+          await handlePaymentSuccess(
+            orderId,
+            orderStatus.paymentId || '',
+            0,
+            orderStatus.paymentMethod || 'unknown'
+          );
+        }
+      }
+
+      res.json({
+        orderId,
+        status: orderStatus.status,
+        paymentId: orderStatus.paymentId,
+        paymentMethod: orderStatus.paymentMethod,
+      });
+    } catch (error: any) {
+      console.error('Error verifying order:', error);
+      res.status(500).json({ error: 'Failed to verify order' });
+    }
+  });
+}
