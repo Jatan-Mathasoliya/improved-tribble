@@ -33,15 +33,14 @@ import {
   applicationFeedback,
 } from '@shared/schema';
 import { uploadToGCS, getSignedDownloadUrl, downloadFromGCS } from './gcs-storage';
-import { getEmailService } from './simpleEmailService';
 import {
-  sendStatusUpdateEmail,
-  sendInterviewInvitation,
-  sendApplicationReceivedEmail,
-  sendOfferEmail,
-  sendRejectionEmail,
-  notifyRecruitersNewApplication,
-} from './emailTemplateService';
+  sendStatusUpdateNotification,
+  sendInterviewInvitationNotification,
+  sendApplicationReceivedNotification,
+  sendOfferNotification,
+  sendRejectionNotification,
+} from './notificationService';
+import { notifyRecruitersNewApplication } from './emailTemplateService';
 import { generateInterviewICS, getICSFilename } from './lib/icsGenerator';
 import { extractResumeText, validateResumeText } from './lib/resumeExtractor';
 import { isAIEnabled, generateCandidateSummary } from './aiJobAnalyzer';
@@ -217,10 +216,10 @@ export function registerApplicationsRoutes(
         });
       }
 
-      // Fire-and-forget: candidate confirmation (if enabled)
-      const autoEmails = process.env.EMAIL_AUTOMATION_ENABLED === 'true' || process.env.EMAIL_AUTOMATION_ENABLED === '1';
-      if (autoEmails) {
-        sendApplicationReceivedEmail(application.id).catch(err => console.error('Application received email error:', err));
+      // Fire-and-forget: candidate confirmation via email and WhatsApp (if enabled)
+      const autoNotifications = process.env.EMAIL_AUTOMATION_ENABLED === 'true' || process.env.EMAIL_AUTOMATION_ENABLED === '1' || process.env.NOTIFICATION_AUTOMATION_ENABLED === 'true';
+      if (autoNotifications) {
+        sendApplicationReceivedNotification(application.id).catch(err => console.error('Application received notification error:', err));
       }
 
       // Send notification email to all recruiters on this job (if enabled)
@@ -370,6 +369,7 @@ export function registerApplicationsRoutes(
           name: applicationData.name,
           email: applicationData.email,
           phone: applicationData.phone,
+          whatsappConsent: applicationData.whatsappConsent,
           ...(applicationData.coverLetter && { coverLetter: applicationData.coverLetter }),
           jobId,
           resumeUrl,
@@ -533,17 +533,17 @@ export function registerApplicationsRoutes(
             // Use atomic method for interview + stage update (prevents partial state)
             await storage.scheduleInterviewWithStage(appId, interviewFields, stageUpdateParams);
 
-            // Fire-and-forget interview invite (if automation enabled)
-            const autoEmails = process.env.EMAIL_AUTOMATION_ENABLED === "true" || process.env.EMAIL_AUTOMATION_ENABLED === "1";
-            if (autoEmails) {
+            // Fire-and-forget interview invite via email and WhatsApp (if automation enabled)
+            const autoNotifications = process.env.EMAIL_AUTOMATION_ENABLED === "true" || process.env.EMAIL_AUTOMATION_ENABLED === "1" || process.env.NOTIFICATION_AUTOMATION_ENABLED === "true";
+            if (autoNotifications) {
               const dateStr = slotDate.toISOString();
               const timeLabel = timeRangeLabel ?? "";
-              sendInterviewInvitation(appId, {
+              sendInterviewInvitationNotification(appId, {
                 date: dateStr,
                 time: timeLabel,
                 location,
               }).catch((err) =>
-                console.error("Bulk interview email error:", err)
+                console.error("Bulk interview notification error:", err)
               );
             }
 
@@ -880,16 +880,16 @@ export function registerApplicationsRoutes(
 
       await storage.updateApplicationStage(appId, stageId, req.user!.id, notes);
 
-      // Fire-and-forget: automated status email (if enabled)
-      const autoEmails = process.env.EMAIL_AUTOMATION_ENABLED === 'true' || process.env.EMAIL_AUTOMATION_ENABLED === '1';
-      if (autoEmails && targetStage.name) {
+      // Fire-and-forget: automated status notification via email and WhatsApp (if enabled)
+      const autoNotifications = process.env.EMAIL_AUTOMATION_ENABLED === 'true' || process.env.EMAIL_AUTOMATION_ENABLED === '1' || process.env.NOTIFICATION_AUTOMATION_ENABLED === 'true';
+      if (autoNotifications && targetStage.name) {
         const stageName = targetStage.name.toLowerCase();
         if (stageName.includes('offer') || stageName.includes('hired')) {
-          sendOfferEmail(appId).catch(err => console.error('Offer email error:', err));
+          sendOfferNotification(appId).catch(err => console.error('Offer notification error:', err));
         } else if (stageName.includes('reject')) {
-          sendRejectionEmail(appId).catch(err => console.error('Rejection email error:', err));
+          sendRejectionNotification(appId).catch(err => console.error('Rejection notification error:', err));
         } else {
-          sendStatusUpdateEmail(appId, targetStage.name).catch(err => console.error('Status email error:', err));
+          sendStatusUpdateNotification(appId, targetStage.name).catch(err => console.error('Status notification error:', err));
         }
       }
 
@@ -1035,9 +1035,9 @@ export function registerApplicationsRoutes(
         ...(notes !== undefined && { notes })
       });
 
-      const autoEmails = process.env.EMAIL_AUTOMATION_ENABLED === 'true' || process.env.EMAIL_AUTOMATION_ENABLED === '1';
-      if (autoEmails && date && time && location) {
-        sendInterviewInvitation(appId, { date, time, location }).catch(err => console.error('Interview email error:', err));
+      const autoNotifications = process.env.EMAIL_AUTOMATION_ENABLED === 'true' || process.env.EMAIL_AUTOMATION_ENABLED === '1' || process.env.NOTIFICATION_AUTOMATION_ENABLED === 'true';
+      if (autoNotifications && date && time && location) {
+        sendInterviewInvitationNotification(appId, { date, time, location }).catch(err => console.error('Interview notification error:', err));
       }
 
       res.json(updated);

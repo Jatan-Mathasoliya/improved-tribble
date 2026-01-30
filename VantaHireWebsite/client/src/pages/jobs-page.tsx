@@ -2,8 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useSearch } from "wouter";
 import { Helmet } from "react-helmet-async";
+import { Search, MapPin, Clock, Filter, Briefcase, ArrowUpDown, X, User, IndianRupee } from "lucide-react";
 import { DEFAULT_SITE_URL } from "@/lib/seoHelpers";
-import { Search, MapPin, Clock, Filter, Briefcase, ArrowUpDown, X, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,7 +39,10 @@ export default function JobsPage() {
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [location, setLocationFilter] = useState(searchParams.get("location") || "");
   const [type, setType] = useState(searchParams.get("type") || "all");
-  const [skills, setSkills] = useState(searchParams.get("skills") || "");
+  const [minSalary, setMinSalary] = useState(searchParams.get("minSalary") || "");
+  const [maxSalary, setMaxSalary] = useState(searchParams.get("maxSalary") || "");
+  const [salaryPeriod, setSalaryPeriod] = useState(searchParams.get("salaryPeriod") || "per_year");
+
   const [sortBy, setSortBy] = useState<string>(searchParams.get("sortBy") || "recent");
   const [isVisible, setIsVisible] = useState(false);
 
@@ -62,16 +65,18 @@ export default function JobsPage() {
   // Derive enabled flag for backward compatibility
   const aiEnabled = aiFeatures?.resumeAdvisor || aiFeatures?.fitScoring;
 
-  // Fetch jobs from API (server only supports: search, location, type, skills)
+  // Fetch jobs from API
   const { data, isLoading, error } = useQuery<JobsResponse>({
-    queryKey: ["/api/jobs", { page, search, location, type, skills }],
+    queryKey: ["/api/jobs", { page, search, location, type, minSalary, maxSalary, salaryPeriod }],
     queryFn: async () => {
       const params = new URLSearchParams();
       params.set("page", page.toString());
       if (search) params.set("search", search);
       if (location) params.set("location", location);
       if (type && type !== "all") params.set("type", type);
-      if (skills) params.set("skills", skills);
+      if (minSalary) params.set("minSalary", minSalary);
+      if (maxSalary) params.set("maxSalary", maxSalary);
+      if (salaryPeriod) params.set("salaryPeriod", salaryPeriod);
 
       const response = await fetch(`/api/jobs?${params}`);
       if (!response.ok) throw new Error("Failed to fetch jobs");
@@ -106,13 +111,15 @@ export default function JobsPage() {
     if (search) params.set("search", search);
     if (location) params.set("location", location);
     if (type && type !== "all") params.set("type", type);
-    if (skills) params.set("skills", skills);
+    if (minSalary) params.set("minSalary", minSalary);
+    if (maxSalary) params.set("maxSalary", maxSalary);
+    if (salaryPeriod) params.set("salaryPeriod", salaryPeriod);
     if (sortBy && sortBy !== "recent") params.set("sortBy", sortBy);
     if (page > 1) params.set("page", page.toString());
 
     const queryString = params.toString();
     setUrlLocation(`/jobs${queryString ? `?${queryString}` : ''}`, { replace: true });
-  }, [search, location, type, skills, sortBy, page, setUrlLocation]);
+  }, [search, location, type, minSalary, maxSalary, salaryPeriod, sortBy, page, setUrlLocation]);
 
   // Scroll to top on pagination change
   useEffect(() => {
@@ -127,7 +134,9 @@ export default function JobsPage() {
     setSearch("");
     setLocationFilter("");
     setType("all");
-    setSkills("");
+    setMinSalary("");
+    setMaxSalary("");
+    setSalaryPeriod("per_year");
     setSortBy("recent");
     setPage(1);
   };
@@ -149,9 +158,10 @@ export default function JobsPage() {
     if (search) count++;
     if (location) count++;
     if (type && type !== "all") count++;
-    if (skills) count++;
+    if (minSalary) count++;
+    if (maxSalary) count++;
     return count;
-  }, [search, location, type, skills]);
+  }, [search, location, type, minSalary, maxSalary]);
 
   // Generate dynamic meta tags based on filters and results
   const metaData = useMemo(() => {
@@ -173,12 +183,21 @@ export default function JobsPage() {
     if (search) description += ` Search: ${search}.`;
     description += " Recruiter-first ATS built for recruiting velocity.";
 
-    // Canonical URL should always be the base jobs page to prevent duplicate content
-    // Query params create filtered views, not separate pages
+    // Build canonical URL with query params (include all active filters)
+    const params = new URLSearchParams();
+    if (search) params.set("search", search);
+    if (location) params.set("location", location);
+    if (type && type !== "all") params.set("type", type);
+    if (minSalary) params.set("minSalary", minSalary);
+    if (maxSalary) params.set("maxSalary", maxSalary);
+    if (salaryPeriod) params.set("salaryPeriod", salaryPeriod);
+    if (sortBy && sortBy !== "recent") params.set("sortBy", sortBy);
+    if (page > 1) params.set("page", page.toString());
+
     const canonicalUrl = `${baseUrl}/jobs`;
 
     return { title, description, canonicalUrl, baseUrl };
-  }, [location, type, search, skills, sortBy, page, data?.pagination.total]);
+  }, [location, type, search, minSalary, maxSalary, salaryPeriod, sortBy, page, data?.pagination.total]);
 
   const formatDate = (dateString: string | Date) => {
     const date = typeof dateString === 'string' ? new Date(dateString) : dateString;
@@ -187,6 +206,17 @@ export default function JobsPage() {
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  const formatSalary = (min?: number | null, max?: number | null, period?: string | null) => {
+    if (!min && !max) return null;
+    const currency = "₹";
+    const p = period === "per_year" ? "/yr" : period === "per_month" ? "/mo" : "";
+
+    if (min && max) return `${currency}${min.toLocaleString()} - ${currency}${max.toLocaleString()}${p}`;
+    if (min) return `From ${currency}${min.toLocaleString()}${p}`;
+    if (max) return `Up to ${currency}${max.toLocaleString()}${p}`;
+    return null;
   };
 
   return (
@@ -217,7 +247,7 @@ export default function JobsPage() {
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxIiBjeT0iMSIgcj0iMSIgZmlsbD0id2hpdGUiIGZpbGwtb3BhY2l0eT0iMC4wNSIvPjwvc3ZnPg==')] opacity-10"></div>
         <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-[100px] animate-pulse-slow"></div>
         <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-info/10 rounded-full blur-[100px] animate-pulse-slow" style={{ animationDelay: '1.2s' }}></div>
-        
+
         <div className={`container mx-auto px-4 py-8 relative z-10 transition-opacity duration-1000 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
           {/* Premium Header */}
           <div className="text-center mb-12 pt-16">
@@ -243,8 +273,12 @@ export default function JobsPage() {
                 setLocation={setLocationFilter}
                 type={type}
                 setType={setType}
-                skills={skills}
-                setSkills={setSkills}
+                minSalary={minSalary}
+                setMinSalary={setMinSalary}
+                maxSalary={maxSalary}
+                setMaxSalary={setMaxSalary}
+                salaryPeriod={salaryPeriod}
+                setSalaryPeriod={setSalaryPeriod}
                 onApplyFilters={handleApplyFilters}
                 onResetFilters={handleResetFilters}
               />
@@ -262,8 +296,12 @@ export default function JobsPage() {
                     setLocation={setLocationFilter}
                     type={type}
                     setType={setType}
-                    skills={skills}
-                    setSkills={setSkills}
+                    minSalary={minSalary}
+                    setMinSalary={setMinSalary}
+                    maxSalary={maxSalary}
+                    setMaxSalary={setMaxSalary}
+                    salaryPeriod={salaryPeriod}
+                    setSalaryPeriod={setSalaryPeriod}
                     onApplyFilters={handleApplyFilters}
                     onResetFilters={handleResetFilters}
                   />
@@ -333,12 +371,21 @@ export default function JobsPage() {
                       />
                     </Badge>
                   )}
-                  {skills && (
+                  {minSalary && (
                     <Badge variant="secondary" className="bg-muted/50 text-foreground gap-1">
-                      Skills: {skills}
+                      Min Salary: {minSalary}
                       <X
                         className="h-3 w-3 cursor-pointer hover:text-destructive"
-                        onClick={() => setSkills("")}
+                        onClick={() => setMinSalary("")}
+                      />
+                    </Badge>
+                  )}
+                  {maxSalary && (
+                    <Badge variant="secondary" className="bg-muted/50 text-foreground gap-1">
+                      Max Salary: {maxSalary}
+                      <X
+                        className="h-3 w-3 cursor-pointer hover:text-destructive"
+                        onClick={() => setMaxSalary("")}
                       />
                     </Badge>
                   )}
@@ -373,94 +420,89 @@ export default function JobsPage() {
 
             {/* Job Cards */}
             <div className="grid gap-6 mb-8">
-              {sortedJobs.map((job) => (
-                <Card
-                  key={job.id}
-                  data-testid="job-card"
-                  className="bg-muted/50 backdrop-blur-sm border-border hover:bg-muted/40 transition-all duration-300"
-                  onMouseEnter={() => handleJobCardHover(job.id)}
-                >
-                  <CardHeader>
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <CardTitle className="text-foreground text-xl mb-2">
-                          <Link href={`/jobs/${job.slug || job.id}`} className="hover:text-primary transition-colors">
-                            {job.title}
-                          </Link>
-                        </CardTitle>
-                        <CardDescription className="text-muted-foreground/50 flex flex-wrap items-center gap-4">
-                          <span className="flex items-center gap-1">
-                            <MapPin className="h-4 w-4" />
-                            {job.location}
-                          </span>
-                          <span className="flex items-center gap-1">
-                            <Clock className="h-4 w-4" />
-                            Posted {formatDate(job.createdAt)}
-                          </span>
-                          {job.postedByName && (
-                            <span className="flex items-center gap-1">
-                              <User className="h-4 w-4" />
-                              by{" "}
-                              {job.postedById && job.isRecruiterProfilePublic ? (
-                                <Link
-                                  href={`/recruiters/${job.postedById}`}
-                                  className="text-primary hover:underline"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  {job.postedByName}
-                                </Link>
-                              ) : (
-                                job.postedByName
-                              )}
-                            </span>
-                          )}
-                        </CardDescription>
-                      </div>
-                      <Badge 
-                        variant="secondary" 
-                        className="bg-primary/20 text-primary border-primary/30"
-                      >
-                        {job.type.replace('-', ' ')}
-                      </Badge>
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <p className="text-muted-foreground/50 mb-4 line-clamp-3">
-                      {job.description.substring(0, 200)}...
-                    </p>
-                    
-                    {job.skills && job.skills.length > 0 && (
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        {job.skills.slice(0, 5).map((skill, index) => (
-                          <Badge key={index} variant="outline" className="text-xs border-info/50 text-info">
-                            {skill}
-                          </Badge>
-                        ))}
-                        {job.skills.length > 5 && (
-                          <Badge variant="outline" className="text-xs border-gray-400/50 text-muted-foreground/50">
-                            +{job.skills.length - 5} more
-                          </Badge>
-                        )}
-                      </div>
-                    )}
+              {sortedJobs.map((job) => {
+                const salaryDisplay = formatSalary(job.salaryMin, job.salaryMax, job.salaryPeriod);
 
-                    <div className="flex justify-between items-center">
-                      {job.deadline && (
-                        <p className="text-sm text-muted-foreground">
-                          Deadline: {formatDate(job.deadline)}
-                        </p>
-                      )}
-                      <div className="flex gap-2">
-                        <Link href={`/jobs/${job.slug || job.id}`}>
-                          <Button className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600">
-                            View Details
-                          </Button>
-                        </Link>
+                return (
+                  <Card
+                    key={job.id}
+                    data-testid="job-card"
+                    className="bg-muted/50 backdrop-blur-sm border-border hover:bg-muted/40 transition-all duration-300"
+                    onMouseEnter={() => handleJobCardHover(job.id)}
+                  >
+                    <CardHeader>
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <CardTitle className="text-foreground text-xl mb-2">
+                            <Link href={`/jobs/${job.slug || job.id}`} className="hover:text-primary transition-colors">
+                              {job.title}
+                            </Link>
+                          </CardTitle>
+                          <CardDescription className="text-muted-foreground/50 flex flex-wrap items-center gap-4">
+                            <span className="flex items-center gap-1">
+                              <MapPin className="h-4 w-4" />
+                              {job.location}
+                            </span>
+                            {salaryDisplay && (
+                              <span className="flex items-center gap-1">
+                                {/*<IndianRupee className="h-4 w-4" />*/}
+                                {salaryDisplay}
+                              </span>
+                            )}
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-4 w-4" />
+                              Posted {formatDate(job.createdAt)}
+                            </span>
+                            {job.postedByName && (
+                              <span className="flex items-center gap-1">
+                                <User className="h-4 w-4" />
+                                by{" "}
+                                {job.postedById && job.isRecruiterProfilePublic ? (
+                                  <Link
+                                    href={`/recruiters/${job.postedById}`}
+                                    className="text-primary hover:underline"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    {job.postedByName}
+                                  </Link>
+                                ) : (
+                                  job.postedByName
+                                )}
+                              </span>
+                            )}
+                          </CardDescription>
+                        </div>
+                        <Badge
+                          variant="secondary"
+                          className="bg-primary/20 text-primary border-primary/30"
+                        >
+                          {job.type.replace('-', ' ')}
+                        </Badge>
                       </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-muted-foreground/50 mb-4 line-clamp-3">
+                        {job.description.substring(0, 200)}...
+                      </p>
+
+                      <div className="flex justify-between items-center">
+                        {job.deadline && (
+                          <p className="text-sm text-muted-foreground">
+                            Deadline: {formatDate(job.deadline)}
+                          </p>
+                        )}
+                        <div className="flex gap-2 ml-auto">
+                          <Link href={`/jobs/${job.slug || job.id}`}>
+                            <Button className="bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600">
+                              View Details
+                            </Button>
+                          </Link>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })}
             </div>
 
             {/* Pagination */}
@@ -474,7 +516,7 @@ export default function JobsPage() {
                 >
                   Previous
                 </Button>
-                
+
                 <div className="flex items-center gap-2">
                   {Array.from({ length: Math.min(5, data.pagination.totalPages) }, (_, i) => {
                     const pageNum = i + 1;

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, MapPin, Filter, Briefcase, X, SlidersHorizontal } from "lucide-react";
+import { Search, MapPin, Filter, Briefcase, X, SlidersHorizontal, IndianRupee } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,8 +15,12 @@ interface FilterPanelProps {
   setLocation: (value: string) => void;
   type: string;
   setType: (value: string) => void;
-  skills: string;
-  setSkills: (value: string) => void;
+  minSalary: string;
+  setMinSalary: (value: string) => void;
+  maxSalary: string;
+  setMaxSalary: (value: string) => void;
+  salaryPeriod: string;
+  setSalaryPeriod: (value: string) => void;
   onApplyFilters: () => void;
   onResetFilters: () => void;
   className?: string;
@@ -29,8 +33,12 @@ function FilterContent({
   setLocation,
   type,
   setType,
-  skills,
-  setSkills,
+  minSalary,
+  setMinSalary,
+  maxSalary,
+  setMaxSalary,
+  salaryPeriod,
+  setSalaryPeriod,
   onApplyFilters,
   onResetFilters,
   showButtons = true
@@ -99,17 +107,42 @@ function FilterContent({
         </Select>
       </div>
 
-      {/* Skills */}
+      {/* Salary Range */}
       <div className="space-y-2">
-        <Label htmlFor="skills" className="text-sm font-medium">Skills (comma separated)</Label>
-        <Input
-          id="skills"
-          placeholder="e.g. React, TypeScript, Node.js"
-          value={skills}
-          onChange={(e) => setSkills(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && onApplyFilters()}
-          className="bg-white/5 border-white/20 text-white placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-purple-400/20"
-        />
+        <Label className="text-sm font-medium flex items-center gap-2">
+          <IndianRupee className="h-4 w-4 text-primary" />
+          Salary Range
+        </Label>
+        <div className="flex items-center gap-2">
+          <Input
+            id="minSalary"
+            placeholder="Min"
+            type="number"
+            value={minSalary}
+            onChange={(e) => setMinSalary(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && onApplyFilters()}
+            className="bg-white/5 border-white/20 text-white placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-purple-400/20"
+          />
+          <span className="text-white">-</span>
+          <Input
+            id="maxSalary"
+            placeholder="Max"
+            type="number"
+            value={maxSalary}
+            onChange={(e) => setMaxSalary(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && onApplyFilters()}
+            className="bg-white/5 border-white/20 text-white placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-purple-400/20"
+          />
+        </div>
+        <Select value={salaryPeriod} onValueChange={setSalaryPeriod}>
+          <SelectTrigger className="bg-white/5 border-white/20 text-white focus:border-primary focus:ring-2 focus:ring-purple-400/20 mt-2">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="per_year">Per Year</SelectItem>
+            <SelectItem value="per_month">Per Month</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       {showButtons && (

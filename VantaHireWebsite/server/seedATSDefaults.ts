@@ -6,6 +6,7 @@
 import { db } from './db';
 import { pipelineStages, emailTemplates, consultants } from '../shared/schema';
 import { eq } from 'drizzle-orm';
+import { seedDefaultWhatsAppTemplates } from './seedWhatsAppTemplates';
 
 export async function seedDefaultPipelineStages() {
   console.log('🌱 Seeding default pipeline stages...');
@@ -275,6 +276,7 @@ export async function seedAllATSDefaults() {
   try {
     await seedDefaultPipelineStages();
     await seedDefaultEmailTemplates();
+    await seedDefaultWhatsAppTemplates();
     await seedConsultants();
     console.log('🎉 All ATS default data seeded successfully!');
   } catch (error: any) {

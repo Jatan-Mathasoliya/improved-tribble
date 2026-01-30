@@ -2,11 +2,12 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, Link } from "wouter";
 import { Helmet } from "react-helmet-async";
-import { MapPin, Clock, Calendar, Users, FileText, Upload, Briefcase, Star, Share2, Bookmark, Sparkles, DollarSign, AlertTriangle, RotateCcw, History } from "lucide-react";
+import { MapPin, Clock, Calendar, Users, FileText, Upload, Briefcase, Star, Share2, Bookmark, Sparkles, AlertTriangle, RotateCcw, History, IndianRupee, GraduationCap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -41,6 +42,7 @@ export default function JobDetailsPage() {
     email: "",
     phone: "",
     coverLetter: "",
+    whatsappConsent: true,
   });
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -159,7 +161,7 @@ export default function JobDetailsPage() {
         description: "We'll review your application and get back to you soon.",
       });
       setShowApplicationForm(false);
-      setFormData({ name: "", email: "", phone: "", coverLetter: "" });
+      setFormData({ name: "", email: "", phone: "", coverLetter: "", whatsappConsent: true });
       setResumeFile(null);
     },
     onError: (error: Error) => {
@@ -495,15 +497,90 @@ export default function JobDetailsPage() {
                     <CardContent>
                       <div className="flex flex-wrap gap-2">
                         {job.skills.map((skill, index) => (
-                          <Badge 
-                            key={index} 
-                            variant="outline" 
-                            className="border-primary/30 text-primary bg-primary/10"
+                          <Badge
+                            key={index}
+                            variant="outline"
+                            className="border-destructive/30 text-destructive bg-destructive/10"
                           >
                             {skill}
                           </Badge>
                         ))}
                       </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Good to Have Skills */}
+                {job.goodToHaveSkills && job.goodToHaveSkills.length > 0 && (
+                  <Card className="bg-muted/50 backdrop-blur-sm border-border premium-card">
+                    <CardHeader>
+                      <CardTitle className="text-foreground flex items-center gap-2">
+                        <Sparkles className="h-5 w-5 text-[#7B38FB]" />
+                        Good to Have Skills
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="flex flex-wrap gap-2">
+                        {job.goodToHaveSkills.map((skill, index) => (
+                          <Badge
+                            key={index}
+                            variant="outline"
+                            className="border-green-500/30 text-green-600 bg-green-500/10"
+                          >
+                            {skill}
+                          </Badge>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Salary */}
+                {(job.salaryMin || job.salaryMax) && (
+                  <Card className="bg-muted/50 backdrop-blur-sm border-border premium-card">
+                    <CardHeader>
+                      <CardTitle className="text-foreground flex items-center gap-2">
+                        <IndianRupee className="h-5 w-5 text-[#7B38FB]" />
+                        Compensation
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <p className="text-2xl font-bold text-foreground">
+                        {job.salaryMin && job.salaryMax
+                          ? `₹${job.salaryMin.toLocaleString('en-IN')} - ₹${job.salaryMax.toLocaleString('en-IN')}`
+                          : job.salaryMin
+                          ? `₹${job.salaryMin.toLocaleString('en-IN')}+`
+                          : `Up to ₹${job.salaryMax?.toLocaleString('en-IN')}`}
+                        <span className="text-sm font-normal text-muted-foreground ml-2">
+                          {job.salaryPeriod === 'per_month' ? '/month' : '/year'}
+                        </span>
+                      </p>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Education & Experience */}
+                {(job.educationRequirement || job.experienceYears) && (
+                  <Card className="bg-muted/50 backdrop-blur-sm border-border premium-card">
+                    <CardHeader>
+                      <CardTitle className="text-foreground flex items-center gap-2">
+                        <GraduationCap className="h-5 w-5 text-[#7B38FB]" />
+                        Requirements
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-3">
+                      {job.educationRequirement && (
+                        <div>
+                          <p className="text-sm text-muted-foreground">Education</p>
+                          <p className="text-foreground font-medium">{job.educationRequirement}</p>
+                        </div>
+                      )}
+                      {job.experienceYears && (
+                        <div>
+                          <p className="text-sm text-muted-foreground">Experience</p>
+                          <p className="text-foreground font-medium">{job.experienceYears}+ years</p>
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 )}
@@ -688,17 +765,34 @@ export default function JobDetailsPage() {
                             />
                           </div>
 
+                          <div className="flex items-start space-x-2 pt-2">
+                            <Checkbox
+                              id="whatsappConsent"
+                              checked={formData.whatsappConsent}
+                              onCheckedChange={(checked) =>
+                                setFormData({ ...formData, whatsappConsent: checked === true })
+                              }
+                              className="mt-0.5"
+                            />
+                            <Label
+                              htmlFor="whatsappConsent"
+                              className="text-sm text-muted-foreground leading-tight cursor-pointer"
+                            >
+                              I agree to receive job updates via WhatsApp
+                            </Label>
+                          </div>
+
                           <div className="flex gap-2">
-                            <Button 
-                              type="submit" 
+                            <Button
+                              type="submit"
                               disabled={applicationMutation.isPending}
                               className="flex-1 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] hover:shadow-lg hover:shadow-purple-500/20 transition-all duration-300"
                             >
                               {applicationMutation.isPending ? "Submitting..." : "Submit Application"}
                             </Button>
-                            <Button 
-                              type="button" 
-                              variant="outline" 
+                            <Button
+                              type="button"
+                              variant="outline"
                               onClick={() => setShowApplicationForm(false)}
                               className="bg-muted/50 border-border text-foreground hover:bg-muted/60"
                             >

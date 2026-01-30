@@ -65,7 +65,7 @@ import {
   type BatchFitResult,
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, desc, and, ilike, sql, or, inArray, count } from "drizzle-orm";
+import { eq, desc, and, ilike, sql, or, inArray, count, gte, lte } from "drizzle-orm";
 
 export type JobHealthStatus = 'green' | 'amber' | 'red';
 
@@ -125,7 +125,9 @@ export interface IStorage {
     limit?: number;
     location?: string;
     type?: string;
-    skills?: string[];
+    minSalary?: number;
+    maxSalary?: number;
+    salaryPeriod?: string;
     search?: string;
     status?: string;
   }): Promise<{ jobs: (Job & { postedByName?: string; postedById?: number | string; isRecruiterProfilePublic?: boolean })[]; total: number }>;
@@ -752,8 +754,11 @@ export class DatabaseStorage implements IStorage {
     limit?: number;
     location?: string;
     type?: string;
-    skills?: string[];
+    minSalary?: number;
+    maxSalary?: number;
+    salaryPeriod?: string;
     search?: string;
+    status?: string;
   }): Promise<{ jobs: (Job & { postedByName?: string; postedById?: number | string; isRecruiterProfilePublic?: boolean })[]; total: number }> {
     const page = filters.page || 1;
     const limit = filters.limit || 10;
@@ -777,6 +782,48 @@ export class DatabaseStorage implements IStorage {
       if (searchCondition) {
         whereConditions.push(searchCondition);
       }
+    }
+
+    // Salary Filtering with Auto-Calculation
+    const filterPeriod = filters.salaryPeriod || 'per_year';
+    const isFilterYearly = filterPeriod === 'per_year';
+
+    if (filters.minSalary) {
+      const minVal = filters.minSalary;
+      // We want jobs where the max salary offered is at least the user's min expectation
+      // Logic: job.salaryMax (normalized) >= minVal
+      if (isFilterYearly) {
+        whereConditions.push(or(
+          and(eq(jobs.salaryPeriod, 'per_year'), gte(jobs.salaryMax, minVal))!,
+          and(eq(jobs.salaryPeriod, 'per_month'), gte(sql`${jobs.salaryMax} * 12`, minVal))!
+        )!);
+      } else {
+        whereConditions.push(or(
+          and(eq(jobs.salaryPeriod, 'per_month'), gte(jobs.salaryMax, minVal))!,
+          and(eq(jobs.salaryPeriod, 'per_year'), gte(sql`${jobs.salaryMax} / 12`, minVal))!
+        )!);
+      }
+    }
+
+    if (filters.maxSalary) {
+      const maxVal = filters.maxSalary;
+      // We want jobs where the min salary starts at or below the user's max budget/expectation
+      // Logic: job.salaryMin (normalized) <= maxVal
+      if (isFilterYearly) {
+        whereConditions.push(or(
+          and(eq(jobs.salaryPeriod, 'per_year'), lte(jobs.salaryMin, maxVal))!,
+          and(eq(jobs.salaryPeriod, 'per_month'), lte(sql`${jobs.salaryMin} * 12`, maxVal))!
+        )!);
+      } else {
+        whereConditions.push(or(
+          and(eq(jobs.salaryPeriod, 'per_month'), lte(jobs.salaryMin, maxVal))!,
+          and(eq(jobs.salaryPeriod, 'per_year'), lte(sql`${jobs.salaryMin} / 12`, maxVal))!
+        )!);
+      }
+    }
+
+    if (filters.status) {
+        whereConditions.push(eq(jobs.status, filters.status));
     }
 
     if (filters.skills && filters.skills.length > 0) {

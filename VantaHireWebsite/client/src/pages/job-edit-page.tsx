@@ -3,13 +3,14 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { useRoute, useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Redirect } from "wouter";
-import { ArrowLeft, Save, AlertCircle } from "lucide-react";
+import { ArrowLeft, Save, AlertCircle, IndianRupee, GraduationCap, Sparkles, Briefcase, Tag, Plus, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Client, Job } from "@shared/schema";
 import { apiRequest, queryClient } from "@/lib/queryClient";
@@ -38,9 +39,17 @@ export default function JobEditPage() {
     location: "",
     type: "full-time",
     skills: [] as string[],
+    goodToHaveSkills: [] as string[],
+    salaryMin: "",
+    salaryMax: "",
+    salaryPeriod: "per_month" as "per_month" | "per_year",
+    educationRequirement: "",
+    experienceYears: "",
   });
   const [hiringManagerId, setHiringManagerId] = useState<string>("");
   const [clientId, setClientId] = useState<string>("");
+  const [newSkill, setNewSkill] = useState("");
+  const [newGoodToHaveSkill, setNewGoodToHaveSkill] = useState("");
   const descriptionWordCount = countWords(formData.description);
   const descriptionWordsRemaining = Math.max(0, MIN_DESCRIPTION_WORDS - descriptionWordCount);
 
@@ -95,6 +104,12 @@ export default function JobEditPage() {
         location: job.location,
         type: job.type,
         skills: job.skills || [],
+        goodToHaveSkills: job.goodToHaveSkills || [],
+        salaryMin: job.salaryMin ? String(job.salaryMin) : "",
+        salaryMax: job.salaryMax ? String(job.salaryMax) : "",
+        salaryPeriod: (job.salaryPeriod as "per_month" | "per_year") || "per_month",
+        educationRequirement: job.educationRequirement || "",
+        experienceYears: job.experienceYears ? String(job.experienceYears) : "",
       });
       setHiringManagerId(job.hiringManagerId ? String(job.hiringManagerId) : "");
       setClientId(job.clientId ? String(job.clientId) : "");
@@ -126,10 +141,36 @@ export default function JobEditPage() {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     updateJobMutation.mutate({
-      ...formData,
+      title: formData.title,
+      description: formData.description,
+      location: formData.location,
+      type: formData.type,
+      skills: formData.skills,
+      goodToHaveSkills: formData.goodToHaveSkills.length > 0 ? formData.goodToHaveSkills : null,
+      salaryMin: formData.salaryMin ? Number(formData.salaryMin) : null,
+      salaryMax: formData.salaryMax ? Number(formData.salaryMax) : null,
+      salaryPeriod: formData.salaryPeriod || null,
+      educationRequirement: formData.educationRequirement || null,
+      experienceYears: formData.experienceYears ? Number(formData.experienceYears) : null,
       hiringManagerId: hiringManagerId ? Number(hiringManagerId) : null,
       clientId: clientId ? Number(clientId) : null,
     });
+  };
+
+  // Handle adding required skill
+  const handleAddSkill = () => {
+    if (newSkill.trim() && !formData.skills.includes(newSkill.trim())) {
+      setFormData({ ...formData, skills: [...formData.skills, newSkill.trim()] });
+      setNewSkill("");
+    }
+  };
+
+  // Handle adding good-to-have skill
+  const handleAddGoodToHaveSkill = () => {
+    if (newGoodToHaveSkill.trim() && !formData.goodToHaveSkills.includes(newGoodToHaveSkill.trim())) {
+      setFormData({ ...formData, goodToHaveSkills: [...formData.goodToHaveSkills, newGoodToHaveSkill.trim()] });
+      setNewGoodToHaveSkill("");
+    }
   };
 
   if (isLoading) {
@@ -261,16 +302,163 @@ export default function JobEditPage() {
                   )}
                 </div>
 
+                {/* Salary Section */}
                 <div className="space-y-2">
-                  <Label htmlFor="skills">Skills (comma-separated)</Label>
+                  <Label className="flex items-center gap-2">
+                    <IndianRupee className="h-4 w-4 text-muted-foreground" />
+                    Salary / Pay (Optional)
+                  </Label>
+                  <div className="flex gap-3">
+                    <div className="flex-1">
+                      <Input
+                        type="number"
+                        value={formData.salaryMin}
+                        onChange={(e) => setFormData({ ...formData, salaryMin: e.target.value })}
+                        placeholder="Min (e.g., 500000)"
+                        min="0"
+                      />
+                    </div>
+                    <span className="flex items-center text-muted-foreground">to</span>
+                    <div className="flex-1">
+                      <Input
+                        type="number"
+                        value={formData.salaryMax}
+                        onChange={(e) => setFormData({ ...formData, salaryMax: e.target.value })}
+                        placeholder="Max (e.g., 800000)"
+                        min="0"
+                      />
+                    </div>
+                    <Select
+                      value={formData.salaryPeriod}
+                      onValueChange={(value: "per_month" | "per_year") =>
+                        setFormData({ ...formData, salaryPeriod: value })
+                      }
+                    >
+                      <SelectTrigger className="w-32">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="per_month">Per Month</SelectItem>
+                        <SelectItem value="per_year">Per Year</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* Required Skills Section */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Tag className="h-4 w-4 text-muted-foreground" />
+                    Required Skills (Non-negotiable)
+                  </Label>
+                  <div className="flex gap-2 mb-3">
+                    <Input
+                      type="text"
+                      value={newSkill}
+                      onChange={(e) => setNewSkill(e.target.value)}
+                      placeholder="Add a required skill..."
+                      className="flex-1"
+                      onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddSkill())}
+                    />
+                    <Button type="button" onClick={handleAddSkill} size="icon">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {formData.skills.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {formData.skills.map((skill, index) => (
+                        <Badge
+                          key={index}
+                          variant="secondary"
+                          className="bg-destructive/10 text-destructive border-destructive/20 pl-3 pr-1 py-1"
+                        >
+                          {skill}
+                          <Button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, skills: formData.skills.filter((s) => s !== skill) })}
+                            variant="ghost"
+                            size="icon"
+                            className="ml-2 p-0 h-4 w-4 hover:bg-destructive/20"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Good to Have Skills Section */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-muted-foreground" />
+                    Good to Have Skills (Optional)
+                  </Label>
+                  <div className="flex gap-2 mb-3">
+                    <Input
+                      type="text"
+                      value={newGoodToHaveSkill}
+                      onChange={(e) => setNewGoodToHaveSkill(e.target.value)}
+                      placeholder="Add a nice-to-have skill..."
+                      className="flex-1"
+                      onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddGoodToHaveSkill())}
+                    />
+                    <Button type="button" onClick={handleAddGoodToHaveSkill} size="icon">
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  {formData.goodToHaveSkills.length > 0 && (
+                    <div className="flex flex-wrap gap-2">
+                      {formData.goodToHaveSkills.map((skill, index) => (
+                        <Badge
+                          key={index}
+                          variant="secondary"
+                          className="bg-green-500/10 text-green-600 border-green-500/20 pl-3 pr-1 py-1"
+                        >
+                          {skill}
+                          <Button
+                            type="button"
+                            onClick={() => setFormData({ ...formData, goodToHaveSkills: formData.goodToHaveSkills.filter((s) => s !== skill) })}
+                            variant="ghost"
+                            size="icon"
+                            className="ml-2 p-0 h-4 w-4 hover:bg-green-500/20"
+                          >
+                            <X className="h-3 w-3" />
+                          </Button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Education Requirement */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <GraduationCap className="h-4 w-4 text-muted-foreground" />
+                    Education Requirement (Optional)
+                  </Label>
                   <Input
-                    id="skills"
-                    value={formData.skills.join(", ")}
-                    onChange={(e) => setFormData({
-                      ...formData,
-                      skills: e.target.value.split(",").map(s => s.trim()).filter(Boolean)
-                    })}
-                    placeholder="React, TypeScript, Node.js"
+                    type="text"
+                    value={formData.educationRequirement}
+                    onChange={(e) => setFormData({ ...formData, educationRequirement: e.target.value })}
+                    placeholder="e.g., Bachelor's in Computer Science or equivalent"
+                  />
+                </div>
+
+                {/* Experience Years */}
+                <div className="space-y-2">
+                  <Label className="flex items-center gap-2">
+                    <Briefcase className="h-4 w-4 text-muted-foreground" />
+                    Preferred Experience (Years)
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    max="50"
+                    value={formData.experienceYears}
+                    onChange={(e) => setFormData({ ...formData, experienceYears: e.target.value })}
+                    placeholder="e.g., 3"
+                    className="w-32"
                   />
                 </div>
 

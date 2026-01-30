@@ -79,6 +79,13 @@ export const jobs = pgTable("jobs", {
   // AI features
   jdDigest: jsonb("jd_digest"), // Cached job description digest for AI matching
   jdDigestVersion: integer("jd_digest_version").default(1),
+  // Structured job requirements
+  salaryMin: integer("salary_min"), // Minimum salary
+  salaryMax: integer("salary_max"), // Maximum salary
+  salaryPeriod: text("salary_period"), // 'per_month' | 'per_year'
+  goodToHaveSkills: text("good_to_have_skills").array(), // Nice-to-have skills (existing 'skills' field is for required skills)
+  educationRequirement: text("education_requirement"), // Education requirement
+  experienceYears: integer("experience_years"), // Preferred years of experience
 }, (table) => ({
   // Indexes for performance hotspots
   statusIdx: index("jobs_status_idx").on(table.status),
@@ -158,6 +165,7 @@ export const applications = pgTable("applications", {
   aiSuggestedActionReason: text("ai_suggested_action_reason"), // Reasoning for the suggested action
   aiSummaryComputedAt: timestamp("ai_summary_computed_at"), // When the summary was generated
   resumeId: integer("resume_id").references(() => candidateResumes.id),
+  whatsappConsent: boolean("whatsapp_consent").notNull().default(true), // WhatsApp notification consent (opt-out model)
 }, (table) => ({
   // Indexes for ATS performance
   currentStageIdx: index("applications_current_stage_idx").on(table.currentStage),
@@ -285,6 +293,47 @@ export const automationEvents = pgTable("automation_events", {
   targetTypeIdx: index("automation_events_target_type_idx").on(table.targetType),
   triggeredAtIdx: index("automation_events_triggered_at_idx").on(table.triggeredAt),
   outcomeIdx: index("automation_events_outcome_idx").on(table.outcome),
+}));
+
+// WhatsApp: Message templates (registered with Meta for production)
+export const whatsappTemplates = pgTable("whatsapp_templates", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  metaTemplateName: text("meta_template_name").notNull().unique(),
+  metaTemplateId: text("meta_template_id"), // Meta's template ID after approval
+  language: text("language").notNull().default("en"),
+  templateType: text("template_type").notNull(), // matches email template types: 'application_received', 'interview_invite', 'status_update', 'offer_extended', 'rejection'
+  category: text("category").notNull().default("UTILITY"), // META template category
+  bodyTemplate: text("body_template").notNull(), // Message body with {{1}}, {{2}} placeholders
+  status: text("status").notNull().default("pending"), // 'pending', 'approved', 'rejected'
+  rejectionReason: text("rejection_reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  templateTypeIdx: index("whatsapp_templates_type_idx").on(table.templateType),
+  statusIdx: index("whatsapp_templates_status_idx").on(table.status),
+}));
+
+// WhatsApp: Audit log (parallel to emailAuditLog)
+export const whatsappAuditLog = pgTable("whatsapp_audit_log", {
+  id: serial("id").primaryKey(),
+  applicationId: integer("application_id").references(() => applications.id, { onDelete: 'cascade' }),
+  templateId: integer("template_id").references(() => whatsappTemplates.id),
+  templateType: text("template_type"),
+  recipientPhone: text("recipient_phone").notNull(),
+  messageId: text("message_id"), // Meta's message ID or test ID
+  status: text("status").notNull().default("pending"), // 'pending', 'sent', 'delivered', 'read', 'failed'
+  errorCode: text("error_code"),
+  errorMessage: text("error_message"),
+  templateVariables: jsonb("template_variables"), // Variables sent to template
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+  deliveredAt: timestamp("delivered_at"),
+  readAt: timestamp("read_at"),
+  sentBy: integer("sent_by").references(() => users.id),
+}, (table) => ({
+  applicationIdIdx: index("whatsapp_audit_log_application_id_idx").on(table.applicationId),
+  statusIdx: index("whatsapp_audit_log_status_idx").on(table.status),
+  messageIdIdx: index("whatsapp_audit_log_message_id_idx").on(table.messageId),
+  sentAtIdx: index("whatsapp_audit_log_sent_at_idx").on(table.sentAt),
 }));
 
 // Consultant Profiles
@@ -700,6 +749,25 @@ export const automationEventsRelations = relations(automationEvents, ({ one }) =
   }),
 }));
 
+export const whatsappTemplatesRelations = relations(whatsappTemplates, ({ many }) => ({
+  auditLogs: many(whatsappAuditLog),
+}));
+
+export const whatsappAuditLogRelations = relations(whatsappAuditLog, ({ one }) => ({
+  application: one(applications, {
+    fields: [whatsappAuditLog.applicationId],
+    references: [applications.id],
+  }),
+  template: one(whatsappTemplates, {
+    fields: [whatsappAuditLog.templateId],
+    references: [whatsappTemplates.id],
+  }),
+  sentByUser: one(users, {
+    fields: [whatsappAuditLog.sentBy],
+    references: [users.id],
+  }),
+}));
+
 export const jobAnalyticsRelations = relations(jobAnalytics, ({ one }) => ({
   job: one(jobs, {
     fields: [jobAnalytics.jobId],
@@ -983,6 +1051,12 @@ export const insertJobSchema = createInsertSchema(jobs).pick({
   deadline: true,
   clientId: true,
   hiringManagerId: true,
+  salaryMin: true,
+  salaryMax: true,
+  salaryPeriod: true,
+  goodToHaveSkills: true,
+  educationRequirement: true,
+  experienceYears: true,
 }).extend({
   title: z.string().min(1).max(100),
   location: z.string().min(1).max(100),
@@ -994,6 +1068,12 @@ export const insertJobSchema = createInsertSchema(jobs).pick({
   deadline: z.string().transform(str => new Date(str)).optional(),
   clientId: z.number().int().positive().optional(),
   hiringManagerId: z.number().int().positive().optional(),
+  salaryMin: z.number().int().positive().optional(),
+  salaryMax: z.number().int().positive().optional(),
+  salaryPeriod: z.enum(["per_month", "per_year"]).optional(),
+  goodToHaveSkills: z.array(z.string().min(1).max(50)).max(20).optional(),
+  educationRequirement: z.string().max(500).optional(),
+  experienceYears: z.number().int().min(0).max(50).optional(),
 });
 
 export const insertApplicationSchema = createInsertSchema(applications).pick({
@@ -1006,17 +1086,21 @@ export const insertApplicationSchema = createInsertSchema(applications).pick({
 }).extend({
   name: z.string().min(1).max(50),
   email: z.string().email(),
-  phone: z.string().min(10).max(15),
+  phone: z.string().regex(/^\d{10}$/, "Please enter exactly 10 digits for your phone number"),
   coverLetter: z.string().max(2000).optional(),
   status: z.enum(["submitted", "reviewed", "shortlisted", "rejected"]).optional(),
   notes: z.string().max(1000).optional(),
+  whatsappConsent: z.preprocess(
+    (val) => val === 'true' || val === true,
+    z.boolean()
+  ).default(true),
 });
 
 // Zod schema for recruiter-add endpoint (separate from public apply)
 export const recruiterAddApplicationSchema = z.object({
   name: z.string().min(1).max(100),
   email: z.string().email(),
-  phone: z.string().min(10).max(15),
+  phone: z.string().regex(/^\d{10}$/, "Please enter exactly 10 digits for your phone number"),
   coverLetter: z.string().max(2000).optional(),
   source: z.enum(['recruiter_add', 'referral', 'linkedin', 'indeed', 'other']).default('recruiter_add'),
   sourceMetadata: z.object({
@@ -1025,6 +1109,10 @@ export const recruiterAddApplicationSchema = z.object({
     notes: z.string().max(500).optional(),
   }).optional(),
   currentStage: z.number().int().positive().optional(), // Initial stage assignment
+  whatsappConsent: z.preprocess(
+    (val) => val === 'true' || val === true,
+    z.boolean()
+  ).default(true),
 });
 
 export const insertUserProfileSchema = createInsertSchema(userProfiles).pick({
@@ -1258,6 +1346,32 @@ export const insertAutomationEventSchema = z.object({
 
 export type AutomationEvent = typeof automationEvents.$inferSelect;
 export type InsertAutomationEvent = z.infer<typeof insertAutomationEventSchema>;
+
+// WhatsApp: Insert schemas and types
+export const insertWhatsappTemplateSchema = createInsertSchema(whatsappTemplates).pick({
+  name: true,
+  metaTemplateName: true,
+  metaTemplateId: true,
+  language: true,
+  templateType: true,
+  category: true,
+  bodyTemplate: true,
+  status: true,
+}).extend({
+  name: z.string().min(1).max(200),
+  metaTemplateName: z.string().min(1).max(100),
+  metaTemplateId: z.string().max(100).optional(),
+  language: z.string().length(2).default('en'),
+  templateType: z.enum(['application_received', 'interview_invite', 'status_update', 'offer_extended', 'rejection']),
+  category: z.enum(['UTILITY', 'MARKETING', 'AUTHENTICATION']).default('UTILITY'),
+  bodyTemplate: z.string().min(1).max(1024),
+  status: z.enum(['pending', 'approved', 'rejected']).default('pending'),
+});
+
+export type WhatsappTemplate = typeof whatsappTemplates.$inferSelect;
+export type InsertWhatsappTemplate = z.infer<typeof insertWhatsappTemplateSchema>;
+
+export type WhatsappAuditLog = typeof whatsappAuditLog.$inferSelect;
 
 // Hiring Manager Invitations: Insert schemas and types
 export const insertHiringManagerInvitationSchema = z.object({

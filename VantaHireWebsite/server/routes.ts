@@ -19,6 +19,7 @@ import { registerClientsRoutes } from "./clients.routes";
 import { registerJobsRoutes } from "./jobs.routes";
 import { registerApplicationsRoutes } from "./applications.routes";
 import { registerCommunicationsRoutes } from "./communications.routes";
+import { registerWhatsAppRoutes } from "./whatsapp.routes";
 import { registerResumeRoutes } from "./resume.routes";
 import { registerProfileRoutes } from "./profile.routes";
 import { registerTalentPoolRoutes } from "./talent-pool.routes";
@@ -363,14 +364,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
 
-  // WhatsApp integration removed - was unused placeholder code
-  // If you need WhatsApp integration in the future:
-  // 1. Set up WhatsApp Business API account
-  // 2. Add WHATSAPP_APP_SECRET to environment variables
-  // 3. Implement proper webhook signature validation
-  // 4. Add error handling and input validation
-  // See COMPREHENSIVE_SECURITY_AUDIT.md for implementation details
-
   // Register admin routes (admin dashboard, stats, user management, etc.)
   registerAdminRoutes(app, doubleCsrfProtection);
 
@@ -385,6 +378,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Register communications routes (email templates, sending, AI drafts)
   registerCommunicationsRoutes(app, doubleCsrfProtection);
+
+  // Register WhatsApp routes (WhatsApp templates, sending, webhooks)
+  registerWhatsAppRoutes(app, doubleCsrfProtection);
 
   // Resume text preview routes
   registerResumeRoutes(app);

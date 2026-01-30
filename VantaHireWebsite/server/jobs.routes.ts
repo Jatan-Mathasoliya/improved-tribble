@@ -112,7 +112,9 @@ export function registerJobsRoutes(
       const location = req.query.location as string;
       const type = req.query.type as string;
       const search = req.query.search as string;
-      const skills = req.query.skills as string;
+      const minSalary = parseInt(req.query.minSalary as string);
+      const maxSalary = parseInt(req.query.maxSalary as string);
+      const salaryPeriod = req.query.salaryPeriod as string;
 
       const filters = {
         ...(page !== undefined && { page: Number(page) }),
@@ -120,7 +122,9 @@ export function registerJobsRoutes(
         ...(location && { location }),
         ...(type && { type }),
         ...(search && { search }),
-        ...(skills && { skills: skills.split(',').map(s => s.trim()).filter(Boolean) })
+        ...(minSalary && !isNaN(minSalary) && { minSalary }),
+        ...(maxSalary && !isNaN(maxSalary) && { maxSalary }),
+        ...(salaryPeriod && { salaryPeriod })
       };
 
       const result = await storage.getJobs(filters);
@@ -253,7 +257,10 @@ export function registerJobsRoutes(
       }
 
       // Validate and extract allowed fields
-      const { title, description, location, type, skills, hiringManagerId, clientId } = req.body;
+      const {
+        title, description, location, type, skills, hiringManagerId, clientId,
+        salaryMin, salaryMax, salaryPeriod, goodToHaveSkills, educationRequirement, experienceYears
+      } = req.body;
       const updates: Partial<{
         title: string;
         description: string;
@@ -262,6 +269,12 @@ export function registerJobsRoutes(
         skills: string[];
         hiringManagerId: number | null;
         clientId: number | null;
+        salaryMin: number | null;
+        salaryMax: number | null;
+        salaryPeriod: string | null;
+        goodToHaveSkills: string[] | null;
+        educationRequirement: string | null;
+        experienceYears: number | null;
       }> = {};
 
       if (title !== undefined) {
@@ -327,6 +340,73 @@ export function registerJobsRoutes(
           updates.clientId = clientId;
         } else {
           res.status(400).json({ error: 'clientId must be a positive integer or null' });
+          return;
+        }
+      }
+
+      // New structured job fields
+      if (salaryMin !== undefined) {
+        if (salaryMin === null) {
+          updates.salaryMin = null;
+        } else if (Number.isInteger(salaryMin) && salaryMin > 0) {
+          updates.salaryMin = salaryMin;
+        } else {
+          res.status(400).json({ error: 'salaryMin must be a positive integer or null' });
+          return;
+        }
+      }
+
+      if (salaryMax !== undefined) {
+        if (salaryMax === null) {
+          updates.salaryMax = null;
+        } else if (Number.isInteger(salaryMax) && salaryMax > 0) {
+          updates.salaryMax = salaryMax;
+        } else {
+          res.status(400).json({ error: 'salaryMax must be a positive integer or null' });
+          return;
+        }
+      }
+
+      if (salaryPeriod !== undefined) {
+        if (salaryPeriod === null) {
+          updates.salaryPeriod = null;
+        } else if (['per_month', 'per_year'].includes(salaryPeriod)) {
+          updates.salaryPeriod = salaryPeriod;
+        } else {
+          res.status(400).json({ error: 'salaryPeriod must be "per_month" or "per_year" or null' });
+          return;
+        }
+      }
+
+      if (goodToHaveSkills !== undefined) {
+        if (goodToHaveSkills === null) {
+          updates.goodToHaveSkills = null;
+        } else if (Array.isArray(goodToHaveSkills)) {
+          updates.goodToHaveSkills = goodToHaveSkills.filter((s): s is string => typeof s === 'string').map(s => s.trim()).filter(Boolean);
+        } else {
+          res.status(400).json({ error: 'goodToHaveSkills must be an array or null' });
+          return;
+        }
+      }
+
+      if (educationRequirement !== undefined) {
+        if (educationRequirement === null || educationRequirement === '') {
+          updates.educationRequirement = null;
+        } else if (typeof educationRequirement === 'string') {
+          updates.educationRequirement = educationRequirement.trim();
+        } else {
+          res.status(400).json({ error: 'educationRequirement must be a string or null' });
+          return;
+        }
+      }
+
+      if (experienceYears !== undefined) {
+        if (experienceYears === null) {
+          updates.experienceYears = null;
+        } else if (Number.isInteger(experienceYears) && experienceYears >= 0 && experienceYears <= 50) {
+          updates.experienceYears = experienceYears;
+        } else {
+          res.status(400).json({ error: 'experienceYears must be an integer between 0-50 or null' });
           return;
         }
       }

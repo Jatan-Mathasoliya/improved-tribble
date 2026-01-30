@@ -31,6 +31,9 @@ import {
   Copy,
   Info,
   Trash2,
+  IndianRupee,
+  GraduationCap,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -63,6 +66,12 @@ const step2Schema = z.object({
       message: `Description must be at least ${MIN_DESCRIPTION_WORDS} words`,
     }),
   skills: z.array(z.string()).optional(),
+  goodToHaveSkills: z.array(z.string()).optional(),
+  salaryMin: z.string().optional(),
+  salaryMax: z.string().optional(),
+  salaryPeriod: z.enum(["per_month", "per_year"]).optional(),
+  educationRequirement: z.string().max(500).optional(),
+  experienceYears: z.string().optional(),
 });
 
 const step3Schema = z.object({
@@ -107,15 +116,27 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
     type: "full-time" | "part-time" | "contract" | "remote";
     description: string;
     deadline: string;
+    salaryMin: string;
+    salaryMax: string;
+    salaryPeriod: "per_month" | "per_year";
+    educationRequirement: string;
+    experienceYears: string;
   }>({
     title: "",
     location: "",
     type: "full-time",
     description: "",
     deadline: "",
+    salaryMin: "",
+    salaryMax: "",
+    salaryPeriod: "per_month",
+    educationRequirement: "",
+    experienceYears: "",
   });
   const [skills, setSkills] = useState<string[]>([]);
   const [newSkill, setNewSkill] = useState("");
+  const [goodToHaveSkills, setGoodToHaveSkills] = useState<string[]>([]);
+  const [newGoodToHaveSkill, setNewGoodToHaveSkill] = useState("");
   const [hiringManagerId, setHiringManagerId] = useState<string>("");
   const [clientId, setClientId] = useState<string>("");
   const [showAiDrawer, setShowAiDrawer] = useState(false);
@@ -195,11 +216,21 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
       type: sourceJob.type as "full-time" | "part-time" | "contract" | "remote",
       description: sourceJob.description,
       deadline: "",
+      salaryMin: sourceJob.salaryMin ? sourceJob.salaryMin.toString() : "",
+      salaryMax: sourceJob.salaryMax ? sourceJob.salaryMax.toString() : "",
+      salaryPeriod: (sourceJob.salaryPeriod as "per_month" | "per_year") || "per_month",
+      educationRequirement: sourceJob.educationRequirement || "",
+      experienceYears: sourceJob.experienceYears ? sourceJob.experienceYears.toString() : "",
     });
 
     // Prefill skills
     if (sourceJob.skills && sourceJob.skills.length > 0) {
       setSkills(sourceJob.skills);
+    }
+
+    // Prefill good-to-have skills
+    if (sourceJob.goodToHaveSkills && sourceJob.goodToHaveSkills.length > 0) {
+      setGoodToHaveSkills(sourceJob.goodToHaveSkills);
     }
 
     // Prefill hiring manager and client if set
@@ -309,6 +340,12 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
         step2Schema.parse({
           description: formData.description,
           skills,
+          goodToHaveSkills,
+          salaryMin: formData.salaryMin || undefined,
+          salaryMax: formData.salaryMax || undefined,
+          salaryPeriod: formData.salaryPeriod || undefined,
+          educationRequirement: formData.educationRequirement || undefined,
+          experienceYears: formData.experienceYears || undefined,
         });
       } else if (step === 3) {
         step3Schema.parse({
@@ -350,11 +387,20 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
 
     try {
       const jobData = {
-        ...formData,
+        title: formData.title,
+        location: formData.location,
+        type: formData.type,
+        description: formData.description,
         skills,
+        goodToHaveSkills: goodToHaveSkills.length > 0 ? goodToHaveSkills : undefined,
         deadline: formData.deadline || undefined,
         hiringManagerId: hiringManagerId ? Number(hiringManagerId) : undefined,
         clientId: clientId ? Number(clientId) : undefined,
+        salaryMin: formData.salaryMin ? Number(formData.salaryMin) : undefined,
+        salaryMax: formData.salaryMax ? Number(formData.salaryMax) : undefined,
+        salaryPeriod: formData.salaryPeriod || undefined,
+        educationRequirement: formData.educationRequirement || undefined,
+        experienceYears: formData.experienceYears ? Number(formData.experienceYears) : undefined,
       };
 
       insertJobSchema.parse(jobData);
@@ -375,6 +421,14 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
     if (newSkill.trim() && !skills.includes(newSkill.trim())) {
       setSkills([...skills, newSkill.trim()]);
       setNewSkill("");
+    }
+  };
+
+  // Handle good-to-have skill add
+  const handleAddGoodToHaveSkill = () => {
+    if (newGoodToHaveSkill.trim() && !goodToHaveSkills.includes(newGoodToHaveSkill.trim())) {
+      setGoodToHaveSkills([...goodToHaveSkills, newGoodToHaveSkill.trim()]);
+      setNewGoodToHaveSkill("");
     }
   };
 
@@ -556,18 +610,62 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
 
           {/* Step 2: Details */}
           {currentStep === 2 && (
-            <div className="space-y-4">
+            <div className="space-y-5">
+              {/* Salary Section */}
+              <div>
+                <Label className="flex items-center gap-2 mb-2">
+                  <IndianRupee className="h-4 w-4 text-muted-foreground" />
+                  Salary / Pay (Optional - won't be visible to candidate if left blank)
+                </Label>
+                <div className="flex gap-3">
+                  <div className="flex-1">
+                    <Input
+                      type="number"
+                      value={formData.salaryMin}
+                      onChange={(e) => setFormData({ ...formData, salaryMin: e.target.value })}
+                      placeholder="Min (e.g., 500000)"
+                      min="0"
+                    />
+                  </div>
+                  <span className="flex items-center text-muted-foreground">to</span>
+                  <div className="flex-1">
+                    <Input
+                      type="number"
+                      value={formData.salaryMax}
+                      onChange={(e) => setFormData({ ...formData, salaryMax: e.target.value })}
+                      placeholder="Max (e.g., 800000)"
+                      min="0"
+                    />
+                  </div>
+                  <Select
+                    value={formData.salaryPeriod}
+                    onValueChange={(value: "per_month" | "per_year") =>
+                      setFormData({ ...formData, salaryPeriod: value })
+                    }
+                  >
+                    <SelectTrigger className="w-32">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="per_month">Per Month</SelectItem>
+                      <SelectItem value="per_year">Per Year</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Required Skills Section */}
               <div>
                 <Label className="flex items-center gap-2 mb-2">
                   <Tag className="h-4 w-4 text-muted-foreground" />
-                  Required Skills
+                  Required Skills (Non-negotiable)
                 </Label>
                 <div className="flex gap-2 mb-3">
                   <Input
                     type="text"
                     value={newSkill}
                     onChange={(e) => setNewSkill(e.target.value)}
-                    placeholder="Add a skill..."
+                    placeholder="Add a required skill..."
                     className="flex-1"
                     onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddSkill())}
                   />
@@ -581,7 +679,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                       <Badge
                         key={index}
                         variant="secondary"
-                        className="bg-primary/10 text-primary border-primary/20 pl-3 pr-1 py-1"
+                        className="bg-destructive/10 text-destructive border-destructive/20 pl-3 pr-1 py-1"
                       >
                         {skill}
                         <Button
@@ -589,7 +687,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                           onClick={() => setSkills(skills.filter((s) => s !== skill))}
                           variant="ghost"
                           size="icon"
-                          className="ml-2 p-0 h-4 w-4 hover:bg-destructive/20 text-destructive"
+                          className="ml-2 p-0 h-4 w-4 hover:bg-destructive/20"
                         >
                           <X className="h-3 w-3" />
                         </Button>
@@ -599,6 +697,81 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                 )}
               </div>
 
+              {/* Good to Have Skills Section */}
+              <div>
+                <Label className="flex items-center gap-2 mb-2">
+                  <Sparkles className="h-4 w-4 text-muted-foreground" />
+                  Good to Have Skills (Optional)
+                </Label>
+                <div className="flex gap-2 mb-3">
+                  <Input
+                    type="text"
+                    value={newGoodToHaveSkill}
+                    onChange={(e) => setNewGoodToHaveSkill(e.target.value)}
+                    placeholder="Add a nice-to-have skill..."
+                    className="flex-1"
+                    onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddGoodToHaveSkill())}
+                  />
+                  <Button type="button" onClick={handleAddGoodToHaveSkill} size="icon">
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
+                {goodToHaveSkills.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {goodToHaveSkills.map((skill, index) => (
+                      <Badge
+                        key={index}
+                        variant="secondary"
+                        className="bg-green-500/10 text-green-600 border-green-500/20 pl-3 pr-1 py-1"
+                      >
+                        {skill}
+                        <Button
+                          type="button"
+                          onClick={() => setGoodToHaveSkills(goodToHaveSkills.filter((s) => s !== skill))}
+                          variant="ghost"
+                          size="icon"
+                          className="ml-2 p-0 h-4 w-4 hover:bg-green-500/20"
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Education Requirement */}
+              <div>
+                <Label className="flex items-center gap-2 mb-2">
+                  <GraduationCap className="h-4 w-4 text-muted-foreground" />
+                  Education Requirement (Optional)
+                </Label>
+                <Input
+                  type="text"
+                  value={formData.educationRequirement}
+                  onChange={(e) => setFormData({ ...formData, educationRequirement: e.target.value })}
+                  placeholder="e.g., Bachelor's in Computer Science or equivalent"
+                />
+              </div>
+
+              {/* Experience Years */}
+              <div>
+                <Label className="flex items-center gap-2 mb-2">
+                  <Briefcase className="h-4 w-4 text-muted-foreground" />
+                  Preferred Experience (Years)
+                </Label>
+                <Input
+                  type="number"
+                  min="0"
+                  max="50"
+                  value={formData.experienceYears}
+                  onChange={(e) => setFormData({ ...formData, experienceYears: e.target.value })}
+                  placeholder="e.g., 3"
+                  className="w-32"
+                />
+              </div>
+
+              {/* Job Description */}
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <Label htmlFor="description" className="block">
@@ -612,7 +785,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                   id="description"
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  placeholder="Describe the role, responsibilities, requirements, and what makes this opportunity exciting..."
+                  placeholder="Describe the role, responsibilities, and what makes this opportunity exciting..."
                   className={cn("min-h-[200px]", getFieldError("description") && "border-destructive")}
                 />
                 <div className="flex justify-between mt-1">
@@ -959,10 +1132,41 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                     <span className="text-muted-foreground">Type:</span>
                     <span className="text-foreground capitalize">{formData.type}</span>
                   </div>
+                  {(formData.salaryMin || formData.salaryMax) && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Salary:</span>
+                      <span className="text-foreground">
+                        {formData.salaryMin && formData.salaryMax
+                          ? `₹${Number(formData.salaryMin).toLocaleString('en-IN')} - ₹${Number(formData.salaryMax).toLocaleString('en-IN')}`
+                          : formData.salaryMin
+                          ? `₹${Number(formData.salaryMin).toLocaleString('en-IN')}+`
+                          : `Up to ₹${Number(formData.salaryMax).toLocaleString('en-IN')}`}
+                        {formData.salaryPeriod === 'per_month' ? '/month' : '/year'}
+                      </span>
+                    </div>
+                  )}
                   {skills.length > 0 && (
                     <div className="flex justify-between items-start">
-                      <span className="text-muted-foreground">Skills:</span>
+                      <span className="text-muted-foreground">Required Skills:</span>
                       <span className="text-foreground">{skills.length} added</span>
+                    </div>
+                  )}
+                  {goodToHaveSkills.length > 0 && (
+                    <div className="flex justify-between items-start">
+                      <span className="text-muted-foreground">Good to Have:</span>
+                      <span className="text-foreground">{goodToHaveSkills.length} added</span>
+                    </div>
+                  )}
+                  {formData.educationRequirement && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Education:</span>
+                      <span className="text-foreground truncate max-w-[200px]">{formData.educationRequirement}</span>
+                    </div>
+                  )}
+                  {formData.experienceYears && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Experience:</span>
+                      <span className="text-foreground">{formData.experienceYears}+ years</span>
                     </div>
                   )}
                   <div className="flex justify-between">

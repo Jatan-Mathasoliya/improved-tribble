@@ -7,6 +7,7 @@ import { createAdminUser, createTestRecruiter, syncAdminPasswordIfEnv } from "./
 import { createTestJobs } from "./createTestJobs";
 import { seedAllATSDefaults } from "./seedATSDefaults";
 import { ensureAtsSchema } from "./bootstrapSchema";
+import { seedDefaultWhatsAppTemplates } from "./seedWhatsAppTemplates";
 
 const app = express();
 
@@ -118,7 +119,11 @@ app.use((req, res, next) => {
       await createAdminUser();
       await syncAdminPasswordIfEnv();
 
-      // 3. Development-only: Create test data (NEVER run in production)
+      // 3. Seed WhatsApp templates (runs in all environments)
+      await seedDefaultWhatsAppTemplates();
+      console.log('✅ WhatsApp templates seeded');
+
+      // 4. Development-only: Create test data (NEVER run in production)
       if (process.env.NODE_ENV !== 'production' && process.env.SEED_DEFAULTS === 'true') {
         console.log('🔧 Development mode: Seeding test data...');
         await createTestRecruiter();

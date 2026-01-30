@@ -723,6 +723,12 @@ export async function ensureAtsSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS applications_rejection_reason_idx ON applications(rejection_reason);
   `);
 
+  // WhatsApp consent: Add whatsapp_consent column to applications
+  console.log('  Adding whatsapp_consent column to applications table...');
+  await db.execute(sql`
+    ALTER TABLE applications ADD COLUMN IF NOT EXISTS whatsapp_consent BOOLEAN NOT NULL DEFAULT TRUE;
+  `);
+
   // Operations Command Center: Create automation_events table for tracking automation activity
   console.log('  Creating automation_events table...');
   await db.execute(sql`
@@ -795,6 +801,69 @@ export async function ensureAtsSchema(): Promise<void> {
   console.log('  Adding publicId column to user_profiles table...');
   await db.execute(sql`ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS public_id TEXT;`);
   await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS user_profiles_public_id_idx ON user_profiles(public_id);`);
+
+  // WhatsApp Integration: Create WhatsApp templates table
+  console.log('  Creating whatsapp_templates table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS whatsapp_templates (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      meta_template_name TEXT NOT NULL UNIQUE,
+      meta_template_id TEXT,
+      language TEXT NOT NULL DEFAULT 'en',
+      template_type TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT 'UTILITY',
+      body_template TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      rejection_reason TEXT,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+  `);
+
+  // WhatsApp Integration: Create indexes for whatsapp_templates
+  console.log('  Creating whatsapp_templates indexes...');
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS whatsapp_templates_type_idx ON whatsapp_templates(template_type);
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS whatsapp_templates_status_idx ON whatsapp_templates(status);
+  `);
+
+  // WhatsApp Integration: Create WhatsApp audit log table
+  console.log('  Creating whatsapp_audit_log table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS whatsapp_audit_log (
+      id SERIAL PRIMARY KEY,
+      application_id INTEGER REFERENCES applications(id) ON DELETE CASCADE,
+      template_id INTEGER REFERENCES whatsapp_templates(id),
+      template_type TEXT,
+      recipient_phone TEXT NOT NULL,
+      message_id TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      error_code TEXT,
+      error_message TEXT,
+      template_variables JSONB,
+      sent_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      delivered_at TIMESTAMP,
+      read_at TIMESTAMP,
+      sent_by INTEGER REFERENCES users(id)
+    );
+  `);
+
+  // WhatsApp Integration: Create indexes for whatsapp_audit_log
+  console.log('  Creating whatsapp_audit_log indexes...');
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS whatsapp_audit_log_application_id_idx ON whatsapp_audit_log(application_id);
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS whatsapp_audit_log_status_idx ON whatsapp_audit_log(status);
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS whatsapp_audit_log_message_id_idx ON whatsapp_audit_log(message_id);
+  `);
+  await db.execute(sql`
+    CREATE INDEX IF NOT EXISTS whatsapp_audit_log_sent_at_idx ON whatsapp_audit_log(sent_at);
+  `);
 
   // Hiring Manager Invitations: Create table for inviting hiring managers
   console.log('  Creating hiring_manager_invitations table...');
@@ -896,6 +965,15 @@ export async function ensureAtsSchema(): Promise<void> {
   console.log('  Adding missing columns to client_shortlists table...');
   await db.execute(sql`ALTER TABLE client_shortlists ADD COLUMN IF NOT EXISTS title TEXT;`);
   await db.execute(sql`ALTER TABLE client_shortlists ADD COLUMN IF NOT EXISTS message TEXT;`);
+
+  // Structured Job Requirements: Add salary, skills, education, experience columns
+  console.log('  Adding structured job requirement columns to jobs table...');
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS salary_min INTEGER;`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS salary_max INTEGER;`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS salary_period TEXT;`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS good_to_have_skills TEXT[];`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS education_requirement TEXT;`);
+  await db.execute(sql`ALTER TABLE jobs ADD COLUMN IF NOT EXISTS experience_years INTEGER;`);
 
   });
 
