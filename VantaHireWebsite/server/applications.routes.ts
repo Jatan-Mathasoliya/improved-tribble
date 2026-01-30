@@ -106,8 +106,8 @@ export function registerApplicationsRoutes(
         return;
       }
 
-      if (job.status && job.status !== 'published') {
-        res.status(400).json({ error: 'This job is not currently published' });
+      if (job.status && job.status !== 'approved') {
+        res.status(400).json({ error: 'This job is not currently accepting applications' });
         return;
       }
 
