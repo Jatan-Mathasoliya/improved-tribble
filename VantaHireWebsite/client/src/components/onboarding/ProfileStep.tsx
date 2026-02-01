@@ -141,10 +141,10 @@ export default function ProfileStep({ onComplete, onSkip, fromInvite }: ProfileS
     e.preventDefault();
 
     // Validate required fields
-    if (!firstName.trim() || !lastName.trim() || !company.trim()) {
+    if (!firstName.trim() || !lastName.trim() || !company.trim() || !phone.trim()) {
       toast({
         title: "Missing required fields",
-        description: "Please fill in your first name, last name, and company.",
+        description: "Please fill in your first name, last name, company, and phone number.",
         variant: "destructive",
       });
       return;
@@ -264,17 +264,32 @@ export default function ProfileStep({ onComplete, onSkip, fromInvite }: ProfileS
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="company" className="flex items-center gap-2">
-              <Building className="h-4 w-4" />
-              Company *
-            </Label>
-            <Input
-              id="company"
-              value={company}
-              onChange={(e) => setCompany(e.target.value)}
-              placeholder="Acme Inc."
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="company" className="flex items-center gap-2">
+                <Building className="h-4 w-4" />
+                Company *
+              </Label>
+              <Input
+                id="company"
+                value={company}
+                onChange={(e) => setCompany(e.target.value)}
+                placeholder="Acme Inc."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="phone" className="flex items-center gap-2">
+                <Phone className="h-4 w-4" />
+                Phone *
+              </Label>
+              <Input
+                id="phone"
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+91 98765 43210"
+              />
+            </div>
           </div>
         </div>
 
@@ -294,32 +309,17 @@ export default function ProfileStep({ onComplete, onSkip, fromInvite }: ProfileS
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="phone" className="flex items-center gap-2">
-                <Phone className="h-4 w-4" />
-                Phone
-              </Label>
-              <Input
-                id="phone"
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+1 (555) 123-4567"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="location" className="flex items-center gap-2">
-                <MapPin className="h-4 w-4" />
-                Location
-              </Label>
-              <Input
-                id="location"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                placeholder="City, Country"
-              />
-            </div>
+          <div className="space-y-2">
+            <Label htmlFor="location" className="flex items-center gap-2">
+              <MapPin className="h-4 w-4" />
+              Location
+            </Label>
+            <Input
+              id="location"
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="City, Country"
+            />
           </div>
 
           <div className="space-y-2">
@@ -363,7 +363,7 @@ export default function ProfileStep({ onComplete, onSkip, fromInvite }: ProfileS
           </Button>
           <Button
             type="submit"
-            disabled={isSubmitting || !firstName.trim() || !lastName.trim() || !company.trim()}
+            disabled={isSubmitting || !firstName.trim() || !lastName.trim() || !company.trim() || !phone.trim()}
             className="min-w-32"
           >
             {isSubmitting ? (

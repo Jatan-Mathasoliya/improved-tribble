@@ -111,8 +111,11 @@ async function handlePaymentSuccess(
   paymentAmount: number,
   paymentMethod: string
 ): Promise<void> {
+  console.log(`[Webhook] handlePaymentSuccess called: orderId=${orderId}, paymentId=${paymentId}, amount=${paymentAmount}`);
+
   // Get transaction
   const transaction = await getTransactionByCashfreeOrder(orderId);
+  console.log(`[Webhook] Transaction lookup result: ${transaction ? `id=${transaction.id}, type=${transaction.type}, status=${transaction.status}, orgId=${transaction.organizationId}` : 'NOT FOUND'}`);
 
   // If no transaction, check if this is a public checkout intent (no transaction created)
   if (!transaction) {
@@ -137,22 +140,10 @@ async function handlePaymentSuccess(
     return;
   }
 
-  // Update transaction with invoice number
+  // Generate invoice number (but don't mark completed yet - do that AFTER subscription is created)
   const invoiceNumber = generateInvoiceNumber(transaction.organizationId);
-  await updatePaymentTransaction(transaction.id, {
-    status: 'completed',
-    cashfreePaymentId: paymentId,
-    cashfreePaymentMethod: paymentMethod,
-    invoiceNumber,
-    completedAt: new Date(),
-  });
 
-  // Generate invoice PDF asynchronously (don't block the webhook)
-  generateAndStoreInvoicePdf(transaction.id).catch(err => {
-    console.error(`Failed to generate invoice PDF for transaction ${transaction.id}:`, err);
-  });
-
-  // If subscription type, activate subscription
+  // If subscription type, activate subscription FIRST (before marking transaction completed)
   if (transaction.type === 'subscription') {
     const metadata = transaction.metadata as {
       planId: number;
@@ -160,6 +151,7 @@ async function handlePaymentSuccess(
       billingCycle: 'monthly' | 'annual';
       checkoutIntentId?: number;
     };
+    console.log(`[Webhook] Processing subscription transaction: id=${transaction.id}, orgId=${transaction.organizationId}, metadata=${JSON.stringify(metadata)}`);
 
     // Handle checkout intent flow (public checkout)
     if (metadata?.checkoutIntentId) {
@@ -169,15 +161,23 @@ async function handlePaymentSuccess(
 
     if (metadata?.planId && metadata?.seats) {
       // Create paid subscription
-      await createPaidSubscription(
-        transaction.organizationId,
-        metadata.planId,
-        metadata.seats,
-        metadata.billingCycle
-      );
+      console.log(`[Webhook] Creating subscription: orgId=${transaction.organizationId}, planId=${metadata.planId}, seats=${metadata.seats}, billingCycle=${metadata.billingCycle}`);
+      try {
+        const newSub = await createPaidSubscription(
+          transaction.organizationId,
+          metadata.planId,
+          metadata.seats,
+          metadata.billingCycle
+        );
+        console.log(`[Webhook] Subscription created: id=${newSub.id}, planId=${newSub.planId}, status=${newSub.status}`);
+      } catch (subError: any) {
+        console.error(`[Webhook] FAILED to create subscription for org ${transaction.organizationId}:`, subError.message);
+        throw subError;
+      }
 
       // Allocate credits to all members
       const subscription = await getOrganizationSubscription(transaction.organizationId);
+      console.log(`[Webhook] Fetched subscription after create: ${subscription ? `id=${subscription.id}, plan=${subscription.plan.name}` : 'NULL'}`);
       if (subscription) {
         const creditsPerSeat = subscription.plan.aiCreditsPerSeatMonthly;
         const maxRollover = subscription.plan.maxCreditRolloverMonths || 3;
@@ -258,6 +258,20 @@ async function handlePaymentSuccess(
       }
     }
   }
+
+  // NOW mark transaction as completed (after subscription/seats are created successfully)
+  await updatePaymentTransaction(transaction.id, {
+    status: 'completed',
+    cashfreePaymentId: paymentId,
+    cashfreePaymentMethod: paymentMethod,
+    invoiceNumber,
+    completedAt: new Date(),
+  });
+
+  // Generate invoice PDF asynchronously (don't block the webhook)
+  generateAndStoreInvoicePdf(transaction.id).catch(err => {
+    console.error(`Failed to generate invoice PDF for transaction ${transaction.id}:`, err);
+  });
 
   console.log(`Payment success processed for order ${orderId}`);
 }
