@@ -207,6 +207,17 @@ const Layout = ({ children }: LayoutProps) => {
                   >
                     Email
                   </Link>
+                  <Link
+                    href="/pricing"
+                    className={cn(
+                      "px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                      location === '/pricing'
+                        ? "text-warning bg-white/10"
+                        : "text-white/70 hover:text-white hover:bg-white/10"
+                    )}
+                  >
+                    Pricing
+                  </Link>
                 </>
               )}
             </div>
@@ -576,13 +587,40 @@ const Layout = ({ children }: LayoutProps) => {
               
 
               {user ? (
-                <Button
-                  onClick={() => { handleLogout(); setIsMenuOpen(false); }}
-                  variant="outline"
-                  className="w-full border-white/20 text-white hover:bg-white/10"
-                >
-                  Logout
-                </Button>
+                <div className="space-y-6">
+                  {(isRecruiter || isAdmin) && (
+                    <>
+                      <a
+                        href="/recruiter-dashboard"
+                        className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
+                        onClick={(e) => { e.preventDefault(); setLocation("/recruiter-dashboard"); setIsMenuOpen(false); }}
+                      >
+                        Dashboard
+                      </a>
+                      <a
+                        href="/my-jobs"
+                        className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
+                        onClick={(e) => { e.preventDefault(); setLocation("/my-jobs"); setIsMenuOpen(false); }}
+                      >
+                        My Jobs
+                      </a>
+                      <a
+                        href="/pricing"
+                        className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
+                        onClick={(e) => { e.preventDefault(); setLocation("/pricing"); setIsMenuOpen(false); }}
+                      >
+                        Pricing
+                      </a>
+                    </>
+                  )}
+                  <Button
+                    onClick={() => { handleLogout(); setIsMenuOpen(false); }}
+                    variant="outline"
+                    className="w-full border-white/20 text-white hover:bg-white/10"
+                  >
+                    Logout
+                  </Button>
+                </div>
               ) : (
                 <div className="space-y-6">
                   <a 
