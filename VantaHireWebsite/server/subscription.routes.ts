@@ -103,11 +103,16 @@ export function registerSubscriptionRoutes(
 ) {
   // ===== Plans =====
 
-  // List available plans
+  // List available plans (with rate limit info)
   app.get("/api/subscription/plans", async (req, res) => {
     try {
       const plans = await getActivePlans();
-      res.json(plans);
+      // Add rate limit info to each plan
+      const plansWithLimits = plans.map(plan => ({
+        ...plan,
+        rateLimits: getPlanRateLimitInfo(plan.name),
+      }));
+      res.json(plansWithLimits);
     } catch (error: any) {
       console.error("Error listing plans:", error);
       res.status(500).json({ error: "Failed to list plans" });

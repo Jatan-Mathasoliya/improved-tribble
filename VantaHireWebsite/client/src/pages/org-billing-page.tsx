@@ -73,7 +73,8 @@ export default function OrgBillingPage() {
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
 
   const isOwner = orgData?.membership?.role === 'owner';
-  const proPlan = plans?.find(p => p.name === 'pro');
+  const freePlan = plans?.find(p => p.name === 'free') as any;
+  const proPlan = plans?.find(p => p.name === 'pro') as any;
   const currentPlanName = subscription?.plan?.displayName || 'Free';
   const isPro = subscription?.plan?.name === 'pro';
 
@@ -295,7 +296,11 @@ export default function OrgBillingPage() {
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
-                    5 AI credits/month
+                    {freePlan?.rateLimits?.monthlyCredits || 300} AI credits/month
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-green-500" />
+                    {freePlan?.rateLimits?.dailyRateLimit || 20} AI analyses/day
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
@@ -317,13 +322,28 @@ export default function OrgBillingPage() {
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
-                    600 AI credits/seat/month
+                    {proPlan?.rateLimits?.monthlyCredits || 600} AI credits/seat/month
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-green-500" />
+                    {proPlan?.rateLimits?.dailyRateLimit || 100} AI analyses/day
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
                     All features included
                   </li>
                 </ul>
+                {isOwner && (
+                  <Button
+                    className="w-full mt-4"
+                    onClick={() => {
+                      setSelectedPlan(proPlan.id);
+                      setUpgradeDialogOpen(true);
+                    }}
+                  >
+                    Upgrade to Pro
+                  </Button>
+                )}
               </div>
             </div>
           </CardContent>
