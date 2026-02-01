@@ -46,7 +46,12 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
   const [seats, setSeats] = useState(1);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
 
-  const proPlan = plans?.find(p => p.name === 'pro');
+  const freePlan = plans?.find(p => p.name === 'free') as any;
+  const proPlan = plans?.find(p => p.name === 'pro') as any;
+
+  // Dynamic values from API
+  const freeCredits = freePlan?.rateLimits?.monthlyCredits || 300;
+  const proCredits = proPlan?.rateLimits?.monthlyCredits || 600;
 
   const handleSelectFree = async () => {
     try {
@@ -153,7 +158,7 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
               <ul className="space-y-1.5 text-sm text-muted-foreground">
                 <li className="flex items-center gap-2">
                   <Check className="h-3.5 w-3.5 text-green-500" />
-                  5 AI credits per month
+                  {freeCredits} AI credits per month
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="h-3.5 w-3.5 text-green-500" />
@@ -203,7 +208,7 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
               <ul className="space-y-1.5 text-sm text-muted-foreground">
                 <li className="flex items-center gap-2">
                   <Check className="h-3.5 w-3.5 text-green-500" />
-                  600 AI credits per seat/month
+                  {proCredits} AI credits per seat/month
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="h-3.5 w-3.5 text-green-500" />
@@ -299,7 +304,7 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
                 onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
               />
               <p className="text-sm text-muted-foreground">
-                Each seat gets 600 AI credits per month.
+                Each seat gets {proCredits} AI credits per month.
               </p>
             </div>
 

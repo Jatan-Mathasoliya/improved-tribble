@@ -46,11 +46,8 @@ interface PlanFeature {
   business: boolean | string;
 }
 
-const features: PlanFeature[] = [
-  { name: "Active job postings", free: "5", pro: "Unlimited", business: "Unlimited" },
-  { name: "Team members", free: "1", pro: "Pay per seat", business: "Custom" },
-  { name: "AI credits per seat/month", free: "5", pro: "600", business: "Custom" },
-  { name: "Credit rollover", free: "15 max", pro: "1,800 max", business: "Custom" },
+// Static features (dynamic AI values are added in component)
+const staticFeatures: PlanFeature[] = [
   { name: "Candidate management", free: true, pro: true, business: true },
   { name: "Application tracking", free: true, pro: true, business: true },
   { name: "Email notifications", free: true, pro: true, business: true },
@@ -87,12 +84,31 @@ export default function PricingPage() {
   const [checkoutMode, setCheckoutMode] = useState<'public' | 'create-org' | 'existing'>('public');
   const [requiresLogin, setRequiresLogin] = useState(false);
 
-  const proPlan = plans?.find(p => p.name === 'pro');
+  const freePlan = plans?.find(p => p.name === 'free') as any;
+  const proPlan = plans?.find(p => p.name === 'pro') as any;
   const isLoggedIn = !!user;
   const hasOrg = !!organization;
   const isOwner = organization?.membership?.role === 'owner';
   const currentPlan = subscription?.plan?.name || 'free';
   const isPro = currentPlan === 'pro';
+
+  // Dynamic plan values from API (with fallbacks)
+  const freeCredits = freePlan?.rateLimits?.monthlyCredits || 300;
+  const freeRolloverMax = freePlan?.rateLimits?.maxCredits || 900;
+  const freeDailyLimit = freePlan?.rateLimits?.dailyRateLimit || 20;
+  const proCredits = proPlan?.rateLimits?.monthlyCredits || 600;
+  const proRolloverMax = proPlan?.rateLimits?.maxCredits || 1800;
+  const proDailyLimit = proPlan?.rateLimits?.dailyRateLimit || 100;
+
+  // Build features array with dynamic values
+  const features: PlanFeature[] = [
+    { name: "Active job postings", free: "5", pro: "Unlimited", business: "Unlimited" },
+    { name: "Team members", free: "1", pro: "Pay per seat", business: "Custom" },
+    { name: "AI credits per seat/month", free: String(freeCredits), pro: String(proCredits), business: "Custom" },
+    { name: "AI analyses per day", free: String(freeDailyLimit), pro: String(proDailyLimit), business: "Custom" },
+    { name: "Credit rollover", free: `${freeRolloverMax.toLocaleString()} max`, pro: `${proRolloverMax.toLocaleString()} max`, business: "Custom" },
+    ...staticFeatures,
+  ];
 
   // Mutation for public checkout
   const publicCheckout = useMutation({
@@ -336,7 +352,11 @@ export default function PricingPage() {
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  5 AI credits per month
+                  {freeCredits} AI credits per month
+                </li>
+                <li className="flex items-center gap-2 text-white/80 text-sm">
+                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  {freeDailyLimit} AI analyses/day
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
@@ -384,7 +404,11 @@ export default function PricingPage() {
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  600 AI credits per seat/month
+                  {proCredits} AI credits per seat/month
+                </li>
+                <li className="flex items-center gap-2 text-white/80 text-sm">
+                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  {proDailyLimit} AI analyses/day
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
@@ -628,7 +652,7 @@ export default function PricingPage() {
                     onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
                   />
                   <p className="text-sm text-muted-foreground">
-                    Each seat gets 600 AI credits per month.
+                    Each seat gets {proCredits} AI credits per month.
                   </p>
                 </div>
 
