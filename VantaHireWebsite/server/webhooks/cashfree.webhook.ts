@@ -156,10 +156,7 @@ async function handlePaymentSuccess(
     // Handle checkout intent flow (public checkout)
     if (metadata?.checkoutIntentId) {
       await handleCheckoutIntentPayment(metadata.checkoutIntentId, paymentId, paymentAmount);
-      return;
-    }
-
-    if (metadata?.planId && metadata?.seats) {
+    } else if (metadata?.planId && metadata?.seats) {
       // Create paid subscription
       console.log(`[Webhook] Creating subscription: orgId=${transaction.organizationId}, planId=${metadata.planId}, seats=${metadata.seats}, billingCycle=${metadata.billingCycle}`);
       try {
@@ -216,6 +213,8 @@ async function handlePaymentSuccess(
           }
         }
       }
+    } else {
+      throw new Error('Missing subscription metadata for payment');
     }
   }
 
@@ -224,20 +223,27 @@ async function handlePaymentSuccess(
     const metadata = transaction.metadata as { additionalSeats?: number; proratedAmount?: number } | null;
     const subscription = await getOrganizationSubscription(transaction.organizationId);
 
-    if (subscription && metadata?.additionalSeats) {
-      // Calculate new seat count and update subscription
-      const newSeats = subscription.seats + metadata.additionalSeats;
-      await updateSubscriptionSeats(subscription.id, newSeats);
+    if (!subscription) {
+      throw new Error(`Subscription not found for org ${transaction.organizationId}`);
+    }
 
-      console.log(`Seat addition completed: org ${transaction.organizationId} now has ${newSeats} seats (+${metadata.additionalSeats})`);
+    if (!metadata?.additionalSeats) {
+      throw new Error('Missing seat addition metadata for payment');
+    }
 
-      const emailService = await getEmailService();
-      if (emailService) {
-        const contact = await getOrganizationBillingContact(transaction.organizationId);
-        if (contact?.billingEmail) {
-          const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
-          const subject = `Seats added - ${contact.organizationName}`;
-          const html = `
+    // Calculate new seat count and update subscription
+    const newSeats = subscription.seats + metadata.additionalSeats;
+    await updateSubscriptionSeats(subscription.id, newSeats);
+
+    console.log(`Seat addition completed: org ${transaction.organizationId} now has ${newSeats} seats (+${metadata.additionalSeats})`);
+
+    const emailService = await getEmailService();
+    if (emailService) {
+      const contact = await getOrganizationBillingContact(transaction.organizationId);
+      if (contact?.billingEmail) {
+        const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+        const subject = `Seats added - ${contact.organizationName}`;
+        const html = `
             <h2>Seats Added</h2>
             <p>Hello${contact.billingName ? ` ${contact.billingName}` : ''},</p>
             <p>${metadata.additionalSeats} seat(s) were added to your subscription.</p>
@@ -247,14 +253,13 @@ async function handlePaymentSuccess(
             </ul>
             <p>Manage billing here: <a href="${baseUrl}/org/billing">${baseUrl}/org/billing</a></p>
           `;
-          const text = `Seats added for ${contact.organizationName}.\nAdded seats: ${metadata.additionalSeats}\nNew total seats: ${newSeats}\nAmount paid: ₹${(paymentAmount / 100).toFixed(2)}\n\nManage billing: ${baseUrl}/org/billing`;
-          await emailService.sendEmail({
-            to: contact.billingEmail,
-            subject,
-            html,
-            text,
-          });
-        }
+        const text = `Seats added for ${contact.organizationName}.\nAdded seats: ${metadata.additionalSeats}\nNew total seats: ${newSeats}\nAmount paid: ₹${(paymentAmount / 100).toFixed(2)}\n\nManage billing: ${baseUrl}/org/billing`;
+        await emailService.sendEmail({
+          to: contact.billingEmail,
+          subject,
+          html,
+          text,
+        });
       }
     }
   }

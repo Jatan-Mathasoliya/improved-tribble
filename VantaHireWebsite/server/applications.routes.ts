@@ -22,7 +22,7 @@ import { getUserOrganization } from './lib/organizationService';
 import { calculateAiCost } from './lib/aiMatchingEngine';
 import { syncProfileCompletionStatus } from './lib/profileCompletion';
 import { requireFeatureAccess, FEATURES } from './lib/featureGating';
-import { hasEnoughCredits, useCredits, getCreditCostForOperation } from './lib/creditService';
+import { hasEnoughCredits, useCredits, getCreditCostForOperation, getUserDailyRateLimit, getPlanRateLimitInfo } from './lib/creditService';
 import {
   insertApplicationSchema,
   recruiterAddApplicationSchema,
@@ -1386,13 +1386,13 @@ export function registerApplicationsRoutes(
   // ============= BULK AI SUMMARY GENERATION =============
 
   // Environment configuration for AI summary limits
-  const AI_SUMMARY_DAILY_LIMIT = parseInt(process.env.AI_ANALYSIS_RATE_LIMIT || '20', 10);
+  // Note: Daily limit is now plan-specific - see getUserDailyRateLimit()
   const AI_SUMMARY_BATCH_MAX = parseInt(process.env.AI_SUMMARY_BATCH_MAX || '50', 10);
   const AI_QUEUE_ENABLED = process.env.AI_QUEUE_ENABLED === 'true';
 
   /**
    * GET /api/ai/summary/limit-status
-   * Returns the recruiter's daily AI summary usage limits
+   * Returns the recruiter's daily AI summary usage limits (plan-specific)
    */
   app.get(
     "/api/ai/summary/limit-status",
@@ -1402,6 +1402,9 @@ export function registerApplicationsRoutes(
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         const userId = req.user!.id;
+
+        // Get plan-specific daily limit
+        const dailyLimit = await getUserDailyRateLimit(userId);
 
         // Get start of current day (local time)
         const now = new Date();
@@ -1423,7 +1426,7 @@ export function registerApplicationsRoutes(
           );
 
         const dailyUsed = dailyUsage[0]?.count || 0;
-        const dailyRemaining = Math.max(0, AI_SUMMARY_DAILY_LIMIT - dailyUsed);
+        const dailyRemaining = Math.max(0, dailyLimit - dailyUsed);
 
         // Check circuit breaker status (includes AI enabled + budget check)
         const circuitBreaker = await checkCircuitBreaker();
@@ -1433,7 +1436,7 @@ export function registerApplicationsRoutes(
         const effectiveRemaining = budgetAllowed ? dailyRemaining : 0;
 
         res.json({
-          dailyLimit: AI_SUMMARY_DAILY_LIMIT,
+          dailyLimit,
           dailyUsed,
           dailyRemaining,
           dailyResetAt: endOfDay.toISOString(),
@@ -1527,6 +1530,9 @@ export function registerApplicationsRoutes(
           return;
         }
 
+        // Get plan-specific daily limit
+        const dailyLimit = await getUserDailyRateLimit(userId);
+
         // Get daily usage to check rate limit (local day)
         const now = new Date();
         const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -1546,7 +1552,7 @@ export function registerApplicationsRoutes(
           );
 
         const dailyUsed = dailyUsage[0]?.count || 0;
-        const dailyRemaining = Math.max(0, AI_SUMMARY_DAILY_LIMIT - dailyUsed);
+        const dailyRemaining = Math.max(0, dailyLimit - dailyUsed);
 
         // Fetch applications and check ownership (recruiter must own the job)
         const apps = await db.query.applications.findMany({

@@ -364,9 +364,9 @@ export function parseWebhookEvent(payload: CashfreeWebhookPayload): {
   } = {
     eventType,
     eventId,
-    orderId: orderId || undefined,
-    paymentId: paymentId || undefined,
-    subscriptionId: subscriptionId || undefined,
+    ...(orderId ? { orderId } : {}),
+    ...(paymentId ? { paymentId } : {}),
+    ...(subscriptionId ? { subscriptionId } : {}),
   };
 
   // Extract additional payment/subscription details

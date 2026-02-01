@@ -1,5 +1,6 @@
 import rateLimit, { type RateLimitRequestHandler } from "express-rate-limit";
-import type { Request, Response } from "express";
+import type { Request, Response, NextFunction } from "express";
+import { FREE_AI_DAILY_RATE_LIMIT, PRO_AI_DAILY_RATE_LIMIT, getUserDailyRateLimit } from "./lib/creditService";
 
 // Skip rate limiting in test/development environments
 const isTestEnv = process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development';
@@ -12,11 +13,17 @@ export interface RateLimitInfo {
   resetTime: Date;
 }
 
+// Extended request type with plan info
+interface RateLimitRequest extends Request {
+  rateLimit?: RateLimitInfo;
+  planRateLimit?: number;
+}
+
 /**
  * Helper to create rate limit handler with remaining count
  */
 export const createRateLimitHandler = (errorMsg: string) => (req: Request, res: Response) => {
-  const info = (req as Request & { rateLimit?: RateLimitInfo }).rateLimit;
+  const info = (req as RateLimitRequest).rateLimit;
   const retryAfter = info?.resetTime ? Math.ceil((info.resetTime.getTime() - Date.now()) / 1000) : undefined;
   res.status(429).json({
     error: errorMsg,
@@ -28,20 +35,123 @@ export const createRateLimitHandler = (errorMsg: string) => (req: Request, res: 
 };
 
 /**
- * Rate limiter for AI analysis endpoints
- * - Configurable requests per day per user (default: 20)
- * - Keyed by user ID (or IP if anonymous)
+ * Plan-aware rate limit handler - shows the user's actual limit
  */
-const AI_ANALYSIS_RATE_LIMIT = parseInt(process.env.AI_ANALYSIS_RATE_LIMIT || '20', 10);
+const planAwareRateLimitHandler = (req: Request, res: Response) => {
+  const extReq = req as RateLimitRequest;
+  const info = extReq.rateLimit;
+  const planLimit = extReq.planRateLimit || FREE_AI_DAILY_RATE_LIMIT;
+  const retryAfter = info?.resetTime ? Math.ceil((info.resetTime.getTime() - Date.now()) / 1000) : undefined;
+  res.status(429).json({
+    error: `AI analysis limit reached (${planLimit}/day). Try again tomorrow.`,
+    limit: planLimit,
+    remaining: 0,
+    used: info?.used || planLimit,
+    retryAfterSeconds: retryAfter,
+    errorCode: 'RATE_LIMIT_EXCEEDED',
+  });
+};
 
-export const aiAnalysisRateLimit: RateLimitRequestHandler = rateLimit({
+// In-memory store for plan-aware rate limiting (keyed by `plan:userId`)
+// Uses separate buckets for free and pro users
+const planRateLimitStore = new Map<string, { count: number; resetTime: number }>();
+
+// Cleanup old entries every hour
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, value] of planRateLimitStore.entries()) {
+    if (value.resetTime < now) {
+      planRateLimitStore.delete(key);
+    }
+  }
+}, 60 * 60 * 1000);
+
+/**
+ * Plan-aware AI rate limiter middleware
+ * - Free plan: FREE_AI_DAILY_RATE_LIMIT/day (default 20)
+ * - Pro plan: PRO_AI_DAILY_RATE_LIMIT/day (default 100)
+ * - Falls back to free limit for unauthenticated users
+ */
+export const aiAnalysisRateLimit = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  if (isTestEnv) {
+    next();
+    return;
+  }
+
+  const userId = req.user?.id;
+  const userKey = userId?.toString() || req.ip || 'anonymous';
+
+  // Get user's plan-specific rate limit
+  let dailyLimit = FREE_AI_DAILY_RATE_LIMIT;
+  if (userId) {
+    try {
+      dailyLimit = await getUserDailyRateLimit(userId);
+    } catch {
+      // Fall back to free limit on error
+      dailyLimit = FREE_AI_DAILY_RATE_LIMIT;
+    }
+  }
+
+  // Store the limit on request for error handler
+  (req as RateLimitRequest).planRateLimit = dailyLimit;
+
+  // Create a key that includes the plan type to prevent limit mixing
+  const planType = dailyLimit >= PRO_AI_DAILY_RATE_LIMIT ? 'pro' : 'free';
+  const storeKey = `${planType}:${userKey}`;
+
+  const now = Date.now();
+  const windowMs = 24 * 60 * 60 * 1000; // 24 hours
+
+  // Get or create rate limit entry
+  let entry = planRateLimitStore.get(storeKey);
+  if (!entry || entry.resetTime < now) {
+    entry = { count: 0, resetTime: now + windowMs };
+    planRateLimitStore.set(storeKey, entry);
+  }
+
+  // Check limit
+  if (entry.count >= dailyLimit) {
+    const info: RateLimitInfo = {
+      limit: dailyLimit,
+      used: entry.count,
+      remaining: 0,
+      resetTime: new Date(entry.resetTime),
+    };
+    (req as RateLimitRequest).rateLimit = info;
+    planAwareRateLimitHandler(req, res);
+    return;
+  }
+
+  // Increment counter
+  entry.count++;
+
+  // Set rate limit info on request
+  const info: RateLimitInfo = {
+    limit: dailyLimit,
+    used: entry.count,
+    remaining: Math.max(0, dailyLimit - entry.count),
+    resetTime: new Date(entry.resetTime),
+  };
+  (req as RateLimitRequest).rateLimit = info;
+
+  // Set standard headers
+  res.setHeader('RateLimit-Limit', dailyLimit);
+  res.setHeader('RateLimit-Remaining', info.remaining);
+  res.setHeader('RateLimit-Reset', Math.ceil(entry.resetTime / 1000));
+
+  next();
+};
+
+// Legacy static rate limiter (kept for backward compatibility, use aiAnalysisRateLimit instead)
+const AI_ANALYSIS_RATE_LIMIT_LEGACY = parseInt(process.env.AI_ANALYSIS_RATE_LIMIT || '20', 10);
+export const aiAnalysisRateLimitStatic: RateLimitRequestHandler = rateLimit({
   windowMs: 24 * 60 * 60 * 1000, // 24 hours
-  max: AI_ANALYSIS_RATE_LIMIT,
+  max: AI_ANALYSIS_RATE_LIMIT_LEGACY,
   standardHeaders: true,
   legacyHeaders: false,
   skip: () => isTestEnv,
   keyGenerator: (req) => req.user?.id?.toString() || req.ip || 'anonymous',
-  handler: createRateLimitHandler(`AI analysis limit reached (${AI_ANALYSIS_RATE_LIMIT}/day). Try again tomorrow.`),
+  handler: createRateLimitHandler(`AI analysis limit reached (${AI_ANALYSIS_RATE_LIMIT_LEGACY}/day). Try again tomorrow.`),
 });
 
 /**

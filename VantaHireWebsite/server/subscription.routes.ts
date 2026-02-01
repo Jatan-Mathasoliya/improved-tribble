@@ -28,6 +28,8 @@ import {
   getMemberCreditBalance,
   getOrgCreditSummary,
   getCreditUsageHistory,
+  getUserDailyRateLimit,
+  getPlanRateLimitInfo,
 } from "./lib/creditService";
 import {
   createCheckoutOrder,
@@ -1078,12 +1080,22 @@ export function registerSubscriptionRoutes(
 
   // ===== AI Credits =====
 
-  // Get current credit balance
+  // Get current credit balance with plan rate limit info
   app.get("/api/ai/credits", requireAuth, async (req, res) => {
     try {
       const user = req.user!;
 
       const balance = await getMemberCreditBalance(user.id);
+
+      // Get user's plan-specific daily rate limit
+      const dailyRateLimit = await getUserDailyRateLimit(user.id);
+
+      // Get full plan rate limit info (includes monthly credits, rollover, etc.)
+      const orgResult = await getUserOrganization(user.id);
+      const planName = orgResult ?
+        (await getOrganizationSubscription(orgResult.organization.id))?.plan.name || 'free'
+        : 'free';
+      const planLimits = getPlanRateLimitInfo(planName);
 
       if (!balance) {
         res.json({
@@ -1091,6 +1103,8 @@ export function registerSubscriptionRoutes(
           used: 0,
           remaining: 0,
           hasCredits: false,
+          dailyRateLimit,
+          planLimits,
         });
         return;
       }
@@ -1098,6 +1112,8 @@ export function registerSubscriptionRoutes(
       res.json({
         ...balance,
         hasCredits: balance.remaining > 0,
+        dailyRateLimit,
+        planLimits,
       });
     } catch (error: any) {
       console.error("Error getting credits:", error);
