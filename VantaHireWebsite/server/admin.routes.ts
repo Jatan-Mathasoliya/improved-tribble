@@ -1304,6 +1304,26 @@ export function registerAdminRoutes(
         WHERE c.organization_id IS NULL
       `);
 
+      // Get breakdown of orphaned records by user (users without org membership)
+      const orphanedByUser = await db.execute(sql`
+        SELECT
+          u.id as user_id,
+          u.username,
+          u.first_name,
+          u.last_name,
+          COUNT(DISTINCT j.id)::int as orphaned_jobs,
+          COUNT(DISTINCT c.id)::int as orphaned_clients
+        FROM users u
+        LEFT JOIN jobs j ON j.posted_by = u.id AND j.organization_id IS NULL
+        LEFT JOIN clients c ON c.created_by = u.id AND c.organization_id IS NULL
+        LEFT JOIN organization_members om ON u.id = om.user_id
+        WHERE om.user_id IS NULL
+          AND (j.id IS NOT NULL OR c.id IS NOT NULL)
+        GROUP BY u.id, u.username, u.first_name, u.last_name
+        ORDER BY orphaned_jobs DESC, orphaned_clients DESC
+        LIMIT 10
+      `);
+
       const result = {
         timestamp: new Date().toISOString(),
         nullCounts: {
@@ -1317,6 +1337,10 @@ export function registerAdminRoutes(
           clients: (backfillableClients.rows[0] as any)?.count || 0,
         },
         healthy: jobsNull.count === 0 && appsNull.count === 0 && clientsNull.count === 0,
+        orphanedByUser: {
+          description: "Users without org membership who have orphaned records (top 10)",
+          users: orphanedByUser.rows,
+        },
       };
 
       res.json(result);
