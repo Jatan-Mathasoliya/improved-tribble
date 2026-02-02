@@ -22,6 +22,63 @@ import slugify from "slugify";
 import crypto from "crypto";
 import { hasAvailableSeats } from "./seatService";
 
+// Backfill orphaned jobs, applications, clients, and child tables for a user joining an organization
+// This ensures legacy records (created before org existed) are associated with the new org
+async function backfillUserRecordsToOrg(
+  tx: any, // Drizzle transaction object
+  userId: number,
+  organizationId: number
+): Promise<void> {
+  // Update orphaned jobs posted by this user
+  await tx.execute(sql`
+    UPDATE jobs
+    SET organization_id = ${organizationId}
+    WHERE posted_by = ${userId}
+      AND organization_id IS NULL
+  `);
+
+  // Update orphaned clients created by this user
+  await tx.execute(sql`
+    UPDATE clients
+    SET organization_id = ${organizationId}
+    WHERE created_by = ${userId}
+      AND organization_id IS NULL
+  `);
+
+  // Update orphaned applications for this user's jobs that are now in the org
+  // Condition: app has no org, app's job is posted by this user, and job is now in this org
+  await tx.execute(sql`
+    UPDATE applications a
+    SET organization_id = ${organizationId}
+    FROM jobs j
+    WHERE a.organization_id IS NULL
+      AND a.job_id = j.id
+      AND j.posted_by = ${userId}
+      AND j.organization_id = ${organizationId}
+  `);
+
+  // Update child tables (job_analytics, job_audit_log) for this user's jobs
+  await tx.execute(sql`
+    UPDATE job_analytics ja
+    SET organization_id = ${organizationId}
+    FROM jobs j
+    WHERE ja.organization_id IS NULL
+      AND ja.job_id = j.id
+      AND j.posted_by = ${userId}
+      AND j.organization_id = ${organizationId}
+  `);
+
+  await tx.execute(sql`
+    UPDATE job_audit_log jal
+    SET organization_id = ${organizationId}
+    FROM jobs j
+    WHERE jal.organization_id IS NULL
+      AND jal.job_id = j.id
+      AND j.posted_by = ${userId}
+      AND j.organization_id = ${organizationId}
+  `);
+}
+
 // Public email domains that cannot claim domain verification
 const PUBLIC_EMAIL_DOMAINS = [
   'gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'live.com',
@@ -63,21 +120,27 @@ export async function createOrganization(
 ): Promise<Organization> {
   const slug = data.slug || await generateUniqueSlug(data.name);
 
-  const [org] = await db.insert(organizations).values({
-    ...data,
-    slug,
-  }).returning();
+  return await db.transaction(async (tx: any) => {
+    // Create organization
+    const [org] = await tx.insert(organizations).values({
+      ...data,
+      slug,
+    }).returning();
 
-  // Add owner as first member
-  await db.insert(organizationMembers).values({
-    organizationId: org.id,
-    userId: ownerId,
-    role: 'owner',
-    seatAssigned: true,
-    joinedAt: new Date(),
+    // Add owner as first member
+    await tx.insert(organizationMembers).values({
+      organizationId: org.id,
+      userId: ownerId,
+      role: 'owner',
+      seatAssigned: true,
+      joinedAt: new Date(),
+    });
+
+    // Backfill orphaned jobs and applications for this user
+    await backfillUserRecordsToOrg(tx, ownerId, org.id);
+
+    return org;
   });
-
-  return org;
 }
 
 export async function getOrganization(id: number): Promise<Organization | undefined> {
@@ -271,25 +334,31 @@ export async function acceptOrganizationInvite(
     throw new Error('No seats available in this organization. Please contact the organization owner to add more seats.');
   }
 
-  // Update invite as accepted
-  await db.update(organizationInvites)
-    .set({
-      acceptedAt: new Date(),
-      acceptedBy: userId,
-    })
-    .where(eq(organizationInvites.id, invite.id));
+  // Transaction: accept invite + add member + backfill records
+  return await db.transaction(async (tx: any) => {
+    // Update invite as accepted
+    await tx.update(organizationInvites)
+      .set({
+        acceptedAt: new Date(),
+        acceptedBy: userId,
+      })
+      .where(eq(organizationInvites.id, invite.id));
 
-  // Add user to organization
-  const [member] = await db.insert(organizationMembers).values({
-    organizationId: invite.organizationId,
-    userId,
-    role: invite.role as OrganizationRole,
-    seatAssigned: true,
-    invitedBy: invite.invitedBy,
-    joinedAt: new Date(),
-  }).returning();
+    // Add user to organization
+    const [member] = await tx.insert(organizationMembers).values({
+      organizationId: invite.organizationId,
+      userId,
+      role: invite.role as OrganizationRole,
+      seatAssigned: true,
+      invitedBy: invite.invitedBy,
+      joinedAt: new Date(),
+    }).returning();
 
-  return member;
+    // Backfill orphaned jobs and applications for this user
+    await backfillUserRecordsToOrg(tx, userId, invite.organizationId);
+
+    return member;
+  });
 }
 
 export async function cancelOrganizationInvite(inviteId: number): Promise<void> {
@@ -362,35 +431,41 @@ export async function respondToJoinRequest(
     throw new Error('Join request has already been processed');
   }
 
-  await db.update(organizationJoinRequests)
-    .set({
-      status,
-      respondedAt: new Date(),
-      respondedBy,
-      rejectionReason: rejectionReason || null,
-    })
-    .where(eq(organizationJoinRequests.id, requestId));
+  // Transaction: update request + add member (if approved) + backfill records
+  return await db.transaction(async (tx: any) => {
+    await tx.update(organizationJoinRequests)
+      .set({
+        status,
+        respondedAt: new Date(),
+        respondedBy,
+        rejectionReason: rejectionReason || null,
+      })
+      .where(eq(organizationJoinRequests.id, requestId));
 
-  if (status === 'approved') {
-    // Check if user is still not in any org
-    const inOrg = await isUserInOrganization(request.userId);
-    if (inOrg) {
-      throw new Error('User has already joined another organization');
+    if (status === 'approved') {
+      // Check if user is still not in any org (unique constraint will also enforce this)
+      const inOrg = await isUserInOrganization(request.userId);
+      if (inOrg) {
+        throw new Error('User has already joined another organization');
+      }
+
+      // Add user to organization
+      const [member] = await tx.insert(organizationMembers).values({
+        organizationId: request.organizationId,
+        userId: request.userId,
+        role: 'member',
+        seatAssigned: true,
+        joinedAt: new Date(),
+      }).returning();
+
+      // Backfill orphaned jobs and applications for this user
+      await backfillUserRecordsToOrg(tx, request.userId, request.organizationId);
+
+      return member;
     }
 
-    // Add user to organization
-    const [member] = await db.insert(organizationMembers).values({
-      organizationId: request.organizationId,
-      userId: request.userId,
-      role: 'member',
-      seatAssigned: true,
-      joinedAt: new Date(),
-    }).returning();
-
-    return member;
-  }
-
-  return null;
+    return null;
+  });
 }
 
 // Domain claim requests (admin-approved)

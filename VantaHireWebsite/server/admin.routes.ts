@@ -1268,5 +1268,209 @@ export function registerAdminRoutes(
     }
   });
 
+  // ============= ORGANIZATION ID BACKFILL & MONITORING =============
+
+  /**
+   * GET /api/admin/ops/org-health
+   * Monitor NULL organization_id counts across tables
+   * Use for alerting on data integrity issues
+   */
+  app.get("/api/admin/ops/org-health", requireRole(['super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      // Count NULL organization_ids across key tables
+      const [jobsNull] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(jobs).where(sql`organization_id IS NULL`);
+      const [appsNull] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(applications).where(sql`organization_id IS NULL`);
+      const [clientsNull] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(clients).where(sql`organization_id IS NULL`);
+
+      // Count how many can be backfilled (user has org membership)
+      const backfillableJobs = await db.execute(sql`
+        SELECT COUNT(*)::int as count FROM jobs j
+        INNER JOIN organization_members om ON j.posted_by = om.user_id
+        WHERE j.organization_id IS NULL
+      `);
+      // Apps backfillable = their job already has an org (matches actual backfill logic)
+      const backfillableApps = await db.execute(sql`
+        SELECT COUNT(*)::int as count FROM applications a
+        INNER JOIN jobs j ON a.job_id = j.id
+        WHERE a.organization_id IS NULL
+          AND j.organization_id IS NOT NULL
+      `);
+      const backfillableClients = await db.execute(sql`
+        SELECT COUNT(*)::int as count FROM clients c
+        INNER JOIN organization_members om ON c.created_by = om.user_id
+        WHERE c.organization_id IS NULL
+      `);
+
+      const result = {
+        timestamp: new Date().toISOString(),
+        nullCounts: {
+          jobs: jobsNull.count,
+          applications: appsNull.count,
+          clients: clientsNull.count,
+        },
+        backfillable: {
+          jobs: (backfillableJobs.rows[0] as any)?.count || 0,
+          applications: (backfillableApps.rows[0] as any)?.count || 0,
+          clients: (backfillableClients.rows[0] as any)?.count || 0,
+        },
+        healthy: jobsNull.count === 0 && appsNull.count === 0 && clientsNull.count === 0,
+      };
+
+      res.json(result);
+      return;
+    } catch (error) {
+      console.error('[Admin Ops] Error checking org health:', error);
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/admin/ops/backfill-org-ids
+   * Backfill NULL organization_ids for jobs, applications, and child tables
+   * Idempotent - safe to run multiple times
+   */
+  app.post("/api/admin/ops/backfill-org-ids", csrfProtection, requireRole(['super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const bodySchema = z.object({
+        dryRun: z.boolean().optional().default(false),
+      });
+
+      const parsed = bodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        res.status(400).json({ error: 'Validation error', details: parsed.error.errors });
+        return;
+      }
+
+      const { dryRun } = parsed.data;
+
+      // 1. Check for duplicate memberships (precheck)
+      const duplicates = await db.execute(sql`
+        SELECT user_id, COUNT(*) as count
+        FROM organization_members
+        GROUP BY user_id
+        HAVING COUNT(*) > 1
+      `);
+
+      if (duplicates.rows.length > 0) {
+        res.status(400).json({
+          error: 'Found users with multiple org memberships',
+          duplicates: duplicates.rows,
+        });
+        return;
+      }
+
+      // 2. Count before
+      const [jobsBefore] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(jobs).where(sql`organization_id IS NULL`);
+      const [appsBefore] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(applications).where(sql`organization_id IS NULL`);
+      const [clientsBefore] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(clients).where(sql`organization_id IS NULL`);
+
+      let jobsUpdated = 0;
+      let appsUpdated = 0;
+      let clientsUpdated = 0;
+      let analyticsUpdated = 0;
+      let auditUpdated = 0;
+
+      if (!dryRun) {
+        // 3. Backfill jobs
+        const jobsResult = await db.execute(sql`
+          UPDATE jobs j
+          SET organization_id = om.organization_id
+          FROM organization_members om
+          WHERE j.organization_id IS NULL
+            AND j.posted_by = om.user_id
+        `);
+        jobsUpdated = jobsResult.rowCount ?? 0;
+
+        // 4. Backfill applications
+        const appsResult = await db.execute(sql`
+          UPDATE applications a
+          SET organization_id = j.organization_id
+          FROM jobs j
+          WHERE a.organization_id IS NULL
+            AND a.job_id = j.id
+            AND j.organization_id IS NOT NULL
+        `);
+        appsUpdated = appsResult.rowCount ?? 0;
+
+        // 5. Backfill clients
+        const clientsResult = await db.execute(sql`
+          UPDATE clients c
+          SET organization_id = om.organization_id
+          FROM organization_members om
+          WHERE c.organization_id IS NULL
+            AND c.created_by = om.user_id
+        `);
+        clientsUpdated = clientsResult.rowCount ?? 0;
+
+        // 6. Backfill child tables
+        const analyticsResult = await db.execute(sql`
+          UPDATE job_analytics ja
+          SET organization_id = j.organization_id
+          FROM jobs j
+          WHERE ja.organization_id IS NULL
+            AND ja.job_id = j.id
+            AND j.organization_id IS NOT NULL
+        `);
+        analyticsUpdated = analyticsResult.rowCount ?? 0;
+
+        const auditResult = await db.execute(sql`
+          UPDATE job_audit_log jal
+          SET organization_id = j.organization_id
+          FROM jobs j
+          WHERE jal.organization_id IS NULL
+            AND jal.job_id = j.id
+            AND j.organization_id IS NOT NULL
+        `);
+        auditUpdated = auditResult.rowCount ?? 0;
+      }
+
+      // 7. Count after
+      const [jobsAfter] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(jobs).where(sql`organization_id IS NULL`);
+      const [appsAfter] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(applications).where(sql`organization_id IS NULL`);
+      const [clientsAfter] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(clients).where(sql`organization_id IS NULL`);
+
+      res.json({
+        success: true,
+        dryRun,
+        before: {
+          jobsNull: jobsBefore.count,
+          applicationsNull: appsBefore.count,
+          clientsNull: clientsBefore.count,
+        },
+        updated: dryRun ? null : {
+          jobs: jobsUpdated,
+          applications: appsUpdated,
+          clients: clientsUpdated,
+          jobAnalytics: analyticsUpdated,
+          jobAuditLog: auditUpdated,
+        },
+        after: {
+          jobsNull: dryRun ? jobsBefore.count : jobsAfter.count,
+          applicationsNull: dryRun ? appsBefore.count : appsAfter.count,
+          clientsNull: dryRun ? clientsBefore.count : clientsAfter.count,
+        },
+        remaining: {
+          description: 'Records that cannot be backfilled (user has no org membership)',
+          jobsNull: dryRun ? jobsBefore.count : jobsAfter.count,
+          applicationsNull: dryRun ? appsBefore.count : appsAfter.count,
+          clientsNull: dryRun ? clientsBefore.count : clientsAfter.count,
+        },
+      });
+      return;
+    } catch (error) {
+      console.error('[Admin Ops] Error running org ID backfill:', error);
+      next(error);
+    }
+  });
+
   console.log('✅ Admin routes registered');
 }
