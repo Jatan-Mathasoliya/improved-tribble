@@ -77,6 +77,55 @@ async function backfillUserRecordsToOrg(
       AND j.posted_by = ${userId}
       AND j.organization_id = ${organizationId}
   `);
+
+  // Update orphaned pipeline stages created by this user (excluding defaults)
+  await tx.execute(sql`
+    UPDATE pipeline_stages
+    SET organization_id = ${organizationId}
+    WHERE created_by = ${userId}
+      AND organization_id IS NULL
+      AND (is_default IS NULL OR is_default = false)
+  `);
+
+  // Update orphaned email templates created by this user (excluding defaults)
+  await tx.execute(sql`
+    UPDATE email_templates
+    SET organization_id = ${organizationId}
+    WHERE created_by = ${userId}
+      AND organization_id IS NULL
+      AND (is_default IS NULL OR is_default = false)
+  `);
+
+  // Update orphaned forms created by this user
+  await tx.execute(sql`
+    UPDATE forms
+    SET organization_id = ${organizationId}
+    WHERE created_by = ${userId}
+      AND organization_id IS NULL
+  `);
+
+  // Update form_invitations for this user's forms that are now in the org
+  await tx.execute(sql`
+    UPDATE form_invitations fi
+    SET organization_id = ${organizationId}
+    FROM forms f
+    WHERE fi.organization_id IS NULL
+      AND fi.form_id = f.id
+      AND f.created_by = ${userId}
+      AND f.organization_id = ${organizationId}
+  `);
+
+  // Update form_responses for this user's forms that are now in the org
+  await tx.execute(sql`
+    UPDATE form_responses fr
+    SET organization_id = ${organizationId}
+    FROM form_invitations fi
+    INNER JOIN forms f ON fi.form_id = f.id
+    WHERE fr.organization_id IS NULL
+      AND fr.invitation_id = fi.id
+      AND f.created_by = ${userId}
+      AND f.organization_id = ${organizationId}
+  `);
 }
 
 // Public email domains that cannot claim domain verification

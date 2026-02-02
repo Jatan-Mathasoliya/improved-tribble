@@ -4,6 +4,12 @@
  * This script associates orphaned records (organization_id IS NULL) with their
  * creator's organization via organization_members lookup.
  *
+ * Tables covered:
+ * - jobs, applications, clients (core tables)
+ * - job_analytics, job_audit_log (job child tables)
+ * - pipeline_stages, email_templates (user-created, excluding defaults)
+ * - forms, form_invitations, form_responses (form hierarchy)
+ *
  * Run with: npx tsx server/scripts/backfill-org-ids.ts
  *
  * Environment variables:
@@ -11,7 +17,7 @@
  */
 
 import { db } from '../db';
-import { jobs, applications, clients } from '../../shared/schema';
+import { jobs, applications, clients, pipelineStages, emailTemplates, forms } from '../../shared/schema';
 import { sql, isNull } from 'drizzle-orm';
 
 const DRY_RUN = process.env.DRY_RUN === 'true';
@@ -56,11 +62,32 @@ async function main() {
     .from(clients)
     .where(isNull(clients.organizationId));
 
+  const [pipelineBefore] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(pipelineStages)
+    .where(isNull(pipelineStages.organizationId));
+
+  const [templatesBefore] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(emailTemplates)
+    .where(isNull(emailTemplates.organizationId));
+
+  const [formsBefore] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(forms)
+    .where(isNull(forms.organizationId));
+
   console.log(`   Jobs with NULL organization_id: ${jobsBefore.count}`);
   console.log(`   Applications with NULL organization_id: ${appsBefore.count}`);
-  console.log(`   Clients with NULL organization_id: ${clientsBefore.count}\n`);
+  console.log(`   Clients with NULL organization_id: ${clientsBefore.count}`);
+  console.log(`   Pipeline stages with NULL organization_id: ${pipelineBefore.count}`);
+  console.log(`   Email templates with NULL organization_id: ${templatesBefore.count}`);
+  console.log(`   Forms with NULL organization_id: ${formsBefore.count}\n`);
 
-  if (jobsBefore.count === 0 && appsBefore.count === 0 && clientsBefore.count === 0) {
+  const totalOrphaned = jobsBefore.count + appsBefore.count + clientsBefore.count +
+    pipelineBefore.count + templatesBefore.count + formsBefore.count;
+
+  if (totalOrphaned === 0) {
     console.log('✅ No orphaned records to backfill. Exiting.\n');
     process.exit(0);
   }
@@ -182,8 +209,120 @@ async function main() {
     console.log(`   Would update ${(auditCount.rows[0] as any)?.count || 0} job_audit_log rows\n`);
   }
 
-  // 5. COUNT AFTER + REPORT LEFTOVERS
-  console.log('Step 5: Final counts...');
+  // 5. UPDATE PIPELINE_STAGES (excluding defaults)
+  console.log('Step 5: Backfilling pipeline stages (excluding defaults)...');
+  if (!DRY_RUN) {
+    const pipelineResult = await db.execute(sql`
+      UPDATE pipeline_stages ps
+      SET organization_id = om.organization_id
+      FROM organization_members om
+      WHERE ps.organization_id IS NULL
+        AND ps.created_by = om.user_id
+        AND (ps.is_default IS NULL OR ps.is_default = false)
+        AND ps.created_by IS NOT NULL
+    `);
+    console.log(`   ✅ Updated ${pipelineResult.rowCount} pipeline_stages rows\n`);
+  } else {
+    const pipelineCount = await db.execute(sql`
+      SELECT COUNT(*)::int as count FROM pipeline_stages ps
+      INNER JOIN organization_members om ON ps.created_by = om.user_id
+      WHERE ps.organization_id IS NULL
+        AND (ps.is_default IS NULL OR ps.is_default = false)
+        AND ps.created_by IS NOT NULL
+    `);
+    console.log(`   Would update ${(pipelineCount.rows[0] as any)?.count || 0} pipeline_stages rows\n`);
+  }
+
+  // 5b. UPDATE EMAIL_TEMPLATES (excluding defaults)
+  console.log('Step 5b: Backfilling email templates (excluding defaults)...');
+  if (!DRY_RUN) {
+    const templatesResult = await db.execute(sql`
+      UPDATE email_templates et
+      SET organization_id = om.organization_id
+      FROM organization_members om
+      WHERE et.organization_id IS NULL
+        AND et.created_by = om.user_id
+        AND (et.is_default IS NULL OR et.is_default = false)
+        AND et.created_by IS NOT NULL
+    `);
+    console.log(`   ✅ Updated ${templatesResult.rowCount} email_templates rows\n`);
+  } else {
+    const templatesCount = await db.execute(sql`
+      SELECT COUNT(*)::int as count FROM email_templates et
+      INNER JOIN organization_members om ON et.created_by = om.user_id
+      WHERE et.organization_id IS NULL
+        AND (et.is_default IS NULL OR et.is_default = false)
+        AND et.created_by IS NOT NULL
+    `);
+    console.log(`   Would update ${(templatesCount.rows[0] as any)?.count || 0} email_templates rows\n`);
+  }
+
+  // 5c. UPDATE FORMS
+  console.log('Step 5c: Backfilling forms...');
+  if (!DRY_RUN) {
+    const formsResult = await db.execute(sql`
+      UPDATE forms f
+      SET organization_id = om.organization_id
+      FROM organization_members om
+      WHERE f.organization_id IS NULL
+        AND f.created_by = om.user_id
+    `);
+    console.log(`   ✅ Updated ${formsResult.rowCount} forms rows\n`);
+  } else {
+    const formsCount = await db.execute(sql`
+      SELECT COUNT(*)::int as count FROM forms f
+      INNER JOIN organization_members om ON f.created_by = om.user_id
+      WHERE f.organization_id IS NULL
+    `);
+    console.log(`   Would update ${(formsCount.rows[0] as any)?.count || 0} forms rows\n`);
+  }
+
+  // 5d. UPDATE FORM_INVITATIONS (via form FK)
+  console.log('Step 5d: Backfilling form invitations...');
+  if (!DRY_RUN) {
+    const formInvitationsResult = await db.execute(sql`
+      UPDATE form_invitations fi
+      SET organization_id = f.organization_id
+      FROM forms f
+      WHERE fi.organization_id IS NULL
+        AND fi.form_id = f.id
+        AND f.organization_id IS NOT NULL
+    `);
+    console.log(`   ✅ Updated ${formInvitationsResult.rowCount} form_invitations rows\n`);
+  } else {
+    const formInvitationsCount = await db.execute(sql`
+      SELECT COUNT(*)::int as count FROM form_invitations fi
+      INNER JOIN forms f ON fi.form_id = f.id
+      WHERE fi.organization_id IS NULL AND f.organization_id IS NOT NULL
+    `);
+    console.log(`   Would update ${(formInvitationsCount.rows[0] as any)?.count || 0} form_invitations rows\n`);
+  }
+
+  // 5e. UPDATE FORM_RESPONSES (via form invitation FK)
+  console.log('Step 5e: Backfilling form responses...');
+  if (!DRY_RUN) {
+    const formResponsesResult = await db.execute(sql`
+      UPDATE form_responses fr
+      SET organization_id = f.organization_id
+      FROM form_invitations fi
+      INNER JOIN forms f ON fi.form_id = f.id
+      WHERE fr.organization_id IS NULL
+        AND fr.invitation_id = fi.id
+        AND f.organization_id IS NOT NULL
+    `);
+    console.log(`   ✅ Updated ${formResponsesResult.rowCount} form_responses rows\n`);
+  } else {
+    const formResponsesCount = await db.execute(sql`
+      SELECT COUNT(*)::int as count FROM form_responses fr
+      INNER JOIN form_invitations fi ON fr.invitation_id = fi.id
+      INNER JOIN forms f ON fi.form_id = f.id
+      WHERE fr.organization_id IS NULL AND f.organization_id IS NOT NULL
+    `);
+    console.log(`   Would update ${(formResponsesCount.rows[0] as any)?.count || 0} form_responses rows\n`);
+  }
+
+  // 6. COUNT AFTER + REPORT LEFTOVERS
+  console.log('Step 6: Final counts...');
   const [jobsAfter] = await db
     .select({ count: sql<number>`count(*)::int` })
     .from(jobs)
@@ -199,11 +338,29 @@ async function main() {
     .from(clients)
     .where(isNull(clients.organizationId));
 
+  const [pipelineAfter] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(pipelineStages)
+    .where(isNull(pipelineStages.organizationId));
+
+  const [templatesAfter] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(emailTemplates)
+    .where(isNull(emailTemplates.organizationId));
+
+  const [formsAfter] = await db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(forms)
+    .where(isNull(forms.organizationId));
+
   console.log(`   Jobs still with NULL organization_id: ${DRY_RUN ? jobsBefore.count : jobsAfter.count}`);
   console.log(`   Applications still with NULL organization_id: ${DRY_RUN ? appsBefore.count : appsAfter.count}`);
-  console.log(`   Clients still with NULL organization_id: ${DRY_RUN ? clientsBefore.count : clientsAfter.count}\n`);
+  console.log(`   Clients still with NULL organization_id: ${DRY_RUN ? clientsBefore.count : clientsAfter.count}`);
+  console.log(`   Pipeline stages still with NULL organization_id: ${DRY_RUN ? pipelineBefore.count : pipelineAfter.count}`);
+  console.log(`   Email templates still with NULL organization_id: ${DRY_RUN ? templatesBefore.count : templatesAfter.count}`);
+  console.log(`   Forms still with NULL organization_id: ${DRY_RUN ? formsBefore.count : formsAfter.count}\n`);
 
-  // 6. LIST REMAINING ORPHANS (users without org membership)
+  // 7. LIST REMAINING ORPHANS (users without org membership)
   const remainingOrphanedJobs = DRY_RUN ? jobsBefore.count : jobsAfter.count;
   if (remainingOrphanedJobs > 0) {
     console.log('Step 6: Listing remaining orphaned jobs (posted by users without org membership)...');

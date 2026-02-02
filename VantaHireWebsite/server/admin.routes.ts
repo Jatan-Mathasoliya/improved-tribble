@@ -31,6 +31,7 @@ import {
   automationSettings,
   applicationStageHistory,
   pipelineStages,
+  emailTemplates,
   jobs,
   clients,
 } from '@shared/schema';
@@ -1285,6 +1286,18 @@ export function registerAdminRoutes(
       const [clientsNull] = await db.select({ count: sql<number>`count(*)::int` })
         .from(clients).where(sql`organization_id IS NULL`);
 
+      // Additional tables: pipeline_stages, email_templates, forms, form_invitations, form_responses
+      const [pipelineNull] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(pipelineStages).where(sql`organization_id IS NULL`);
+      const [templatesNull] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(emailTemplates).where(sql`organization_id IS NULL`);
+      const [formsNull] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(forms).where(sql`organization_id IS NULL`);
+      const [formInvitationsNull] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(formInvitations).where(sql`organization_id IS NULL`);
+      const [formResponsesNull] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(formResponses).where(sql`organization_id IS NULL`);
+
       // Count how many can be backfilled (user has org membership)
       const backfillableJobs = await db.execute(sql`
         SELECT COUNT(*)::int as count FROM jobs j
@@ -1302,6 +1315,43 @@ export function registerAdminRoutes(
         SELECT COUNT(*)::int as count FROM clients c
         INNER JOIN organization_members om ON c.created_by = om.user_id
         WHERE c.organization_id IS NULL
+      `);
+      // Pipeline stages: exclude defaults (is_default = true or created_by IS NULL)
+      const backfillablePipeline = await db.execute(sql`
+        SELECT COUNT(*)::int as count FROM pipeline_stages ps
+        INNER JOIN organization_members om ON ps.created_by = om.user_id
+        WHERE ps.organization_id IS NULL
+          AND (ps.is_default IS NULL OR ps.is_default = false)
+          AND ps.created_by IS NOT NULL
+      `);
+      // Email templates: exclude defaults (is_default = true or created_by IS NULL)
+      const backfillableTemplates = await db.execute(sql`
+        SELECT COUNT(*)::int as count FROM email_templates et
+        INNER JOIN organization_members om ON et.created_by = om.user_id
+        WHERE et.organization_id IS NULL
+          AND (et.is_default IS NULL OR et.is_default = false)
+          AND et.created_by IS NOT NULL
+      `);
+      // Forms: backfill via created_by
+      const backfillableForms = await db.execute(sql`
+        SELECT COUNT(*)::int as count FROM forms f
+        INNER JOIN organization_members om ON f.created_by = om.user_id
+        WHERE f.organization_id IS NULL
+      `);
+      // Form invitations: backfill via form FK (form must have org)
+      const backfillableFormInvitations = await db.execute(sql`
+        SELECT COUNT(*)::int as count FROM form_invitations fi
+        INNER JOIN forms f ON fi.form_id = f.id
+        WHERE fi.organization_id IS NULL
+          AND f.organization_id IS NOT NULL
+      `);
+      // Form responses: backfill via form invitation -> form FK
+      const backfillableFormResponses = await db.execute(sql`
+        SELECT COUNT(*)::int as count FROM form_responses fr
+        INNER JOIN form_invitations fi ON fr.invitation_id = fi.id
+        INNER JOIN forms f ON fi.form_id = f.id
+        WHERE fr.organization_id IS NULL
+          AND f.organization_id IS NOT NULL
       `);
 
       // Get breakdown of orphaned records by user (users without org membership)
@@ -1330,13 +1380,25 @@ export function registerAdminRoutes(
           jobs: jobsNull.count,
           applications: appsNull.count,
           clients: clientsNull.count,
+          pipelineStages: pipelineNull.count,
+          emailTemplates: templatesNull.count,
+          forms: formsNull.count,
+          formInvitations: formInvitationsNull.count,
+          formResponses: formResponsesNull.count,
         },
         backfillable: {
           jobs: (backfillableJobs.rows[0] as any)?.count || 0,
           applications: (backfillableApps.rows[0] as any)?.count || 0,
           clients: (backfillableClients.rows[0] as any)?.count || 0,
+          pipelineStages: (backfillablePipeline.rows[0] as any)?.count || 0,
+          emailTemplates: (backfillableTemplates.rows[0] as any)?.count || 0,
+          forms: (backfillableForms.rows[0] as any)?.count || 0,
+          formInvitations: (backfillableFormInvitations.rows[0] as any)?.count || 0,
+          formResponses: (backfillableFormResponses.rows[0] as any)?.count || 0,
         },
-        healthy: jobsNull.count === 0 && appsNull.count === 0 && clientsNull.count === 0,
+        healthy: jobsNull.count === 0 && appsNull.count === 0 && clientsNull.count === 0 &&
+                 pipelineNull.count === 0 && templatesNull.count === 0 && formsNull.count === 0 &&
+                 formInvitationsNull.count === 0 && formResponsesNull.count === 0,
         orphanedByUser: {
           description: "Users without org membership who have orphaned records (top 10)",
           users: orphanedByUser.rows,
@@ -1394,11 +1456,24 @@ export function registerAdminRoutes(
       const [clientsBefore] = await db.select({ count: sql<number>`count(*)::int` })
         .from(clients).where(sql`organization_id IS NULL`);
 
+      // Count before for new tables
+      const [pipelineBefore] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(pipelineStages).where(sql`organization_id IS NULL`);
+      const [templatesBefore] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(emailTemplates).where(sql`organization_id IS NULL`);
+      const [formsBefore] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(forms).where(sql`organization_id IS NULL`);
+
       let jobsUpdated = 0;
       let appsUpdated = 0;
       let clientsUpdated = 0;
       let analyticsUpdated = 0;
       let auditUpdated = 0;
+      let pipelineUpdated = 0;
+      let templatesUpdated = 0;
+      let formsUpdated = 0;
+      let formInvitationsUpdated = 0;
+      let formResponsesUpdated = 0;
 
       if (!dryRun) {
         // 3. Backfill jobs
@@ -1452,15 +1527,78 @@ export function registerAdminRoutes(
             AND j.organization_id IS NOT NULL
         `);
         auditUpdated = auditResult.rowCount ?? 0;
+
+        // 7. Backfill pipeline_stages (exclude defaults)
+        const pipelineResult = await db.execute(sql`
+          UPDATE pipeline_stages ps
+          SET organization_id = om.organization_id
+          FROM organization_members om
+          WHERE ps.organization_id IS NULL
+            AND ps.created_by = om.user_id
+            AND (ps.is_default IS NULL OR ps.is_default = false)
+            AND ps.created_by IS NOT NULL
+        `);
+        pipelineUpdated = pipelineResult.rowCount ?? 0;
+
+        // 8. Backfill email_templates (exclude defaults)
+        const templatesResult = await db.execute(sql`
+          UPDATE email_templates et
+          SET organization_id = om.organization_id
+          FROM organization_members om
+          WHERE et.organization_id IS NULL
+            AND et.created_by = om.user_id
+            AND (et.is_default IS NULL OR et.is_default = false)
+            AND et.created_by IS NOT NULL
+        `);
+        templatesUpdated = templatesResult.rowCount ?? 0;
+
+        // 9. Backfill forms
+        const formsResult = await db.execute(sql`
+          UPDATE forms f
+          SET organization_id = om.organization_id
+          FROM organization_members om
+          WHERE f.organization_id IS NULL
+            AND f.created_by = om.user_id
+        `);
+        formsUpdated = formsResult.rowCount ?? 0;
+
+        // 10. Backfill form_invitations (via form join)
+        const formInvitationsResult = await db.execute(sql`
+          UPDATE form_invitations fi
+          SET organization_id = f.organization_id
+          FROM forms f
+          WHERE fi.organization_id IS NULL
+            AND fi.form_id = f.id
+            AND f.organization_id IS NOT NULL
+        `);
+        formInvitationsUpdated = formInvitationsResult.rowCount ?? 0;
+
+        // 11. Backfill form_responses (via form join)
+        const formResponsesResult = await db.execute(sql`
+          UPDATE form_responses fr
+          SET organization_id = f.organization_id
+          FROM form_invitations fi
+          INNER JOIN forms f ON fi.form_id = f.id
+          WHERE fr.organization_id IS NULL
+            AND fr.invitation_id = fi.id
+            AND f.organization_id IS NOT NULL
+        `);
+        formResponsesUpdated = formResponsesResult.rowCount ?? 0;
       }
 
-      // 7. Count after
+      // 12. Count after
       const [jobsAfter] = await db.select({ count: sql<number>`count(*)::int` })
         .from(jobs).where(sql`organization_id IS NULL`);
       const [appsAfter] = await db.select({ count: sql<number>`count(*)::int` })
         .from(applications).where(sql`organization_id IS NULL`);
       const [clientsAfter] = await db.select({ count: sql<number>`count(*)::int` })
         .from(clients).where(sql`organization_id IS NULL`);
+      const [pipelineAfter] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(pipelineStages).where(sql`organization_id IS NULL`);
+      const [templatesAfter] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(emailTemplates).where(sql`organization_id IS NULL`);
+      const [formsAfter] = await db.select({ count: sql<number>`count(*)::int` })
+        .from(forms).where(sql`organization_id IS NULL`);
 
       res.json({
         success: true,
@@ -1469,6 +1607,9 @@ export function registerAdminRoutes(
           jobsNull: jobsBefore.count,
           applicationsNull: appsBefore.count,
           clientsNull: clientsBefore.count,
+          pipelineStagesNull: pipelineBefore.count,
+          emailTemplatesNull: templatesBefore.count,
+          formsNull: formsBefore.count,
         },
         updated: dryRun ? null : {
           jobs: jobsUpdated,
@@ -1476,17 +1617,28 @@ export function registerAdminRoutes(
           clients: clientsUpdated,
           jobAnalytics: analyticsUpdated,
           jobAuditLog: auditUpdated,
+          pipelineStages: pipelineUpdated,
+          emailTemplates: templatesUpdated,
+          forms: formsUpdated,
+          formInvitations: formInvitationsUpdated,
+          formResponses: formResponsesUpdated,
         },
         after: {
           jobsNull: dryRun ? jobsBefore.count : jobsAfter.count,
           applicationsNull: dryRun ? appsBefore.count : appsAfter.count,
           clientsNull: dryRun ? clientsBefore.count : clientsAfter.count,
+          pipelineStagesNull: dryRun ? pipelineBefore.count : pipelineAfter.count,
+          emailTemplatesNull: dryRun ? templatesBefore.count : templatesAfter.count,
+          formsNull: dryRun ? formsBefore.count : formsAfter.count,
         },
         remaining: {
-          description: 'Records that cannot be backfilled (user has no org membership)',
+          description: 'Records that cannot be backfilled (user has no org membership or are system defaults)',
           jobsNull: dryRun ? jobsBefore.count : jobsAfter.count,
           applicationsNull: dryRun ? appsBefore.count : appsAfter.count,
           clientsNull: dryRun ? clientsBefore.count : clientsAfter.count,
+          pipelineStagesNull: dryRun ? pipelineBefore.count : pipelineAfter.count,
+          emailTemplatesNull: dryRun ? templatesBefore.count : templatesAfter.count,
+          formsNull: dryRun ? formsBefore.count : formsAfter.count,
         },
       });
       return;

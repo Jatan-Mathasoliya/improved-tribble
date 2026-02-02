@@ -107,7 +107,7 @@ export async function createFreeSubscription(orgId: number): Promise<Organizatio
   return subscription;
 }
 
-// Create paid subscription (after successful payment)
+// Create or upgrade to paid subscription (after successful payment)
 export async function createPaidSubscription(
   orgId: number,
   planId: number,
@@ -125,36 +125,62 @@ export async function createPaidSubscription(
     periodEnd.setMonth(periodEnd.getMonth() + 1);
   }
 
-  // Delete existing subscription if any
   const existing = await getOrganizationSubscription(orgId);
+
+  let subscription: OrganizationSubscription;
+
   if (existing) {
-    await db.delete(organizationSubscriptions)
-      .where(eq(organizationSubscriptions.id, existing.id));
+    // Update existing subscription (preserves ID and audit log references)
+    const [updated] = await db.update(organizationSubscriptions)
+      .set({
+        planId,
+        seats,
+        paidSeats: seats, // All seats are paid for in a paid subscription
+        billingCycle,
+        status: 'active',
+        startDate: now,
+        currentPeriodStart: now,
+        currentPeriodEnd: periodEnd,
+        cashfreeSubscriptionId,
+        cashfreeCustomerId,
+      })
+      .where(eq(organizationSubscriptions.id, existing.id))
+      .returning();
+    subscription = updated;
+
+    // Log the upgrade
+    await logSubscriptionAction(orgId, subscription.id, 'upgraded', {
+      planId: existing.planId,
+      seats: existing.seats,
+    }, {
+      planId,
+      seats,
+      billingCycle,
+    });
+  } else {
+    // Create new subscription
+    const [created] = await db.insert(organizationSubscriptions).values({
+      organizationId: orgId,
+      planId,
+      seats,
+      paidSeats: seats,
+      billingCycle,
+      status: 'active',
+      startDate: now,
+      currentPeriodStart: now,
+      currentPeriodEnd: periodEnd,
+      cashfreeSubscriptionId,
+      cashfreeCustomerId,
+    }).returning();
+    subscription = created;
+
+    // Log the creation
+    await logSubscriptionAction(orgId, subscription.id, 'created', null, {
+      planId,
+      seats,
+      billingCycle,
+    });
   }
-
-  const [subscription] = await db.insert(organizationSubscriptions).values({
-    organizationId: orgId,
-    planId,
-    seats,
-    paidSeats: seats, // All seats are paid for in a paid subscription
-    billingCycle,
-    status: 'active',
-    startDate: now,
-    currentPeriodStart: now,
-    currentPeriodEnd: periodEnd,
-    cashfreeSubscriptionId,
-    cashfreeCustomerId,
-  }).returning();
-
-  // Log the upgrade
-  await logSubscriptionAction(orgId, subscription.id, 'upgraded', existing ? {
-    planId: existing.planId,
-    seats: existing.seats,
-  } : null, {
-    planId,
-    seats,
-    billingCycle,
-  });
 
   return subscription;
 }
