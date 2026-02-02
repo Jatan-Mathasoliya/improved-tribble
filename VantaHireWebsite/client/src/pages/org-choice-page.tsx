@@ -262,9 +262,13 @@ export default function OrgChoicePage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-4">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
                 <CheckCircle className="h-4 w-4 text-green-500" />
                 <span>Valid invite for {inviteDetails.email}</span>
+              </div>
+              <div className="flex items-start gap-2 text-sm text-muted-foreground bg-muted/50 rounded-md p-3 mb-4">
+                <AlertCircle className="h-4 w-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                <span>Your existing jobs and clients will be moved to this organization when you join.</span>
               </div>
               <div className="flex gap-3">
                 <Button
@@ -348,6 +352,9 @@ export default function OrgChoicePage() {
                   </p>
                   <p className="text-sm text-amber-700 mt-1">
                     {domainOrg.name} is already using VantaHire. You can request to join them.
+                  </p>
+                  <p className="text-xs text-amber-600 mt-2">
+                    Note: Your existing jobs and clients will be moved to this organization if approved.
                   </p>
                   <Button
                     variant="outline"
@@ -443,7 +450,7 @@ export default function OrgChoicePage() {
 
                   {/* Preview card when invite is valid */}
                   {isValidInviteCode && inviteDetails && !inviteFromUrl && (
-                    <div className="border rounded-lg p-4 bg-gradient-to-br from-primary/5 to-transparent">
+                    <div className="border rounded-lg p-4 bg-gradient-to-br from-primary/5 to-transparent space-y-3">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center">
                           <UserPlus className="h-5 w-5 text-primary" />
@@ -455,6 +462,10 @@ export default function OrgChoicePage() {
                           </p>
                         </div>
                         <CheckCircle className="h-5 w-5 text-green-500" />
+                      </div>
+                      <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/50 rounded-md p-2">
+                        <AlertCircle className="h-3.5 w-3.5 text-amber-500 mt-0.5 flex-shrink-0" />
+                        <span>Your existing jobs and clients will be moved to this organization.</span>
                       </div>
                     </div>
                   )}
