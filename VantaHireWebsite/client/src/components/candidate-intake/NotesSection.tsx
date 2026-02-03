@@ -39,7 +39,7 @@ export function NotesSection({
     onValidChange(true);
   }, [onValidChange]);
 
-  const sortedStages = [...pipelineStages].sort((a, b) => a.order - b.order);
+  const sortedStages = [...pipelineStages].sort((a, b) => (a.order - b.order) || (a.id - b.id));
 
   return (
     <div className="space-y-6">

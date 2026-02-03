@@ -52,6 +52,7 @@ import { applicationRateLimit, recruiterAddRateLimit, aiAnalysisRateLimit, type 
 import { isQueueAvailable, enqueueSummaryBatch, removeJob, QUEUES } from './lib/aiQueue';
 import { randomUUID } from 'crypto';
 import type { CsrfMiddleware } from './types/routes';
+import { normalizeStageName } from './lib/pipelineStageUtils';
 
 // Base URL for email links
 const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
@@ -853,6 +854,13 @@ export function registerApplicationsRoutes(
       const organizationId = orgResult?.organization.id;
 
       const body = insertPipelineStageSchema.parse(req.body);
+      const existingStages = await storage.getPipelineStages(organizationId ?? null, req.user!.id);
+      const normalizedName = normalizeStageName(body.name);
+      const duplicateStage = existingStages.find((stage) => normalizeStageName(stage.name) === normalizedName);
+      if (duplicateStage) {
+        res.status(409).json({ error: 'Stage name already exists', stageId: duplicateStage.id });
+        return;
+      }
       const stage = await storage.createPipelineStage({
         ...body,
         createdBy: req.user!.id,
@@ -903,6 +911,18 @@ export function registerApplicationsRoutes(
       if (!stage) {
         res.status(404).json({ error: 'Stage not found' });
         return;
+      }
+
+      if (validation.data.name !== undefined) {
+        const existingStages = await storage.getPipelineStages(organizationId ?? null, req.user!.id);
+        const normalizedName = normalizeStageName(validation.data.name);
+        const duplicateStage = existingStages.find(
+          (candidate) => candidate.id !== stageId && normalizeStageName(candidate.name) === normalizedName
+        );
+        if (duplicateStage) {
+          res.status(409).json({ error: 'Stage name already exists', stageId: duplicateStage.id });
+          return;
+        }
       }
 
       // Build update object without undefined values.

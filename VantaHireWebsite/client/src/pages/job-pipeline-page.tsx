@@ -217,7 +217,7 @@ export default function JobPipelinePage() {
     }
   });
 
-  const sortedStages = [...pipelineStages].sort((a, b) => a.order - b.order);
+  const sortedStages = [...pipelineStages].sort((a, b) => (a.order - b.order) || (a.id - b.id));
 
   const createStageMutation = useMutation({
     mutationFn: async (name: string) => {

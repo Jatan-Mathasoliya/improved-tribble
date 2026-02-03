@@ -1404,7 +1404,7 @@ export default function ApplicationManagementPage() {
                       <SelectItem value="unassigned">Unassigned</SelectItem>
                       {pipelineStages
                         .slice()
-                        .sort((a, b) => a.order - b.order)
+                        .sort((a, b) => (a.order - b.order) || (a.id - b.id))
                         .map((stage) => (
                           <SelectItem key={stage.id} value={stage.id.toString()}>
                             {stage.name}
@@ -1503,7 +1503,7 @@ export default function ApplicationManagementPage() {
           <div className="min-h-[600px] rounded-lg border border-border bg-card shadow-sm p-4 overflow-auto" data-tour="kanban-board">
             <KanbanBoard
               applications={filteredApplications}
-              pipelineStages={pipelineStages.sort((a, b) => a.order - b.order)}
+              pipelineStages={pipelineStages.sort((a, b) => (a.order - b.order) || (a.id - b.id))}
               selectedIds={selectedApplications}
               onToggleSelect={handleToggleSelect}
               onOpenDetails={handleOpenDetails}

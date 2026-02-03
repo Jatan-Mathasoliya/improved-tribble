@@ -355,7 +355,7 @@ type HmFeedbackResponse = {
   const funnelData = useMemo(() => {
     if (dropoffData) {
       const stageColorMap = new Map(pipelineStages.map((s) => [s.id, s.color]));
-      const sorted = [...dropoffData.stages].sort((a, b) => a.order - b.order);
+      const sorted = [...dropoffData.stages].sort((a, b) => (a.order - b.order) || (a.stageId - b.stageId));
       const unassigned = dropoffData.unassigned
         ? [{ name: "Unassigned", count: dropoffData.unassigned, color: "#94a3b8", order: -1 }]
         : [];
@@ -376,7 +376,7 @@ type HmFeedbackResponse = {
       const key = app.currentStage ? String(app.currentStage) : "unassigned";
       counts[key] = (counts[key] || 0) + 1;
     });
-    const sortedStages = [...pipelineStages].sort((a, b) => a.order - b.order);
+    const sortedStages = [...pipelineStages].sort((a, b) => (a.order - b.order) || (a.id - b.id));
     const mapped = sortedStages.map((stage) => ({
       name: stage.name,
       count: counts[String(stage.id)] || 0,
@@ -397,7 +397,7 @@ type HmFeedbackResponse = {
         .sort((a, b) => a.rate - b.rate)[0];
       return { conversions: dropoffData.conversions, weakest };
     }
-    const sortedStages = [...pipelineStages].sort((a, b) => a.order - b.order);
+    const sortedStages = [...pipelineStages].sort((a, b) => (a.order - b.order) || (a.id - b.id));
     const counts = sortedStages.map((stage) => ({
       name: stage.name,
       count: filteredApplications.filter((app) => app.currentStage === stage.id).length,

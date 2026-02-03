@@ -67,6 +67,7 @@ import {
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, inArray, count, gte, lte, isNull } from "drizzle-orm";
+import { normalizeStageName } from "./lib/pipelineStageUtils";
 
 export type JobHealthStatus = 'green' | 'amber' | 'red';
 
@@ -2480,7 +2481,7 @@ export class DatabaseStorage implements IStorage {
   // ===== ATS: Pipeline and Interviews =====
   async getPipelineStages(organizationId?: number | null, userId?: number): Promise<PipelineStage[]> {
     if (organizationId === undefined) {
-      return db.select().from(pipelineStages).orderBy(pipelineStages.order);
+      return db.select().from(pipelineStages).orderBy(pipelineStages.order, pipelineStages.id);
     }
 
     const conditions = [] as any[];
@@ -2499,7 +2500,48 @@ export class DatabaseStorage implements IStorage {
     }
 
     const whereClause = conditions.length === 1 ? conditions[0] : or(...conditions);
-    return db.select().from(pipelineStages).where(whereClause).orderBy(pipelineStages.order);
+    const stages = await db.select().from(pipelineStages).where(whereClause).orderBy(pipelineStages.order, pipelineStages.id);
+
+    type StageRow = typeof stages[number];
+
+    if (organizationId != null) {
+      const normalizedOrgStageNames = new Set<string>();
+      for (const stage of stages) {
+        if (stage.organizationId === organizationId) {
+          normalizedOrgStageNames.add(normalizeStageName(stage.name));
+        }
+      }
+
+      if (normalizedOrgStageNames.size > 0) {
+        const defaultDuplicateCandidates = stages.filter(
+          (stage: StageRow) => stage.organizationId == null && stage.isDefault && normalizedOrgStageNames.has(normalizeStageName(stage.name))
+        );
+
+        if (defaultDuplicateCandidates.length > 0) {
+          const defaultDuplicateIds = defaultDuplicateCandidates.map((stage: StageRow) => stage.id);
+          const usedDefaults = await db
+            .select({ stageId: applications.currentStage, count: sql<number>`count(*)::int` })
+            .from(applications)
+            .innerJoin(jobs, eq(applications.jobId, jobs.id))
+            .where(and(eq(jobs.organizationId, organizationId), inArray(applications.currentStage, defaultDuplicateIds)))
+            .groupBy(applications.currentStage);
+
+          const usedDefaultIds = new Set<number>();
+          for (const row of usedDefaults) {
+            if (row.stageId != null) usedDefaultIds.add(row.stageId);
+          }
+
+          return stages.filter((stage: StageRow) => {
+            if (stage.organizationId == null && stage.isDefault && normalizedOrgStageNames.has(normalizeStageName(stage.name))) {
+              return usedDefaultIds.has(stage.id);
+            }
+            return true;
+          });
+        }
+      }
+    }
+
+    return stages;
   }
 
   async createPipelineStage(stage: InsertPipelineStage & { createdBy?: number; organizationId?: number }): Promise<PipelineStage> {

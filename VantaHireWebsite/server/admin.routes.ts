@@ -13,11 +13,12 @@
 
 import type { Express, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
-import { sql, eq, and, desc, gte, inArray } from 'drizzle-orm';
+import { sql, eq, and, desc, gte, inArray, or, isNull } from 'drizzle-orm';
 import { db } from './db';
 import { backfillExtractedResumeText } from './lib/backfillResumeText';
 import { storage } from './storage';
 import { requireRole } from './auth';
+import { normalizeStageName } from './lib/pipelineStageUtils';
 import {
   userAiUsage,
   applicationFeedback,
@@ -1409,6 +1410,208 @@ export function registerAdminRoutes(
       return;
     } catch (error) {
       console.error('[Admin Ops] Error checking org health:', error);
+      next(error);
+    }
+  });
+
+  /**
+   * POST /api/admin/ops/merge-duplicate-stages
+   * Merge duplicate pipeline stages (same name) within an org, preferring org stages over defaults.
+   * Dry run returns counts without mutating data.
+   */
+  app.post("/api/admin/ops/merge-duplicate-stages", csrfProtection, requireRole(['super_admin']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const bodySchema = z.object({
+        orgId: z.number().int().positive(),
+        dryRun: z.boolean().optional().default(true),
+      });
+
+      const parsed = bodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        res.status(400).json({ error: 'Validation error', details: parsed.error.errors });
+        return;
+      }
+
+      const { orgId, dryRun } = parsed.data;
+
+      const stages = await db.select({
+        id: pipelineStages.id,
+        name: pipelineStages.name,
+        order: pipelineStages.order,
+        organizationId: pipelineStages.organizationId,
+        isDefault: pipelineStages.isDefault,
+      })
+        .from(pipelineStages)
+        .where(or(
+          eq(pipelineStages.organizationId, orgId),
+          and(isNull(pipelineStages.organizationId), eq(pipelineStages.isDefault, true))
+        ));
+
+      const stageGroups = new Map<string, typeof stages>();
+      for (const stage of stages) {
+        const key = normalizeStageName(stage.name);
+        const existing = stageGroups.get(key);
+        if (existing) {
+          existing.push(stage);
+        } else {
+          stageGroups.set(key, [stage]);
+        }
+      }
+
+      const duplicateGroups: {
+        name: string;
+        canonicalId: number;
+        duplicateStageIds: number[];
+        duplicateOrgStageIds: number[];
+      }[] = [];
+
+      const allDuplicateStageIds = new Set<number>();
+      const allDuplicateOrgStageIds = new Set<number>();
+
+      const sortByOrder = (a: typeof stages[number], b: typeof stages[number]) => (a.order - b.order) || (a.id - b.id);
+
+      type StageRow = typeof stages[number];
+      for (const [, group] of stageGroups.entries()) {
+        if (group.length < 2) continue;
+
+        const orgStages = group.filter((stage: StageRow) => stage.organizationId === orgId);
+        const defaultStages = group.filter((stage: StageRow) => stage.organizationId == null && stage.isDefault);
+        if (orgStages.length === 0 && defaultStages.length === 0) continue;
+
+        const canonical = (orgStages.length ? [...orgStages].sort(sortByOrder)[0] : [...defaultStages].sort(sortByOrder)[0]);
+        const duplicateStageIds = group.filter((stage: StageRow) => stage.id !== canonical.id).map((stage: StageRow) => stage.id);
+        if (duplicateStageIds.length === 0) continue;
+
+        const duplicateOrgStageIds = group
+          .filter((stage: StageRow) => stage.organizationId === orgId && stage.id !== canonical.id)
+          .map((stage: StageRow) => stage.id);
+
+        duplicateStageIds.forEach((id: number) => allDuplicateStageIds.add(id));
+        duplicateOrgStageIds.forEach((id: number) => allDuplicateOrgStageIds.add(id));
+
+        duplicateGroups.push({
+          name: group[0].name,
+          canonicalId: canonical.id,
+          duplicateStageIds,
+          duplicateOrgStageIds,
+        });
+      }
+
+      if (duplicateGroups.length === 0) {
+        res.json({
+          success: true,
+          orgId,
+          dryRun,
+          message: 'No duplicate stages found.',
+        });
+        return;
+      }
+
+      const duplicateStageIdsAll = Array.from(allDuplicateStageIds);
+      const duplicateOrgStageIdsAll = Array.from(allDuplicateOrgStageIds);
+
+      let applicationsUpdated = 0;
+      let historyFromUpdated = 0;
+      let historyToUpdated = 0;
+      let stagesDeleted = 0;
+
+      if (dryRun) {
+        const [appsToMove] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(applications)
+          .innerJoin(jobs, eq(applications.jobId, jobs.id))
+          .where(and(eq(jobs.organizationId, orgId), inArray(applications.currentStage, duplicateStageIdsAll)));
+
+        const [historyFrom] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(applicationStageHistory)
+          .innerJoin(applications, eq(applicationStageHistory.applicationId, applications.id))
+          .innerJoin(jobs, eq(applications.jobId, jobs.id))
+          .where(and(eq(jobs.organizationId, orgId), inArray(applicationStageHistory.fromStage, duplicateStageIdsAll)));
+
+        const [historyTo] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(applicationStageHistory)
+          .innerJoin(applications, eq(applicationStageHistory.applicationId, applications.id))
+          .innerJoin(jobs, eq(applications.jobId, jobs.id))
+          .where(and(eq(jobs.organizationId, orgId), inArray(applicationStageHistory.toStage, duplicateStageIdsAll)));
+
+        res.json({
+          success: true,
+          orgId,
+          dryRun: true,
+          duplicateGroups,
+          totals: {
+            applicationsToMove: appsToMove?.count ?? 0,
+            historyFromToUpdate: historyFrom?.count ?? 0,
+            historyToToUpdate: historyTo?.count ?? 0,
+            orgStagesToDelete: duplicateOrgStageIdsAll.length,
+          },
+        });
+        return;
+      }
+
+      for (const group of duplicateGroups) {
+        if (group.duplicateStageIds.length === 0) continue;
+
+        const stageIds = group.duplicateStageIds.map((id) => sql`${id}`);
+        const stageIdList = sql.join(stageIds, sql`, `);
+
+        const appsResult = await db.execute(sql`
+          UPDATE applications a
+          SET current_stage = ${group.canonicalId}
+          FROM jobs j
+          WHERE a.job_id = j.id
+            AND j.organization_id = ${orgId}
+            AND a.current_stage IN (${stageIdList})
+        `);
+        applicationsUpdated += appsResult.rowCount ?? 0;
+
+        const historyFromResult = await db.execute(sql`
+          UPDATE application_stage_history ash
+          SET from_stage = ${group.canonicalId}
+          FROM applications a
+          JOIN jobs j ON a.job_id = j.id
+          WHERE ash.application_id = a.id
+            AND j.organization_id = ${orgId}
+            AND ash.from_stage IN (${stageIdList})
+        `);
+        historyFromUpdated += historyFromResult.rowCount ?? 0;
+
+        const historyToResult = await db.execute(sql`
+          UPDATE application_stage_history ash
+          SET to_stage = ${group.canonicalId}
+          FROM applications a
+          JOIN jobs j ON a.job_id = j.id
+          WHERE ash.application_id = a.id
+            AND j.organization_id = ${orgId}
+            AND ash.to_stage IN (${stageIdList})
+        `);
+        historyToUpdated += historyToResult.rowCount ?? 0;
+      }
+
+      if (duplicateOrgStageIdsAll.length > 0) {
+        const deleteResult = await db
+          .delete(pipelineStages)
+          .where(inArray(pipelineStages.id, duplicateOrgStageIdsAll));
+        stagesDeleted = deleteResult.rowCount ?? 0;
+      }
+
+      res.json({
+        success: true,
+        orgId,
+        dryRun: false,
+        duplicateGroups,
+        totals: {
+          applicationsUpdated,
+          historyFromUpdated,
+          historyToUpdated,
+          stagesDeleted,
+        },
+      });
+      return;
+    } catch (error) {
+      console.error('[Admin Ops] Error merging duplicate pipeline stages:', error);
       next(error);
     }
   });

@@ -148,7 +148,7 @@ export default function FormEditorPage() {
       setIsPublished(template.isPublished);
       setFields(
         template.fields
-          .sort((a, b) => a.order - b.order)
+          .sort((a, b) => (a.order - b.order) || (a.id - b.id))
           .map((f, index) => ({
             id: `field-${index}-${Date.now()}`,
             type: f.type,

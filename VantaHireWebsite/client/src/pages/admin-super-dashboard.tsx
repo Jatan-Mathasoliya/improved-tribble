@@ -1743,7 +1743,7 @@ export default function AdminSuperDashboard() {
                           <SelectItem value="unassigned">Unassigned</SelectItem>
                           {pipelineStages
                             .slice()
-                            .sort((a, b) => a.order - b.order)
+                            .sort((a, b) => (a.order - b.order) || (a.id - b.id))
                             .map((stage) => (
                               <SelectItem key={stage.id} value={stage.id.toString()}>
                                 {stage.name}

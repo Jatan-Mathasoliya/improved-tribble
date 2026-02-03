@@ -174,7 +174,7 @@ export default function JobAnalyticsPage() {
   ].filter(d => d.value > 0);
 
   // Stage distribution for bar chart
-  const sortedStages = [...pipelineStages].sort((a, b) => a.order - b.order);
+  const sortedStages = [...pipelineStages].sort((a, b) => (a.order - b.order) || (a.id - b.id));
   const stageData = sortedStages.map(stage => ({
     name: stage.name.length > 10 ? stage.name.substring(0, 10) + '...' : stage.name,
     fullName: stage.name,

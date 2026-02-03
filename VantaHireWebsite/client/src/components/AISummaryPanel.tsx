@@ -163,7 +163,7 @@ export function AISummaryPanel({
       }
 
       // Find the next stage
-      const sortedStages = [...pipelineStages].sort((a, b) => a.order - b.order);
+      const sortedStages = [...pipelineStages].sort((a, b) => (a.order - b.order) || (a.id - b.id));
       const currentIndex = sortedStages.findIndex(s => s.id === currentStageId);
       const nextStage = currentIndex >= 0 && currentIndex < sortedStages.length - 1
         ? sortedStages[currentIndex + 1]
