@@ -190,13 +190,16 @@ export default function ApplicationManagementPage() {
   });
 
   // ATS: Fetch pipeline stages
+  const pipelineOrgId = user?.role === 'super_admin' ? job?.organizationId : undefined;
   const { data: pipelineStages = [] } = useQuery<PipelineStage[]>({
-    queryKey: ["/api/pipeline/stages"],
+    queryKey: ["/api/pipeline/stages", pipelineOrgId ?? 'default'],
     queryFn: async () => {
-      const response = await fetch("/api/pipeline/stages");
+      const url = pipelineOrgId ? `/api/pipeline/stages?orgId=${pipelineOrgId}` : "/api/pipeline/stages";
+      const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch pipeline stages");
       return response.json();
     },
+    enabled: user?.role === 'super_admin' ? !!pipelineOrgId : true,
   });
 
   // ATS: Fetch email templates
@@ -355,7 +358,7 @@ export default function ApplicationManagementPage() {
     }
 
     // Prefer the earliest "Interview" stage by order if multiple exist
-    const sortedStages = [...pipelineStages].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const sortedStages = [...pipelineStages].sort((a, b) => ((a.order ?? 0) - (b.order ?? 0)) || (a.id - b.id));
     const interviewStage = sortedStages.find((stage) =>
       stage.name.toLowerCase().includes("interview")
     );

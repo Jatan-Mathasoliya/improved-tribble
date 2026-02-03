@@ -840,7 +840,20 @@ export function registerApplicationsRoutes(
   app.get("/api/pipeline/stages", requireAuth, requireRole(['recruiter', 'super_admin']), requireSeat({ allowNoOrg: true }), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const orgResult = await getUserOrganization(req.user!.id);
-      const organizationId = req.user!.role === 'super_admin' && !orgResult ? undefined : (orgResult?.organization.id ?? null);
+      let organizationId = req.user!.role === 'super_admin' && !orgResult ? undefined : (orgResult?.organization.id ?? null);
+      const orgIdParam = req.query.orgId;
+      if (orgIdParam !== undefined) {
+        if (req.user!.role !== 'super_admin') {
+          res.status(403).json({ error: 'Super admin access required' });
+          return;
+        }
+        const parsedOrgId = Number(orgIdParam);
+        if (!Number.isFinite(parsedOrgId) || parsedOrgId <= 0 || !Number.isInteger(parsedOrgId)) {
+          res.status(400).json({ error: 'Invalid orgId' });
+          return;
+        }
+        organizationId = parsedOrgId;
+      }
       const stages = await storage.getPipelineStages(organizationId, req.user!.id);
       res.json(stages);
       return;
