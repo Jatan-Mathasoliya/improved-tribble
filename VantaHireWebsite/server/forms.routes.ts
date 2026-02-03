@@ -1,9 +1,9 @@
 import type { Express, Request, Response, NextFunction } from "express";
 import { db } from "./db";
-import { forms, formFields, formInvitations, formResponses, formResponseAnswers, applications, jobs, emailAuditLog, userAiUsage } from "@shared/schema";
+import { forms, formFields, formInvitations, formResponses, formResponseAnswers, applications, jobs, emailAuditLog, userAiUsage, users } from "@shared/schema";
 import { insertFormSchema, insertFormFieldSchema, insertFormInvitationSchema, insertFormResponseAnswerSchema } from "@shared/schema";
 import { requireAuth, requireRole, requireSeat } from "./auth";
-import { eq, and, desc, sql, or, inArray } from "drizzle-orm";
+import { eq, and, desc, sql, or, inArray, isNull } from "drizzle-orm";
 import { z } from "zod";
 import crypto from "crypto";
 import rateLimit from "express-rate-limit";
@@ -285,14 +285,22 @@ export function registerFormsRoutes(app: Express, csrfProtection?: (req: Request
     "/api/forms/templates",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
-    requireSeat(),
+    requireSeat({ allowNoOrg: true }),
     async (req: Request, res: Response) => {
       try {
         const isAdmin = req.user!.role === 'super_admin';
 
         // Get user's organization for data isolation
         const orgResult = await getUserOrganization(req.user!.id);
-        const userOrgId = orgResult?.organization.id;
+        const userOrgId = orgResult?.organization.id ?? null;
+
+        const superAdminIds = db.select({ id: users.id }).from(users).where(eq(users.role, 'super_admin'));
+        const publishedScope = userOrgId === null
+          ? and(isNull(forms.organizationId), inArray(forms.createdBy, superAdminIds))
+          : or(
+              eq(forms.organizationId, userOrgId),
+              and(isNull(forms.organizationId), inArray(forms.createdBy, superAdminIds))
+            );
 
         // Admins see ALL templates (published + drafts for oversight)
         // Recruiters see: (published templates in their org) OR (their own templates regardless of published status)
@@ -301,10 +309,7 @@ export function registerFormsRoutes(app: Express, csrfProtection?: (req: Request
             ? undefined // No filter - admins see everything
             : or(
                 // Published templates in the same organization
-                and(
-                  eq(forms.isPublished, true),
-                  userOrgId ? eq(forms.organizationId, userOrgId) : undefined
-                ),
+                and(eq(forms.isPublished, true), publishedScope),
                 // Own templates (regardless of published or org)
                 eq(forms.createdBy, req.user!.id)
               ),

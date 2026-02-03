@@ -53,11 +53,11 @@ export function registerCommunicationsRoutes(
   // ============= EMAIL TEMPLATE ROUTES =============
 
   // Get all email templates - filtered by organization
-  app.get("/api/email-templates", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/email-templates", requireRole(['recruiter', 'super_admin']), requireSeat({ allowNoOrg: true }), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const orgResult = await getUserOrganization(req.user!.id);
-      const organizationId = req.user!.role === 'super_admin' && !orgResult ? undefined : orgResult?.organization.id;
-      const list = await storage.getEmailTemplates(organizationId);
+      const organizationId = req.user!.role === 'super_admin' && !orgResult ? undefined : (orgResult?.organization.id ?? null);
+      const list = await storage.getEmailTemplates(organizationId, req.user!.id);
       res.json(list);
       return;
     } catch (e) { next(e); }
@@ -178,7 +178,7 @@ export function registerCommunicationsRoutes(
         res.status(404).json({ error: 'application not found' });
         return;
       }
-      const [tpl] = (await storage.getEmailTemplates(appData.organizationId ?? undefined)).filter(t => t.id === templateId);
+      const [tpl] = (await storage.getEmailTemplates(appData.organizationId ?? null, req.user!.id)).filter(t => t.id === templateId);
       if (!tpl) {
         res.status(404).json({ error: 'template not found' });
         return;
@@ -237,7 +237,7 @@ export function registerCommunicationsRoutes(
       }
 
       // 3. Fetch email template
-      const templates = await storage.getEmailTemplates(job.organizationId ?? undefined);
+      const templates = await storage.getEmailTemplates(job.organizationId ?? null, req.user!.id);
       const template = templates.find((t: any) => t.id === templateId);
       if (!template) {
         res.status(404).json({ error: 'Email template not found' });

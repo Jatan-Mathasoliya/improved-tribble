@@ -200,7 +200,7 @@ export function registerApplicationsRoutes(
       // Determine default pipeline stage for new applications (if stages are configured)
       let initialStageId: number | null = null;
       try {
-        const stages = await storage.getPipelineStages(job.organizationId ?? undefined);
+        const stages = await storage.getPipelineStages(job.organizationId ?? null);
         if (stages && stages.length > 0) {
           const explicitDefault = stages.find((s) => s.isDefault);
           const chosen = explicitDefault ?? stages[0]!;
@@ -384,7 +384,7 @@ export function registerApplicationsRoutes(
         // Determine default pipeline stage for recruiter-added candidates (if stages are configured)
         let defaultStageId: number | null = null;
         try {
-          const stages = await storage.getPipelineStages(job.organizationId ?? undefined);
+          const stages = await storage.getPipelineStages(job.organizationId ?? null);
           if (stages && stages.length > 0) {
             const explicitDefault = stages.find((s) => s.isDefault);
             const chosen = explicitDefault ?? stages[0]!;
@@ -544,7 +544,7 @@ export function registerApplicationsRoutes(
         let targetStageOrder: number | null = null;
         const targetStageId = stageId ?? null;
         if (targetStageId !== null) {
-          const stages = await storage.getPipelineStages(organizationId);
+          const stages = await storage.getPipelineStages(organizationId, req.user!.id);
           stageOrderMap = new Map(stages.map((s) => [s.id, s.order ?? 0]));
           targetStageOrder = stageOrderMap.get(targetStageId) ?? null;
         }
@@ -631,7 +631,7 @@ export function registerApplicationsRoutes(
   );
 
   // Get applications for a specific job (recruiters only) - with org verification
-  app.get("/api/jobs/:id/applications", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/jobs/:id/applications", requireRole(['recruiter', 'super_admin']), requireSeat({ allowNoOrg: true }), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const idParam = req.params.id;
       if (!idParam) {
@@ -667,6 +667,39 @@ export function registerApplicationsRoutes(
       }));
 
       res.json(applicationsWithFeedback);
+      return;
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Hiring manager: get applications for a job they own
+  app.get("/api/hiring-manager/jobs/:id/applications", requireRole(['hiring_manager']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const idParam = req.params.id;
+      if (!idParam) {
+        res.status(400).json({ error: 'Missing ID parameter' });
+        return;
+      }
+      const jobId = Number(idParam);
+      if (!Number.isFinite(jobId) || jobId <= 0 || !Number.isInteger(jobId)) {
+        res.status(400).json({ error: 'Invalid ID parameter' });
+        return;
+      }
+
+      const job = await storage.getJob(jobId);
+      if (!job) {
+        res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+
+      if (job.hiringManagerId !== req.user!.id) {
+        res.status(403).json({ error: 'Access denied' });
+        return;
+      }
+
+      const applicationsList = await storage.getApplicationsByJob(jobId);
+      res.json(applicationsList);
       return;
     } catch (error) {
       next(error);
@@ -803,11 +836,11 @@ export function registerApplicationsRoutes(
   // ============= PIPELINE MANAGEMENT ROUTES =============
 
   // Get pipeline stages - filtered by organization
-  app.get("/api/pipeline/stages", requireAuth, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/pipeline/stages", requireAuth, requireRole(['recruiter', 'super_admin']), requireSeat({ allowNoOrg: true }), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const orgResult = await getUserOrganization(req.user!.id);
-      const organizationId = req.user!.role === 'super_admin' && !orgResult ? undefined : orgResult?.organization.id;
-      const stages = await storage.getPipelineStages(organizationId);
+      const organizationId = req.user!.role === 'super_admin' && !orgResult ? undefined : (orgResult?.organization.id ?? null);
+      const stages = await storage.getPipelineStages(organizationId, req.user!.id);
       res.json(stages);
       return;
     } catch (e) { next(e); }
@@ -957,7 +990,7 @@ export function registerApplicationsRoutes(
 
       const orgResult = await getUserOrganization(req.user!.id);
       const organizationId = req.user!.role === 'super_admin' && !orgResult ? undefined : orgResult?.organization.id;
-      const stages = await storage.getPipelineStages(organizationId);
+      const stages = await storage.getPipelineStages(organizationId, req.user!.id);
       const targetStage = stages.find(s => s.id === stageId);
       if (!targetStage) {
         res.status(400).json({ error: `Invalid stage ID: ${stageId}` });
@@ -2145,9 +2178,11 @@ export function registerApplicationsRoutes(
   });
 
   // Get applications received for recruiter's jobs
-  app.get("/api/my-applications-received", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/my-applications-received", requireRole(['recruiter', 'super_admin']), requireSeat({ allowNoOrg: true }), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const applicationsList = await storage.getRecruiterApplications(req.user!.id);
+      const orgResult = await getUserOrganization(req.user!.id);
+      const organizationId = req.user!.role === 'super_admin' && !orgResult ? undefined : (orgResult?.organization.id ?? null);
+      const applicationsList = await storage.getRecruiterApplications(req.user!.id, organizationId);
       res.json(applicationsList);
       return;
     } catch (error) {
@@ -2156,7 +2191,7 @@ export function registerApplicationsRoutes(
   });
 
   // Get global candidates view (aggregated by email)
-  app.get("/api/candidates", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/candidates", requireRole(['recruiter', 'super_admin']), requireSeat({ allowNoOrg: true }), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const { q: search, minRating, tags } = req.query;
 

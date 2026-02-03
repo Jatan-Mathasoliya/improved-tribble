@@ -40,22 +40,17 @@ export function registerClientsRoutes(
   // ============= CLIENT MANAGEMENT ROUTES =============
 
   // Get all clients (recruiter/admin) - filtered by organization
-  app.get("/api/clients", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/clients", requireRole(['recruiter', 'super_admin']), requireSeat({ allowNoOrg: true }), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       // Get user's organization for data isolation
       const orgResult = await getUserOrganization(req.user!.id);
-      // Super admin without org can see all; recruiters must have org
+      // Super admin without org can see all
       const organizationId = req.user!.role === 'super_admin' && !orgResult
         ? undefined  // super_admin sees all
-        : orgResult?.organization.id;
-
-      if (req.user!.role === 'recruiter' && !organizationId) {
-        res.status(403).json({ error: 'Organization required to view clients' });
-        return;
-      }
+        : orgResult?.organization.id ?? null;
 
       const search = typeof req.query.q === 'string' ? req.query.q.trim() : '';
-      const clients = await storage.getClients(organizationId);
+      const clients = await storage.getClients(organizationId, req.user!.id);
 
       const filtered = search
         ? clients.filter((client) => {
@@ -133,7 +128,13 @@ export function registerClientsRoutes(
       // Organization verification (super_admin can update any)
       if (req.user!.role !== 'super_admin') {
         const orgResult = await getUserOrganization(req.user!.id);
-        if (!orgResult || client.organizationId !== orgResult.organization.id) {
+        const ownsLegacy = client.organizationId == null && client.createdBy === req.user!.id;
+        if (!orgResult) {
+          if (!ownsLegacy) {
+            res.status(403).json({ error: 'Access denied: client belongs to another organization' });
+            return;
+          }
+        } else if (client.organizationId !== orgResult.organization.id && !ownsLegacy) {
           res.status(403).json({ error: 'Access denied: client belongs to another organization' });
           return;
         }

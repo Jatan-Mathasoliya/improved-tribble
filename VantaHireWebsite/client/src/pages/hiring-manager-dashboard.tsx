@@ -44,9 +44,9 @@ export default function HiringManagerDashboard() {
 
   // Fetch all jobs where this user is the hiring manager
   const { data: allJobs = [], isLoading: jobsLoading } = useQuery<Job[]>({
-    queryKey: ["/api/my-jobs"],
+    queryKey: ["/api/hiring-manager/jobs"],
     queryFn: async () => {
-      const response = await fetch("/api/my-jobs");
+      const response = await fetch("/api/hiring-manager/jobs");
       if (!response.ok) throw new Error("Failed to fetch jobs");
       return response.json();
     },
@@ -62,7 +62,7 @@ export default function HiringManagerDashboard() {
       if (myJobs.length === 0) return [];
 
       const applicationsPromises = myJobs.map(async (job) => {
-        const response = await fetch(`/api/jobs/${job.id}/applications`);
+        const response = await fetch(`/api/hiring-manager/jobs/${job.id}/applications`);
         if (!response.ok) throw new Error(`Failed to fetch applications for job ${job.id}`);
         const apps = await response.json();
         return apps.map((app: Application) => ({

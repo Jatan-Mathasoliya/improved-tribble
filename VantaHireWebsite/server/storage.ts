@@ -135,7 +135,7 @@ export interface IStorage {
   updateJobStatus(id: number, isActive: boolean, reason?: string, performedBy?: number): Promise<Job | undefined>;
   updateJob(id: number, updates: Partial<Pick<Job, 'title' | 'description' | 'location' | 'type' | 'skills' | 'hiringManagerId' | 'clientId'>>): Promise<Job | undefined>;
   logJobAction(data: { jobId: number; action: string; performedBy: number; reason?: string; metadata?: any }): Promise<JobAuditLog>;
-  getJobsByUser(userId: number, organizationId?: number): Promise<(Job & { applicationCount: number; hiringManager?: { id: number; firstName: string | null; lastName: string | null; username: string } })[]>;
+  getJobsByUser(userId: number, organizationId?: number | null): Promise<(Job & { applicationCount: number; hiringManager?: { id: number; firstName: string | null; lastName: string | null; username: string } })[]>;
   reviewJob(id: number, status: string, reviewComments?: string, reviewedBy?: number): Promise<Job | undefined>;
   getJobsByStatus(status: string, page?: number, limit?: number): Promise<{ jobs: Job[]; total: number }>;
   getPublicJobsByRecruiter(recruiterId: number): Promise<Job[]>;
@@ -181,7 +181,7 @@ export interface IStorage {
   getApplicationsByEmail(email: string): Promise<(Application & { job: Job })[]>;
   getApplicationsByUserId(userId: number, userEmail?: string): Promise<(Application & { job: Job })[]>;
   withdrawApplication(applicationId: number, userId: number): Promise<boolean>;
-  getRecruiterApplications(recruiterId: number): Promise<(Application & { job: Job; feedbackCount?: number })[]>;
+  getRecruiterApplications(recruiterId: number, organizationId?: number | null): Promise<(Application & { job: Job; feedbackCount?: number })[]>;
   claimApplicationsForUser(userId: number, username: string): Promise<number>;
   getCandidatesForRecruiter(recruiterId: number, filters?: {
     search?: string;
@@ -211,7 +211,7 @@ export interface IStorage {
   updateUserRole(userId: number, role: string): Promise<User | undefined>;
   deleteJob(jobId: number): Promise<boolean>;
   // Client operations
-  getClients(organizationId?: number): Promise<Client[]>;
+  getClients(organizationId?: number | null, userId?: number): Promise<Client[]>;
   getClient(id: number): Promise<Client | undefined>;
   createClient(client: InsertClient & { createdBy: number; organizationId: number }): Promise<Client>;
   updateClient(id: number, client: Partial<InsertClient>): Promise<Client | undefined>;
@@ -238,7 +238,7 @@ export interface IStorage {
   }>>;
   
   // ATS: pipeline & interview
-  getPipelineStages(organizationId?: number): Promise<PipelineStage[]>;
+  getPipelineStages(organizationId?: number | null, userId?: number): Promise<PipelineStage[]>;
   createPipelineStage(stage: InsertPipelineStage & { createdBy?: number; organizationId?: number }): Promise<PipelineStage>;
   updateApplicationStage(appId: number, newStageId: number, changedBy: number, notes?: string): Promise<void>;
   getApplicationStageHistory(appId: number): Promise<any[]>;
@@ -247,7 +247,7 @@ export interface IStorage {
   setApplicationRating(appId: number, rating: number): Promise<Application | undefined>;
   
   // ATS: email templates
-  getEmailTemplates(organizationId?: number): Promise<EmailTemplate[]>;
+  getEmailTemplates(organizationId?: number | null, userId?: number): Promise<EmailTemplate[]>;
   createEmailTemplate(template: InsertEmailTemplate & { createdBy?: number; organizationId?: number }): Promise<EmailTemplate>;
 
   // Consultant operations
@@ -293,7 +293,7 @@ export interface IStorage {
   addJobRecruiter(jobId: number, recruiterId: number, addedBy: number, organizationId?: number): Promise<JobRecruiter>;
   removeJobRecruiter(jobId: number, recruiterId: number): Promise<boolean>;
   getJobRecruiters(jobId: number): Promise<User[]>;
-  isRecruiterOnJob(jobId: number, userId: number, organizationId?: number): Promise<boolean>;
+  isRecruiterOnJob(jobId: number, userId: number, organizationId?: number | null): Promise<boolean>;
 
   // Co-Recruiter Invitation operations
   createCoRecruiterInvitation(data: {
@@ -446,11 +446,27 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Client methods
-  async getClients(organizationId?: number): Promise<Client[]> {
-    if (organizationId) {
-      return db.select().from(clients).where(eq(clients.organizationId, organizationId)).orderBy(clients.name);
+  async getClients(organizationId?: number | null, userId?: number): Promise<Client[]> {
+    if (organizationId === undefined) {
+      return db.select().from(clients).orderBy(clients.name);
     }
-    return db.select().from(clients).orderBy(clients.name);
+
+    const conditions = [] as any[];
+    if (organizationId === null) {
+      if (userId != null) {
+        conditions.push(and(isNull(clients.organizationId), eq(clients.createdBy, userId)));
+      } else {
+        conditions.push(isNull(clients.organizationId));
+      }
+    } else {
+      conditions.push(eq(clients.organizationId, organizationId));
+      if (userId != null) {
+        conditions.push(and(isNull(clients.organizationId), eq(clients.createdBy, userId)));
+      }
+    }
+
+    const whereClause = conditions.length === 1 ? conditions[0] : or(...conditions);
+    return db.select().from(clients).where(whereClause).orderBy(clients.name);
   }
 
   async getClient(id: number): Promise<Client | undefined> {
@@ -1021,7 +1037,7 @@ export class DatabaseStorage implements IStorage {
     }));
   }
 
-  async getJobsByUser(userId: number, organizationId?: number): Promise<(Job & { applicationCount: number; hiringManager?: { id: number; firstName: string | null; lastName: string | null; username: string }; clientName?: string | null })[]> {
+  async getJobsByUser(userId: number, organizationId?: number | null): Promise<(Job & { applicationCount: number; hiringManager?: { id: number; firstName: string | null; lastName: string | null; username: string }; clientName?: string | null })[]> {
     // Include jobs where user is primary (postedBy) OR co-recruiter (in job_recruiters)
     // If organizationId is provided, filter to only jobs from that org (enforces data isolation after leaving)
     const whereConditions = [
@@ -1031,10 +1047,14 @@ export class DatabaseStorage implements IStorage {
       )
     ];
 
-    // If user has an org, only show jobs from that org
-    // This prevents access to old jobs after leaving an organization
+    // If org scope provided, restrict to that org plus legacy (orgId NULL)
+    // When organizationId is null, only legacy jobs (orgId NULL) are shown
     if (organizationId !== undefined) {
-      whereConditions.push(eq(jobs.organizationId, organizationId));
+      if (organizationId === null) {
+        whereConditions.push(isNull(jobs.organizationId));
+      } else {
+        whereConditions.push(or(eq(jobs.organizationId, organizationId), isNull(jobs.organizationId)));
+      }
     }
 
     const results = await db
@@ -1537,7 +1557,24 @@ export class DatabaseStorage implements IStorage {
     return (result.rowCount || 0) > 0;
   }
 
-  async getRecruiterApplications(recruiterId: number): Promise<(Application & { job: Job; feedbackCount?: number })[]> {
+  async getRecruiterApplications(recruiterId: number, organizationId?: number | null): Promise<(Application & { job: Job; feedbackCount?: number })[]> {
+    const conditions = [
+      or(
+        eq(jobs.postedBy, recruiterId),
+        eq(jobRecruiters.recruiterId, recruiterId)
+      )
+    ];
+
+    if (organizationId !== undefined) {
+      if (organizationId === null) {
+        conditions.push(isNull(jobs.organizationId));
+      } else {
+        conditions.push(or(eq(jobs.organizationId, organizationId), isNull(jobs.organizationId)));
+      }
+    }
+
+    const whereClause = and(...conditions);
+
     const results = await db
       .select({
         id: applications.id,
@@ -1587,12 +1624,7 @@ export class DatabaseStorage implements IStorage {
       .innerJoin(jobs, eq(applications.jobId, jobs.id))
       .leftJoin(applicationFeedback, eq(applicationFeedback.applicationId, applications.id))
       .leftJoin(jobRecruiters, eq(jobRecruiters.jobId, jobs.id))
-      .where(
-        or(
-          eq(jobs.postedBy, recruiterId),
-          eq(jobRecruiters.recruiterId, recruiterId)
-        )
-      )
+      .where(whereClause)
       .groupBy(applications.id, jobs.id)
       .orderBy(desc(applications.appliedAt));
 
@@ -1663,20 +1695,44 @@ export class DatabaseStorage implements IStorage {
         WHERE 1=1
       `;
     } else {
-      // Recruiters see only candidates who applied to jobs in their organization
-      query = sql`
-        SELECT
-          a.email,
-          a.name,
-          COUNT(DISTINCT a.job_id)::int as jobs_applied_count,
-          MAX(a.applied_at) as last_application_date,
-          MAX(a.rating)::int as highest_rating,
-          array_agg(a.tags) FILTER (WHERE a.tags IS NOT NULL AND array_length(a.tags, 1) > 0) as all_tags_arrays
-        FROM applications a
-        INNER JOIN jobs j ON a.job_id = j.id
-        INNER JOIN organization_members om ON om.user_id = ${recruiterId}
-        WHERE j.organization_id = om.organization_id
-      `;
+      const membership = await db.query.organizationMembers.findFirst({
+        where: eq(organizationMembers.userId, recruiterId),
+        columns: { organizationId: true },
+      });
+
+      if (membership) {
+        // Recruiters see candidates from their org jobs plus their own legacy jobs
+        query = sql`
+          SELECT
+            a.email,
+            a.name,
+            COUNT(DISTINCT a.job_id)::int as jobs_applied_count,
+            MAX(a.applied_at) as last_application_date,
+            MAX(a.rating)::int as highest_rating,
+            array_agg(a.tags) FILTER (WHERE a.tags IS NOT NULL AND array_length(a.tags, 1) > 0) as all_tags_arrays
+          FROM applications a
+          INNER JOIN jobs j ON a.job_id = j.id
+          LEFT JOIN job_recruiters jr ON jr.job_id = j.id
+          WHERE j.organization_id = ${membership.organizationId}
+             OR (j.organization_id IS NULL AND (j.posted_by = ${recruiterId} OR jr.recruiter_id = ${recruiterId}))
+        `;
+      } else {
+        // Legacy recruiters without org see candidates for their own legacy jobs only
+        query = sql`
+          SELECT
+            a.email,
+            a.name,
+            COUNT(DISTINCT a.job_id)::int as jobs_applied_count,
+            MAX(a.applied_at) as last_application_date,
+            MAX(a.rating)::int as highest_rating,
+            array_agg(a.tags) FILTER (WHERE a.tags IS NOT NULL AND array_length(a.tags, 1) > 0) as all_tags_arrays
+          FROM applications a
+          INNER JOIN jobs j ON a.job_id = j.id
+          LEFT JOIN job_recruiters jr ON jr.job_id = j.id
+          WHERE j.organization_id IS NULL
+            AND (j.posted_by = ${recruiterId} OR jr.recruiter_id = ${recruiterId})
+        `;
+      }
     }
 
     // Add search filter
@@ -1696,7 +1752,8 @@ export class DatabaseStorage implements IStorage {
     // Order by last application date (most recent first)
     query = sql`${query} ORDER BY last_application_date DESC`;
 
-    const results: any[] = await db.execute(query);
+    const rawResult: any = await db.execute(query);
+    const results: any[] = Array.isArray(rawResult) ? rawResult : (rawResult?.rows ?? []);
 
     // Post-process results to filter by tags if needed
     let candidates = results;
@@ -2421,11 +2478,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ===== ATS: Pipeline and Interviews =====
-  async getPipelineStages(organizationId?: number): Promise<PipelineStage[]> {
-    if (organizationId != null) {
-      return db.select().from(pipelineStages).where(eq(pipelineStages.organizationId, organizationId)).orderBy(pipelineStages.order);
+  async getPipelineStages(organizationId?: number | null, userId?: number): Promise<PipelineStage[]> {
+    if (organizationId === undefined) {
+      return db.select().from(pipelineStages).orderBy(pipelineStages.order);
     }
-    return db.select().from(pipelineStages).orderBy(pipelineStages.order);
+
+    const conditions = [] as any[];
+
+    if (organizationId === null) {
+      conditions.push(and(isNull(pipelineStages.organizationId), eq(pipelineStages.isDefault, true)));
+      if (userId != null) {
+        conditions.push(and(isNull(pipelineStages.organizationId), eq(pipelineStages.createdBy, userId)));
+      }
+    } else {
+      conditions.push(eq(pipelineStages.organizationId, organizationId));
+      conditions.push(and(isNull(pipelineStages.organizationId), eq(pipelineStages.isDefault, true)));
+      if (userId != null) {
+        conditions.push(and(isNull(pipelineStages.organizationId), eq(pipelineStages.createdBy, userId)));
+      }
+    }
+
+    const whereClause = conditions.length === 1 ? conditions[0] : or(...conditions);
+    return db.select().from(pipelineStages).where(whereClause).orderBy(pipelineStages.order);
   }
 
   async createPipelineStage(stage: InsertPipelineStage & { createdBy?: number; organizationId?: number }): Promise<PipelineStage> {
@@ -2599,11 +2673,28 @@ export class DatabaseStorage implements IStorage {
   }
 
   // ===== ATS: Email templates =====
-  async getEmailTemplates(organizationId?: number): Promise<EmailTemplate[]> {
-    if (organizationId) {
-      return db.select().from(emailTemplates).where(eq(emailTemplates.organizationId, organizationId)).orderBy(desc(emailTemplates.createdAt));
+  async getEmailTemplates(organizationId?: number | null, userId?: number): Promise<EmailTemplate[]> {
+    if (organizationId === undefined) {
+      return db.select().from(emailTemplates).orderBy(desc(emailTemplates.createdAt));
     }
-    return db.select().from(emailTemplates).orderBy(desc(emailTemplates.createdAt));
+
+    const conditions = [] as any[];
+
+    if (organizationId === null) {
+      conditions.push(and(isNull(emailTemplates.organizationId), eq(emailTemplates.isDefault, true)));
+      if (userId != null) {
+        conditions.push(and(isNull(emailTemplates.organizationId), eq(emailTemplates.createdBy, userId)));
+      }
+    } else {
+      conditions.push(eq(emailTemplates.organizationId, organizationId));
+      conditions.push(and(isNull(emailTemplates.organizationId), eq(emailTemplates.isDefault, true)));
+      if (userId != null) {
+        conditions.push(and(isNull(emailTemplates.organizationId), eq(emailTemplates.createdBy, userId)));
+      }
+    }
+
+    const whereClause = conditions.length === 1 ? conditions[0] : or(...conditions);
+    return db.select().from(emailTemplates).where(whereClause).orderBy(desc(emailTemplates.createdAt));
   }
 
   async createEmailTemplate(template: InsertEmailTemplate & { createdBy?: number; organizationId?: number }): Promise<EmailTemplate> {
@@ -2852,7 +2943,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     // Get first pipeline stage for initial placement
-    const stages = await this.getPipelineStages(job.organizationId ?? undefined);
+    const stages = await this.getPipelineStages(job.organizationId ?? null);
     const firstStage = stages.length > 0 ? stages[0] : null;
 
     // Create application from talent pool data
@@ -2960,7 +3051,7 @@ export class DatabaseStorage implements IStorage {
       const job = await this.getJob(invitation.jobId);
       if (job) {
         // Get first pipeline stage
-        const stages = await this.getPipelineStages(job.organizationId ?? undefined);
+        const stages = await this.getPipelineStages(job.organizationId ?? null);
         const firstStage = stages.length > 0 ? stages[0] : null;
 
         const [application] = await db.insert(applications).values({
@@ -3124,7 +3215,7 @@ export class DatabaseStorage implements IStorage {
     return results;
   }
 
-  async isRecruiterOnJob(jobId: number, userId: number, organizationId?: number): Promise<boolean> {
+  async isRecruiterOnJob(jobId: number, userId: number, organizationId?: number | null): Promise<boolean> {
     // Check both job_recruiters table AND jobs.postedBy for backward compatibility
     // Also allow super_admin
     const user = await this.getUser(userId);
@@ -3136,8 +3227,12 @@ export class DatabaseStorage implements IStorage {
 
     // If organizationId provided, verify the job belongs to that org
     // This enforces data isolation - users can't access jobs from orgs they've left
-    if (organizationId !== undefined && job.organizationId !== organizationId) {
-      return false;
+    if (organizationId !== undefined) {
+      if (organizationId === null) {
+        if (job.organizationId !== null) return false;
+      } else if (job.organizationId != null && job.organizationId !== organizationId) {
+        return false;
+      }
     }
 
     // Check primary recruiter (jobs.postedBy)

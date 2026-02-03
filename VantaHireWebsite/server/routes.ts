@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
 import { eq, and, sql } from "drizzle-orm";
-import { insertContactSchema, jobs } from "@shared/schema";
+import { insertContactSchema, jobs, users, organizationMembers, hiringManagerInvitations } from "@shared/schema";
 import { z } from "zod";
 import { getEmailService } from "./simpleEmailService";
 import { setupAuth, requireRole } from "./auth";
@@ -319,6 +319,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
       let filteredUsers = allUsers;
       if (role && typeof role === 'string') {
         filteredUsers = allUsers.filter((u: typeof allUsers[0]) => u.role === role);
+      }
+
+      // Scope hiring managers to the requester's organization (recruiters only)
+      if (req.user?.role === 'recruiter' && role === 'hiring_manager') {
+        const membership = await db.query.organizationMembers.findFirst({
+          where: eq(organizationMembers.userId, req.user.id),
+          columns: { organizationId: true },
+        });
+
+        if (!membership) {
+          res.json([]);
+          return;
+        }
+
+        const orgId = membership.organizationId;
+
+        const hmFromJobs = await db.select({ id: jobs.hiringManagerId })
+          .from(jobs)
+          .where(and(
+            eq(jobs.organizationId, orgId),
+            sql`${jobs.hiringManagerId} IS NOT NULL`
+          ));
+
+        const hmFromInvites = await db.select({ id: users.id })
+          .from(hiringManagerInvitations)
+          .innerJoin(users, sql`LOWER(${users.username}) = LOWER(${hiringManagerInvitations.email})`)
+          .innerJoin(organizationMembers, eq(organizationMembers.userId, hiringManagerInvitations.invitedBy))
+          .where(and(
+            eq(organizationMembers.organizationId, orgId),
+            eq(hiringManagerInvitations.status, 'accepted'),
+            eq(users.role, 'hiring_manager')
+          ));
+
+        const allowedIds = new Set<number>();
+        for (const row of hmFromJobs) {
+          if (row.id != null) allowedIds.add(row.id);
+        }
+        for (const row of hmFromInvites) {
+          allowedIds.add(row.id);
+        }
+
+        filteredUsers = filteredUsers.filter((u: typeof allUsers[0]) => allowedIds.has(u.id));
       }
 
       // Return sanitized user data (exclude password)

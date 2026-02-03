@@ -27,7 +27,7 @@ import {
 import { aiAnalysisRateLimit, jobPostingRateLimit } from './rateLimit';
 import type { CsrfMiddleware } from './types/routes';
 import { db } from './db';
-import { and, eq, gte, lte, inArray, or } from 'drizzle-orm';
+import { and, eq, gte, lte, inArray, or, desc, sql } from 'drizzle-orm';
 
 const countWords = (value: string): number =>
   value
@@ -507,7 +507,7 @@ export function registerJobsRoutes(
 
   // Get jobs accessible to current user (own + co-recruiter assigned)
   // Per plan: All org members see own jobs + co-recruiter assigned, super_admin sees all
-  app.get("/api/my-jobs", requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  app.get("/api/my-jobs", requireRole(['recruiter', 'super_admin']), requireSeat({ allowNoOrg: true }), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const user = req.user!;
 
@@ -520,7 +520,7 @@ export function registerJobsRoutes(
 
       // Get user's organization to filter jobs and update activity
       const orgResult = await getUserOrganization(user.id);
-      const organizationId = orgResult?.organization.id;
+      const organizationId = orgResult?.organization.id ?? null;
 
       // Update member activity
       if (orgResult) {
@@ -532,6 +532,30 @@ export function registerJobsRoutes(
       const userJobs = await storage.getJobsByUser(user.id, organizationId);
 
       res.json(userJobs);
+      return;
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  // Hiring manager: get jobs assigned to the current hiring manager
+  app.get("/api/hiring-manager/jobs", requireRole(['hiring_manager']), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const rows = await db
+        .select({
+          job: jobs,
+          applicationCount: sql<number>`COUNT(DISTINCT ${applications.id})`,
+        })
+        .from(jobs)
+        .leftJoin(applications, eq(applications.jobId, jobs.id))
+        .where(eq(jobs.hiringManagerId, req.user!.id))
+        .groupBy(jobs.id)
+        .orderBy(desc(jobs.createdAt));
+
+      res.json(rows.map((row: typeof rows[number]) => ({
+        ...row.job,
+        applicationCount: row.applicationCount ?? 0,
+      })));
       return;
     } catch (error) {
       next(error);

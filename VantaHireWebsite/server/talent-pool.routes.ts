@@ -21,6 +21,7 @@ export function registerTalentPoolRoutes(app: Express) {
     "/api/talent-pool",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat({ allowNoOrg: true }),
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         const recruiterId = req.user!.id;
@@ -44,6 +45,7 @@ export function registerTalentPoolRoutes(app: Express) {
     "/api/talent-pool/:id",
     requireAuth,
     requireRole(['recruiter', 'super_admin']),
+    requireSeat({ allowNoOrg: true }),
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         const idParam = req.params.id;

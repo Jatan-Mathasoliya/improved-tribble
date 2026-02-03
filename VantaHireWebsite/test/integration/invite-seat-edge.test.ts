@@ -374,7 +374,7 @@ maybeDescribe('Invite and seat enforcement edge cases', () => {
     expect(newAccept.status).toBe(200);
   });
 
-  it('returns NO_ORGANIZATION when recruiter has no org', async () => {
+  it('allows no-org recruiter to read their legacy jobs (backward compat)', async () => {
     const user = await createRecruiterUser({
       username: `noorg_${Date.now()}@example.com`,
       password: 'password',
@@ -388,9 +388,11 @@ maybeDescribe('Invite and seat enforcement edge cases', () => {
       expectedRole: ['recruiter'],
     });
 
+    // No-org recruiters can now read their legacy jobs (backward compatibility)
+    // New users will have an empty array since they have no legacy data
     const response = await agent.get('/api/my-jobs');
-    expect(response.status).toBe(403);
-    expect(response.body?.code).toBe('NO_ORGANIZATION');
+    expect(response.status).toBe(200);
+    expect(Array.isArray(response.body)).toBe(true);
   });
 
   it('returns NO_SEAT when recruiter is unseated', async () => {

@@ -175,7 +175,7 @@ export function withOrgContext() {
 }
 
 // Middleware to require an active seat (blocks unseated members)
-export function requireSeat() {
+export function requireSeat(options?: { allowNoOrg?: boolean }) {
   return async (req: any, res: any, next: any) => {
     if (!req.user) {
       return res.status(401).json({ error: 'Authentication required' });
@@ -187,10 +187,14 @@ export function requireSeat() {
     }
 
     try {
+      const allowNoOrg = options?.allowNoOrg ?? false;
       const { getUserOrganization } = await import('./lib/organizationService');
       const orgResult = await getUserOrganization(req.user.id);
 
       if (!orgResult) {
+        if (allowNoOrg) {
+          return next();
+        }
         // User not in org - block access, require onboarding first
         return res.status(403).json({
           error: 'Organization required',

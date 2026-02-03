@@ -19,7 +19,7 @@ export async function createTestJobs() {
     const organizationId = orgResult.organization.id;
 
     // Check if test jobs already exist
-    const existingJobs = await storage.getJobsByUser(recruiter.id);
+    const existingJobs = await storage.getJobsByUser(recruiter.id, organizationId);
     if (existingJobs.length > 0) {
       console.log('Test jobs already exist');
       return;
