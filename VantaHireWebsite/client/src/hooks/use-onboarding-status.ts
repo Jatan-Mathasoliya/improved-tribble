@@ -9,10 +9,16 @@ export interface OnboardingStatus {
   creditsLazyInit?: boolean;
 }
 
+interface UseOnboardingStatusOptions {
+  /** Set to false to skip fetching (e.g., for non-recruiters). Defaults to true. */
+  enabled?: boolean;
+}
+
 /**
  * Hook for managing recruiter onboarding status
  */
-export function useOnboardingStatus() {
+export function useOnboardingStatus(options: UseOnboardingStatusOptions = {}) {
+  const { enabled = true } = options;
   const queryClient = useQueryClient();
 
   // Fetch onboarding status
@@ -31,6 +37,7 @@ export function useOnboardingStatus() {
       return await res.json();
     },
     staleTime: 30_000, // Cache for 30 seconds
+    enabled, // Only fetch when enabled (e.g., for recruiters only)
   });
 
   // Mark onboarding as complete

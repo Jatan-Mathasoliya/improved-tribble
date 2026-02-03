@@ -155,12 +155,9 @@ export default function OnboardingPage() {
               We couldn't load your onboarding status. Please try again or contact support if the issue persists.
             </p>
             <div className="flex gap-3 justify-center">
-              <Button variant="outline" onClick={() => refetch()}>
+              <Button onClick={() => refetch()}>
                 <RefreshCw className="h-4 w-4 mr-2" />
                 Try Again
-              </Button>
-              <Button onClick={() => setLocation('/recruiter-dashboard')}>
-                Go to Dashboard
               </Button>
             </div>
           </div>

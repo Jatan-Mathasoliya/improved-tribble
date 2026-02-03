@@ -64,7 +64,8 @@ export default function AuthPage() {
   // Redirect if already logged in based on role
   if (user) {
     if (user.role === 'recruiter') {
-      return <Redirect to="/recruiter-dashboard" />;
+      // Send recruiters to recruiter-auth which handles onboarding check
+      return <Redirect to="/recruiter-auth" />;
     } else if (user.role === 'super_admin') {
       return <Redirect to="/admin" />;
     } else if (user.role === 'hiring_manager') {

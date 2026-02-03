@@ -91,7 +91,8 @@ export default function RecruiterAuth() {
   const [resendLoading, setResendLoading] = useState(false);
 
   // Check onboarding status for recruiters
-  const checkOnboardingAndRedirect = useCallback(async () => {
+  // Returns: OnboardingStatus on success, { error: true } on failure, null for non-recruiters
+  const checkOnboardingAndRedirect = useCallback(async (): Promise<OnboardingStatus | { error: true } | null> => {
     if (!user || user.role !== "recruiter") return null;
 
     try {
@@ -100,10 +101,12 @@ export default function RecruiterAuth() {
         const status: OnboardingStatus = await res.json();
         return status;
       }
+      // Non-OK response - treat as error, don't allow bypass
+      return { error: true };
     } catch {
-      // If onboarding status check fails, continue with normal redirect
+      // Network/fetch error - treat as error, don't allow bypass
+      return { error: true };
     }
-    return null;
   }, [user]);
 
   // Redirect if already logged in as recruiter, admin, or hiring manager (shared portal)
@@ -116,28 +119,35 @@ export default function RecruiterAuth() {
       return;
     }
 
-    // If there's a redirect URL and user is recruiter/admin, use it
-    if (redirectUrl && (user.role === "recruiter" || user.role === "super_admin")) {
-      setLocation(redirectUrl);
-      return;
-    }
-
-    // For recruiters, check onboarding status before redirecting
+    // For recruiters, ALWAYS check onboarding status before any redirect
+    // This ensures onboarding cannot be bypassed via redirectUrl param
     if (user.role === "recruiter") {
       checkOnboardingAndRedirect().then((status) => {
-        if (status?.needsOnboarding) {
+        if (!status || 'error' in status) {
+          // Status check failed - safe fallback to onboarding page
+          // The onboarding page will re-check and redirect if already complete
+          setLocation("/onboarding");
+          return;
+        }
+        if (status.needsOnboarding) {
+          // Onboarding required - ignore redirectUrl, go to onboarding
           setLocation(`/onboarding?step=${status.currentStep}`);
         } else {
-          setLocation("/recruiter-dashboard");
+          // Onboarding complete - honor redirectUrl if provided, else dashboard
+          setLocation(redirectUrl || "/recruiter-dashboard");
         }
       });
       return;
     }
 
-    // Other role redirects
+    // For super_admin, honor redirectUrl or go to admin
     if (user.role === "super_admin") {
-      setLocation("/admin");
-    } else if (user.role === "hiring_manager") {
+      setLocation(redirectUrl || "/admin");
+      return;
+    }
+
+    // Other role redirects
+    if (user.role === "hiring_manager") {
       setLocation("/hiring-manager");
     }
   }, [user, setLocation, redirectUrl, inviteToken, checkOnboardingAndRedirect]);

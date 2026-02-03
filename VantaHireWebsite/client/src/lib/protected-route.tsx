@@ -1,9 +1,21 @@
 import { useAuth } from "@/hooks/use-auth";
+import { useOnboardingStatus } from "@/hooks/use-onboarding-status";
 import { Loader2 } from "lucide-react";
 import { Redirect, Route } from "wouter";
 import { ComponentType, LazyExoticComponent } from "react";
 
 type LazyComponent = LazyExoticComponent<ComponentType<object>>;
+
+// Paths that don't require onboarding completion for recruiters
+const ONBOARDING_EXEMPT_PATHS = [
+  '/onboarding',
+  '/org/choice',
+  '/blocked/',
+];
+
+function isOnboardingExempt(path: string): boolean {
+  return ONBOARDING_EXEMPT_PATHS.some(exempt => path.startsWith(exempt));
+}
 
 export function ProtectedRoute({
   path,
@@ -16,7 +28,22 @@ export function ProtectedRoute({
 }) {
   const { user, isLoading } = useAuth();
 
-  if (isLoading) {
+  // Only check onboarding for recruiters on non-exempt paths
+  const shouldCheckOnboarding =
+    user?.role === 'recruiter' &&
+    !isOnboardingExempt(path);
+
+  // Pass enabled to avoid unnecessary API calls for non-recruiters
+  const {
+    status: onboardingStatus,
+    isLoading: onboardingLoading,
+    error: onboardingError,
+  } = useOnboardingStatus({ enabled: shouldCheckOnboarding });
+
+  // Combined loading state
+  const isFullyLoading = isLoading || (shouldCheckOnboarding && onboardingLoading);
+
+  if (isFullyLoading) {
     return (
       <Route path={path}>
         <div className="flex items-center justify-center min-h-screen">
@@ -45,6 +72,26 @@ export function ProtectedRoute({
             <p className="text-muted-foreground">You don't have permission to access this page.</p>
           </div>
         </div>
+      </Route>
+    );
+  }
+
+  // Fail-closed: if onboarding check was required but failed/errored, redirect to onboarding
+  // The onboarding page will re-check status and redirect if already complete
+  if (shouldCheckOnboarding && (onboardingError || !onboardingStatus)) {
+    return (
+      <Route path={path}>
+        <Redirect to="/onboarding" />
+      </Route>
+    );
+  }
+
+  // Onboarding gate for recruiters: redirect to onboarding if needed
+  if (shouldCheckOnboarding && onboardingStatus?.needsOnboarding) {
+    const step = onboardingStatus.currentStep || 'org';
+    return (
+      <Route path={path}>
+        <Redirect to={`/onboarding?step=${step}`} />
       </Route>
     );
   }

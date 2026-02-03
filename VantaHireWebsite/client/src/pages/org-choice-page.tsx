@@ -92,11 +92,13 @@ export default function OrgChoicePage() {
     }
   }, [inviteFromUrl]);
 
-  // Redirect if already in org
+  // Redirect if already in org - go through onboarding check
   useEffect(() => {
     if (!orgLoading && orgData) {
       if (orgData.membership.seatAssigned) {
-        setLocation("/recruiter-dashboard");
+        // Go to onboarding which will check status and redirect appropriately
+        // This ensures profile/plan steps aren't skipped
+        setLocation("/onboarding");
       } else {
         setLocation("/blocked/seat-removed");
       }
@@ -139,7 +141,8 @@ export default function OrgChoicePage() {
         title: "Organization created",
         description: "Your organization has been created successfully.",
       });
-      setLocation("/recruiter-dashboard");
+      // Continue to onboarding (profile step) instead of dashboard
+      setLocation("/onboarding?step=profile");
     } catch (error: any) {
       toast({
         title: "Error",
