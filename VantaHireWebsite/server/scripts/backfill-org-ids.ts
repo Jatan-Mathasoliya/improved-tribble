@@ -19,6 +19,7 @@
 import { db } from '../db';
 import { jobs, applications, clients, pipelineStages, emailTemplates, forms } from '../../shared/schema';
 import { sql, isNull } from 'drizzle-orm';
+import { mergeDuplicatePipelineStagesForOrg } from '../lib/pipelineStageMerge';
 
 const DRY_RUN = process.env.DRY_RUN === 'true';
 
@@ -76,6 +77,18 @@ async function main() {
     .select({ count: sql<number>`count(*)::int` })
     .from(forms)
     .where(isNull(forms.organizationId));
+
+  const pipelineStageOrgRows = await db.execute(sql`
+    SELECT DISTINCT om.organization_id as org_id
+    FROM pipeline_stages ps
+    INNER JOIN organization_members om ON ps.created_by = om.user_id
+    WHERE ps.organization_id IS NULL
+      AND (ps.is_default IS NULL OR ps.is_default = false)
+      AND ps.created_by IS NOT NULL
+  `);
+  const pipelineStageOrgIds = pipelineStageOrgRows.rows
+    .map((row: any) => Number(row.org_id))
+    .filter((orgId: number) => Number.isInteger(orgId) && orgId > 0);
 
   console.log(`   Jobs with NULL organization_id: ${jobsBefore.count}`);
   console.log(`   Applications with NULL organization_id: ${appsBefore.count}`);
@@ -231,6 +244,32 @@ async function main() {
         AND ps.created_by IS NOT NULL
     `);
     console.log(`   Would update ${(pipelineCount.rows[0] as any)?.count || 0} pipeline_stages rows\n`);
+  }
+
+  if (pipelineStageOrgIds.length > 0) {
+    console.log('Step 5a: Merging duplicate pipeline stages after backfill...');
+    for (const orgId of pipelineStageOrgIds) {
+      const result = await mergeDuplicatePipelineStagesForOrg(orgId, { dryRun: DRY_RUN });
+      if (result.duplicateGroups.length === 0) {
+        console.log(`   ✅ Org ${orgId}: No duplicate stages found`);
+        continue;
+      }
+
+      if (DRY_RUN) {
+        console.log(`   🔎 Org ${orgId}: ${result.duplicateGroups.length} duplicate groups`);
+        console.log(`      - Applications to move: ${result.totals.applicationsToMove ?? 0}`);
+        console.log(`      - History updates (from): ${result.totals.historyFromToUpdate ?? 0}`);
+        console.log(`      - History updates (to): ${result.totals.historyToToUpdate ?? 0}`);
+        console.log(`      - Org stages to delete: ${result.totals.orgStagesToDelete ?? 0}`);
+      } else {
+        console.log(`   ✅ Org ${orgId}: merged ${result.duplicateGroups.length} duplicate groups`);
+        console.log(`      - Applications updated: ${result.totals.applicationsUpdated ?? 0}`);
+        console.log(`      - History updated (from): ${result.totals.historyFromUpdated ?? 0}`);
+        console.log(`      - History updated (to): ${result.totals.historyToUpdated ?? 0}`);
+        console.log(`      - Org stages deleted: ${result.totals.stagesDeleted ?? 0}`);
+      }
+    }
+    console.log('');
   }
 
   // 5b. UPDATE EMAIL_TEMPLATES (excluding defaults)

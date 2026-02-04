@@ -5,8 +5,9 @@
 
 import { db } from './db';
 import { pipelineStages, emailTemplates, consultants } from '../shared/schema';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { seedDefaultWhatsAppTemplates } from './seedWhatsAppTemplates';
+import { normalizeStageName } from './lib/pipelineStageUtils';
 
 export async function seedDefaultPipelineStages() {
   console.log('🌱 Seeding default pipeline stages...');
@@ -21,9 +22,13 @@ export async function seedDefaultPipelineStages() {
   ];
 
   for (const stage of defaultStages) {
-    // Check if stage already exists
+    const normalizedName = normalizeStageName(stage.name);
     const existing = await db.query.pipelineStages.findFirst({
-      where: eq(pipelineStages.name, stage.name)
+      where: and(
+        isNull(pipelineStages.organizationId),
+        eq(pipelineStages.isDefault, true),
+        sql`LOWER(REGEXP_REPLACE(TRIM(${pipelineStages.name}), '\\s+', ' ', 'g')) = ${normalizedName}`
+      )
     });
 
     if (!existing) {

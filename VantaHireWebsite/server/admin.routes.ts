@@ -18,7 +18,7 @@ import { db } from './db';
 import { backfillExtractedResumeText } from './lib/backfillResumeText';
 import { storage } from './storage';
 import { requireRole } from './auth';
-import { normalizeStageName } from './lib/pipelineStageUtils';
+import { mergeDuplicatePipelineStagesForOrg, type MergeDuplicateStagesResult } from './lib/pipelineStageMerge';
 import {
   userAiUsage,
   applicationFeedback,
@@ -1434,182 +1434,13 @@ export function registerAdminRoutes(
 
       const { orgId, dryRun } = parsed.data;
 
-      const stages = await db.select({
-        id: pipelineStages.id,
-        name: pipelineStages.name,
-        order: pipelineStages.order,
-        organizationId: pipelineStages.organizationId,
-        isDefault: pipelineStages.isDefault,
-      })
-        .from(pipelineStages)
-        .where(or(
-          eq(pipelineStages.organizationId, orgId),
-          and(isNull(pipelineStages.organizationId), eq(pipelineStages.isDefault, true))
-        ));
-
-      const stageGroups = new Map<string, typeof stages>();
-      for (const stage of stages) {
-        const key = normalizeStageName(stage.name);
-        const existing = stageGroups.get(key);
-        if (existing) {
-          existing.push(stage);
-        } else {
-          stageGroups.set(key, [stage]);
-        }
-      }
-
-      const duplicateGroups: {
-        name: string;
-        canonicalId: number;
-        duplicateStageIds: number[];
-        duplicateOrgStageIds: number[];
-      }[] = [];
-
-      const allDuplicateStageIds = new Set<number>();
-      const allDuplicateOrgStageIds = new Set<number>();
-
-      const sortByOrder = (a: typeof stages[number], b: typeof stages[number]) => (a.order - b.order) || (a.id - b.id);
-
-      type StageRow = typeof stages[number];
-      for (const [, group] of stageGroups.entries()) {
-        if (group.length < 2) continue;
-
-        const orgStages = group.filter((stage: StageRow) => stage.organizationId === orgId);
-        const defaultStages = group.filter((stage: StageRow) => stage.organizationId == null && stage.isDefault);
-        if (orgStages.length === 0 && defaultStages.length === 0) continue;
-
-        const canonical = (orgStages.length ? [...orgStages].sort(sortByOrder)[0] : [...defaultStages].sort(sortByOrder)[0]);
-        const duplicateStageIds = group.filter((stage: StageRow) => stage.id !== canonical.id).map((stage: StageRow) => stage.id);
-        if (duplicateStageIds.length === 0) continue;
-
-        const duplicateOrgStageIds = group
-          .filter((stage: StageRow) => stage.organizationId === orgId && stage.id !== canonical.id)
-          .map((stage: StageRow) => stage.id);
-
-        duplicateStageIds.forEach((id: number) => allDuplicateStageIds.add(id));
-        duplicateOrgStageIds.forEach((id: number) => allDuplicateOrgStageIds.add(id));
-
-        duplicateGroups.push({
-          name: group[0].name,
-          canonicalId: canonical.id,
-          duplicateStageIds,
-          duplicateOrgStageIds,
-        });
-      }
-
-      if (duplicateGroups.length === 0) {
-        res.json({
-          success: true,
-          orgId,
-          dryRun,
-          message: 'No duplicate stages found.',
-        });
-        return;
-      }
-
-      const duplicateStageIdsAll = Array.from(allDuplicateStageIds);
-      const duplicateOrgStageIdsAll = Array.from(allDuplicateOrgStageIds);
-
-      let applicationsUpdated = 0;
-      let historyFromUpdated = 0;
-      let historyToUpdated = 0;
-      let stagesDeleted = 0;
-
-      if (dryRun) {
-        const [appsToMove] = await db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(applications)
-          .innerJoin(jobs, eq(applications.jobId, jobs.id))
-          .where(and(eq(jobs.organizationId, orgId), inArray(applications.currentStage, duplicateStageIdsAll)));
-
-        const [historyFrom] = await db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(applicationStageHistory)
-          .innerJoin(applications, eq(applicationStageHistory.applicationId, applications.id))
-          .innerJoin(jobs, eq(applications.jobId, jobs.id))
-          .where(and(eq(jobs.organizationId, orgId), inArray(applicationStageHistory.fromStage, duplicateStageIdsAll)));
-
-        const [historyTo] = await db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(applicationStageHistory)
-          .innerJoin(applications, eq(applicationStageHistory.applicationId, applications.id))
-          .innerJoin(jobs, eq(applications.jobId, jobs.id))
-          .where(and(eq(jobs.organizationId, orgId), inArray(applicationStageHistory.toStage, duplicateStageIdsAll)));
-
-        res.json({
-          success: true,
-          orgId,
-          dryRun: true,
-          duplicateGroups,
-          totals: {
-            applicationsToMove: appsToMove?.count ?? 0,
-            historyFromToUpdate: historyFrom?.count ?? 0,
-            historyToToUpdate: historyTo?.count ?? 0,
-            orgStagesToDelete: duplicateOrgStageIdsAll.length,
-          },
-        });
-        return;
-      }
-
-      for (const group of duplicateGroups) {
-        if (group.duplicateStageIds.length === 0) continue;
-
-        const stageIds = group.duplicateStageIds.map((id) => sql`${id}`);
-        const stageIdList = sql.join(stageIds, sql`, `);
-
-        const appsResult = await db.execute(sql`
-          UPDATE applications a
-          SET current_stage = ${group.canonicalId}
-          FROM jobs j
-          WHERE a.job_id = j.id
-            AND j.organization_id = ${orgId}
-            AND a.current_stage IN (${stageIdList})
-        `);
-        applicationsUpdated += appsResult.rowCount ?? 0;
-
-        const historyFromResult = await db.execute(sql`
-          UPDATE application_stage_history ash
-          SET from_stage = ${group.canonicalId}
-          FROM applications a
-          JOIN jobs j ON a.job_id = j.id
-          WHERE ash.application_id = a.id
-            AND j.organization_id = ${orgId}
-            AND ash.from_stage IN (${stageIdList})
-        `);
-        historyFromUpdated += historyFromResult.rowCount ?? 0;
-
-        const historyToResult = await db.execute(sql`
-          UPDATE application_stage_history ash
-          SET to_stage = ${group.canonicalId}
-          FROM applications a
-          JOIN jobs j ON a.job_id = j.id
-          WHERE ash.application_id = a.id
-            AND j.organization_id = ${orgId}
-            AND ash.to_stage IN (${stageIdList})
-        `);
-        historyToUpdated += historyToResult.rowCount ?? 0;
-      }
-
-      if (duplicateOrgStageIdsAll.length > 0) {
-        const deleteResult = await db
-          .delete(pipelineStages)
-          .where(inArray(pipelineStages.id, duplicateOrgStageIdsAll));
-        stagesDeleted = deleteResult.rowCount ?? 0;
-      }
-
+      const result = await mergeDuplicatePipelineStagesForOrg(orgId, { dryRun });
       res.json({
         success: true,
-        orgId,
-        dryRun: false,
-        duplicateGroups,
-        totals: {
-          applicationsUpdated,
-          historyFromUpdated,
-          historyToUpdated,
-          stagesDeleted,
-        },
+        ...result,
       });
       return;
+
     } catch (error) {
       console.error('[Admin Ops] Error merging duplicate pipeline stages:', error);
       next(error);
@@ -1666,6 +1497,20 @@ export function registerAdminRoutes(
         .from(emailTemplates).where(sql`organization_id IS NULL`);
       const [formsBefore] = await db.select({ count: sql<number>`count(*)::int` })
         .from(forms).where(sql`organization_id IS NULL`);
+
+      const pipelineStageOrgRows = await db.execute(sql`
+        SELECT DISTINCT om.organization_id as org_id
+        FROM pipeline_stages ps
+        INNER JOIN organization_members om ON ps.created_by = om.user_id
+        WHERE ps.organization_id IS NULL
+          AND (ps.is_default IS NULL OR ps.is_default = false)
+          AND ps.created_by IS NOT NULL
+      `);
+      const pipelineStageOrgIds = pipelineStageOrgRows.rows
+        .map((row: any) => Number(row.org_id))
+        .filter((orgId: number) => Number.isInteger(orgId) && orgId > 0);
+
+      const duplicateStageMergeResults: MergeDuplicateStagesResult[] = [];
 
       let jobsUpdated = 0;
       let appsUpdated = 0;
@@ -1743,6 +1588,15 @@ export function registerAdminRoutes(
         `);
         pipelineUpdated = pipelineResult.rowCount ?? 0;
 
+        if (pipelineStageOrgIds.length > 0) {
+          for (const orgId of pipelineStageOrgIds) {
+            const result = await mergeDuplicatePipelineStagesForOrg(orgId, { dryRun: false });
+            if (result.duplicateGroups.length > 0) {
+              duplicateStageMergeResults.push(result);
+            }
+          }
+        }
+
         // 8. Backfill email_templates (exclude defaults)
         const templatesResult = await db.execute(sql`
           UPDATE email_templates et
@@ -1787,6 +1641,13 @@ export function registerAdminRoutes(
             AND f.organization_id IS NOT NULL
         `);
         formResponsesUpdated = formResponsesResult.rowCount ?? 0;
+      } else if (pipelineStageOrgIds.length > 0) {
+        for (const orgId of pipelineStageOrgIds) {
+          const result = await mergeDuplicatePipelineStagesForOrg(orgId, { dryRun: true });
+          if (result.duplicateGroups.length > 0) {
+            duplicateStageMergeResults.push(result);
+          }
+        }
       }
 
       // 12. Count after
@@ -1843,6 +1704,7 @@ export function registerAdminRoutes(
           emailTemplatesNull: dryRun ? templatesBefore.count : templatesAfter.count,
           formsNull: dryRun ? formsBefore.count : formsAfter.count,
         },
+        duplicateStageMerge: duplicateStageMergeResults,
       });
       return;
     } catch (error) {

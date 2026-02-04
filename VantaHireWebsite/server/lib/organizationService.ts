@@ -21,6 +21,7 @@ import { eq, and, desc, sql, or, isNull } from "drizzle-orm";
 import slugify from "slugify";
 import crypto from "crypto";
 import { hasAvailableSeats } from "./seatService";
+import { mergeDuplicatePipelineStagesForOrg } from "./pipelineStageMerge";
 
 // Backfill orphaned jobs, applications, clients, and child tables for a user joining an organization
 // This ensures legacy records (created before org existed) are associated with the new org
@@ -169,7 +170,7 @@ export async function createOrganization(
 ): Promise<Organization> {
   const slug = data.slug || await generateUniqueSlug(data.name);
 
-  return await db.transaction(async (tx: any) => {
+  const org = await db.transaction(async (tx: any) => {
     // Create organization
     const [org] = await tx.insert(organizations).values({
       ...data,
@@ -190,6 +191,14 @@ export async function createOrganization(
 
     return org;
   });
+
+  try {
+    await mergeDuplicatePipelineStagesForOrg(org.id, { dryRun: false });
+  } catch (error) {
+    console.warn('[Org Backfill] Failed to merge duplicate pipeline stages after org creation:', error);
+  }
+
+  return org;
 }
 
 export async function getOrganization(id: number): Promise<Organization | undefined> {
@@ -384,7 +393,7 @@ export async function acceptOrganizationInvite(
   }
 
   // Transaction: accept invite + add member + backfill records
-  return await db.transaction(async (tx: any) => {
+  const member = await db.transaction(async (tx: any) => {
     // Update invite as accepted
     await tx.update(organizationInvites)
       .set({
@@ -408,6 +417,14 @@ export async function acceptOrganizationInvite(
 
     return member;
   });
+
+  try {
+    await mergeDuplicatePipelineStagesForOrg(invite.organizationId, { dryRun: false });
+  } catch (error) {
+    console.warn('[Org Backfill] Failed to merge duplicate pipeline stages after invite acceptance:', error);
+  }
+
+  return member;
 }
 
 export async function cancelOrganizationInvite(inviteId: number): Promise<void> {
@@ -481,7 +498,7 @@ export async function respondToJoinRequest(
   }
 
   // Transaction: update request + add member (if approved) + backfill records
-  return await db.transaction(async (tx: any) => {
+  const member = await db.transaction(async (tx: any) => {
     await tx.update(organizationJoinRequests)
       .set({
         status,
@@ -515,6 +532,16 @@ export async function respondToJoinRequest(
 
     return null;
   });
+
+  if (member) {
+    try {
+      await mergeDuplicatePipelineStagesForOrg(request.organizationId, { dryRun: false });
+    } catch (error) {
+      console.warn('[Org Backfill] Failed to merge duplicate pipeline stages after join approval:', error);
+    }
+  }
+
+  return member;
 }
 
 // Domain claim requests (admin-approved)
