@@ -657,6 +657,31 @@ export function registerApplicationsRoutes(
 
       const applicationsList = await storage.getApplicationsByJob(jobId);
 
+      const job = await storage.getJob(jobId);
+      if (job?.organizationId != null) {
+        const stageIds = Array.from(new Set(
+          applicationsList
+            .map((app) => app.currentStage)
+            .filter((stageId): stageId is number => typeof stageId === 'number')
+        ));
+
+        if (stageIds.length > 0) {
+          const orgStages = await storage.getPipelineStages(job.organizationId);
+          const orgStageIds = new Set(orgStages.map((stage) => stage.id));
+          const missingStageIds = stageIds.filter((stageId) => !orgStageIds.has(stageId));
+
+          if (missingStageIds.length > 0) {
+            console.warn('[Pipeline Guardrail] Applications reference stages missing from org pipeline stages', {
+              jobId,
+              organizationId: job.organizationId,
+              userId: req.user!.id,
+              missingStageIds,
+              totalStages: orgStages.length,
+            });
+          }
+        }
+      }
+
       // Get client feedback counts for all applications
       const appIds = applicationsList.map(app => app.id);
       const feedbackCounts = await storage.getClientFeedbackCountsByApplicationIds(appIds);
@@ -847,12 +872,17 @@ export function registerApplicationsRoutes(
           res.status(403).json({ error: 'Super admin access required' });
           return;
         }
-        const parsedOrgId = Number(orgIdParam);
-        if (!Number.isFinite(parsedOrgId) || parsedOrgId <= 0 || !Number.isInteger(parsedOrgId)) {
-          res.status(400).json({ error: 'Invalid orgId' });
-          return;
+        // Accept 'none' or 'null' to explicitly request default stages
+        if (orgIdParam === 'none' || orgIdParam === 'null') {
+          organizationId = null;
+        } else {
+          const parsedOrgId = Number(orgIdParam);
+          if (!Number.isFinite(parsedOrgId) || parsedOrgId <= 0 || !Number.isInteger(parsedOrgId)) {
+            res.status(400).json({ error: 'Invalid orgId' });
+            return;
+          }
+          organizationId = parsedOrgId;
         }
-        organizationId = parsedOrgId;
       }
       const stages = await storage.getPipelineStages(organizationId, req.user!.id);
       res.json(stages);

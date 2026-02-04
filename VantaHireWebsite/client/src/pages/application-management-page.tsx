@@ -190,16 +190,19 @@ export default function ApplicationManagementPage() {
   });
 
   // ATS: Fetch pipeline stages
-  const pipelineOrgId = user?.role === 'super_admin' ? job?.organizationId : undefined;
+  // For super_admin: use job's orgId if set, or 'none' for null-org jobs to get defaults
+  const pipelineOrgParam = user?.role === 'super_admin'
+    ? (job?.organizationId ? String(job.organizationId) : 'none')
+    : undefined;
   const { data: pipelineStages = [] } = useQuery<PipelineStage[]>({
-    queryKey: ["/api/pipeline/stages", pipelineOrgId ?? 'default'],
+    queryKey: ["/api/pipeline/stages", pipelineOrgParam ?? 'default'],
     queryFn: async () => {
-      const url = pipelineOrgId ? `/api/pipeline/stages?orgId=${pipelineOrgId}` : "/api/pipeline/stages";
+      const url = pipelineOrgParam ? `/api/pipeline/stages?orgId=${pipelineOrgParam}` : "/api/pipeline/stages";
       const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch pipeline stages");
       return response.json();
     },
-    enabled: user?.role === 'super_admin' ? !!pipelineOrgId : true,
+    enabled: user?.role === 'super_admin' ? !!job : true,
   });
 
   // ATS: Fetch email templates
