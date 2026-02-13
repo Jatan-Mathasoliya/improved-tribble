@@ -831,13 +831,23 @@ export function registerApplicationsRoutes(
           const buffer = await downloadFromGCS(url);
           const filename = appRecord.resumeFilename || 'resume.pdf';
           const ext = filename.split('.').pop()?.toLowerCase() || 'pdf';
-          const contentType = ext === 'pdf' ? 'application/pdf' : 'application/octet-stream';
+          const contentType =
+            ext === 'pdf'
+              ? 'application/pdf'
+              : ext === 'docx'
+                ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+                : ext === 'doc'
+                  ? 'application/msword'
+                  : 'application/octet-stream';
+          const downloadParam = req.query.download;
+          const forceDownload = downloadParam === '1' || downloadParam === 'true';
+          const disposition = forceDownload || ext !== 'pdf' ? 'attachment' : 'inline';
 
           // Allow embedding in iframes from same origin only (security fix)
           res.setHeader('X-Frame-Options', 'SAMEORIGIN');
           res.setHeader('Content-Security-Policy', "frame-ancestors 'self'");
           res.setHeader('Content-Type', contentType);
-          res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+          res.setHeader('Content-Disposition', `${disposition}; filename="${filename}"`);
           res.setHeader('Content-Length', buffer.length);
           res.send(buffer);
           return;

@@ -55,10 +55,10 @@ export function ApplicationDetailModal({
   const resumeUrl = application.resumeUrl
     ? `/api/applications/${application.id}/resume`
     : null;
-
   // Check if resume is a PDF (most likely case)
-  const isPdf = application.resumeUrl?.toLowerCase().endsWith('.pdf') ||
-    application.resumeUrl?.toLowerCase().includes('pdf');
+  const nameForType = (application.resumeFilename || application.resumeUrl || '').toLowerCase();
+  const isPdf = nameForType.endsWith('.pdf') || nameForType.includes('.pdf');
+  const displayFilename = application.resumeFilename || application.resumeUrl?.split('/').pop() || 'Resume';
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -124,18 +124,20 @@ export function ApplicationDetailModal({
                 <div className="flex items-center gap-2">
                   <FileText className="h-5 w-5 text-muted-foreground" />
                   <span className="text-sm text-muted-foreground">
-                    {application.resumeUrl?.split('/').pop() || 'Resume'}
+                    {displayFilename}
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => window.open(resumeUrl!, '_blank')}
-                  >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Open in New Tab
-                  </Button>
+                  {isPdf && resumeUrl && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(resumeUrl, '_blank')}
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Open in New Tab
+                    </Button>
+                  )}
                   <Button
                     variant="default"
                     size="sm"
@@ -156,24 +158,24 @@ export function ApplicationDetailModal({
                       className="w-full h-full"
                       title="Resume Preview"
                     />
+                  ) : resumeText ? (
+                    <div className="h-full p-4 overflow-auto bg-white">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Resume text</p>
+                      <pre className="whitespace-pre-wrap text-sm text-foreground font-sans leading-relaxed">
+                        {resumeText}
+                      </pre>
+                    </div>
                   ) : (
-                    <object
-                      data={resumeUrl}
-                      type="application/pdf"
-                      className="w-full h-full"
-                    >
-                      {/* Fallback for non-PDF files or if object fails */}
-                      <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-                        <FileText className="h-16 w-16 text-muted-foreground/50 mb-4" />
-                        <p className="text-muted-foreground mb-4">
-                          Unable to preview this file type in browser.
-                        </p>
-                        <Button onClick={() => window.open(resumeUrl, '_blank')}>
-                          <Download className="h-4 w-4 mr-2" />
-                          Download to View
-                        </Button>
-                      </div>
-                    </object>
+                    <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                      <FileText className="h-16 w-16 text-muted-foreground/50 mb-4" />
+                      <p className="text-muted-foreground mb-4">
+                        Unable to preview this file type in browser.
+                      </p>
+                      <Button onClick={onDownloadResume}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Download to View
+                      </Button>
+                    </div>
                   )
                 ) : resumeText ? (
                   <div className="h-full p-4 overflow-auto bg-white">

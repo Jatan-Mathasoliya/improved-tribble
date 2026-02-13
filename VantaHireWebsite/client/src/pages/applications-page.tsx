@@ -434,6 +434,7 @@ export default function ApplicationsPage() {
         applicationEmail={resumePreviewApp?.email ?? ""}
         jobTitle={resumePreviewApp?.job?.title}
         resumeUrl={resumePreviewApp?.resumeUrl ?? null}
+        resumeFilename={resumePreviewApp?.resumeFilename ?? null}
         status={resumePreviewApp?.status}
         aiFitScore={resumePreviewApp?.aiFitScore}
         aiFitLabel={resumePreviewApp?.aiFitLabel}

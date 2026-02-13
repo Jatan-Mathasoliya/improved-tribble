@@ -739,7 +739,7 @@ export default function ApplicationManagementPage() {
 
   const handleResumeDownload = (application: Application) => {
     // Use secure, permission-gated endpoint
-    window.open(`/api/applications/${application.id}/resume`, '_blank');
+    window.open(`/api/applications/${application.id}/resume?download=1`, '_blank');
     // Track download for analytics/status (server also marks for recruiter/admin)
     markDownloadedMutation.mutate(application.id);
   };
@@ -1531,7 +1531,7 @@ export default function ApplicationManagementPage() {
                 }
               }}
               onQuickDownload={(appId) => {
-                window.open(`/api/applications/${appId}/resume`, '_blank');
+                window.open(`/api/applications/${appId}/resume?download=1`, '_blank');
               }}
               onToggleStageSelect={(stageId, shouldSelect) => {
                 const stageApps = applications?.filter(app => 

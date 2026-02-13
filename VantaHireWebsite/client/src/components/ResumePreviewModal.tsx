@@ -11,6 +11,7 @@ interface ResumePreviewModalProps {
   applicationEmail: string;
   jobTitle?: string | undefined;
   resumeUrl: string | null;
+  resumeFilename?: string | null;
   status?: string | undefined;
   aiFitScore?: number | null | undefined;
   aiFitLabel?: string | null | undefined;
@@ -29,6 +30,7 @@ export function ResumePreviewModal({
   applicationEmail,
   jobTitle,
   resumeUrl,
+  resumeFilename,
   status,
   aiFitScore,
   aiFitLabel,
@@ -45,20 +47,23 @@ export function ResumePreviewModal({
 
   if (!applicationId) return null;
 
-  const fullResumeUrl = resumeUrl
+  const previewUrl = resumeUrl
     ? `/api/applications/${applicationId}/resume`
+    : null;
+  const downloadUrl = resumeUrl
+    ? `/api/applications/${applicationId}/resume?download=1`
     : null;
 
   // Check if resume is a PDF
-  const isPdf = resumeUrl?.toLowerCase().endsWith('.pdf') ||
-    resumeUrl?.toLowerCase().includes('pdf');
+  const nameForType = (resumeFilename || resumeUrl || '').toLowerCase();
+  const isPdf = nameForType.endsWith('.pdf') || nameForType.includes('.pdf');
 
   const handleDownload = () => {
     if (onDownload) {
       onDownload();
     }
-    if (fullResumeUrl) {
-      window.open(fullResumeUrl, '_blank');
+    if (downloadUrl) {
+      window.open(downloadUrl, '_blank');
     }
   };
 
@@ -104,6 +109,8 @@ export function ResumePreviewModal({
     return colorMap[label] || 'bg-muted text-muted-foreground border-border';
   };
 
+  const displayFilename = resumeFilename || resumeUrl?.split('/').pop() || 'Resume';
+
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
       <DialogContent className="max-w-6xl w-[95vw] h-[90vh] max-h-[90vh] p-0 gap-0 flex flex-col">
@@ -144,20 +151,22 @@ export function ResumePreviewModal({
               <div className="flex items-center gap-2">
                 <FileText className="h-5 w-5 text-muted-foreground" />
                 <span className="text-sm text-muted-foreground">
-                  {resumeUrl?.split('/').pop() || 'Resume'}
+                  {displayFilename}
                 </span>
               </div>
               <div className="flex items-center gap-2">
-                {fullResumeUrl && (
+                {previewUrl && (
                   <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => window.open(fullResumeUrl, '_blank')}
-                    >
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      Open in New Tab
-                    </Button>
+                    {isPdf && previewUrl && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(previewUrl, '_blank')}
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Open in New Tab
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       size="sm"
@@ -174,31 +183,31 @@ export function ResumePreviewModal({
             {/* Resume Preview */}
             <div className="flex-1 overflow-hidden p-4" data-testid="resume-preview-pane">
               <div className="h-full border border-border rounded-lg overflow-hidden bg-muted/50" data-testid="resume-preview-frame">
-                {fullResumeUrl ? (
+                {previewUrl ? (
                   isPdf ? (
                     <iframe
-                      src={`${fullResumeUrl}#toolbar=0&navpanes=0`}
+                      src={`${previewUrl}#toolbar=0&navpanes=0`}
                       className="w-full h-full"
                       title="Resume Preview"
                     />
+                  ) : resumeText ? (
+                    <div className="h-full p-4 overflow-auto bg-white">
+                      <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">Resume text</p>
+                      <pre className="whitespace-pre-wrap text-sm text-foreground font-sans leading-relaxed">
+                        {resumeText}
+                      </pre>
+                    </div>
                   ) : (
-                    <object
-                      data={fullResumeUrl}
-                      type="application/pdf"
-                      className="w-full h-full"
-                    >
-                      {/* Fallback for non-PDF files */}
-                      <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-                        <FileText className="h-16 w-16 text-muted-foreground/50 mb-4" />
-                        <p className="text-muted-foreground mb-4">
-                          Unable to preview this file type in browser.
-                        </p>
-                        <Button onClick={() => window.open(fullResumeUrl, '_blank')}>
-                          <Download className="h-4 w-4 mr-2" />
-                          Download to View
-                        </Button>
-                      </div>
-                    </object>
+                    <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                      <FileText className="h-16 w-16 text-muted-foreground/50 mb-4" />
+                      <p className="text-muted-foreground mb-4">
+                        Unable to preview this file type in browser.
+                      </p>
+                      <Button onClick={handleDownload}>
+                        <Download className="h-4 w-4 mr-2" />
+                        Download to View
+                      </Button>
+                    </div>
                   )
                 ) : resumeText ? (
                   <div className="h-full p-4 overflow-auto bg-white">
