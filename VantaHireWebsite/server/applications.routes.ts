@@ -46,6 +46,7 @@ import {
 import { notifyRecruitersNewApplication } from './emailTemplateService';
 import { generateInterviewICS, getICSFilename } from './lib/icsGenerator';
 import { extractResumeText, validateResumeText } from './lib/resumeExtractor';
+import { resolveActiveKGTenantId } from './lib/activekgAuth';
 import { isAIEnabled, generateCandidateSummary } from './aiJobAnalyzer';
 import { checkCircuitBreaker } from './lib/aiMatchingEngine';
 import { applicationRateLimit, recruiterAddRateLimit, aiAnalysisRateLimit, type RateLimitInfo } from './rateLimit';
@@ -107,8 +108,8 @@ export function registerApplicationsRoutes(
         return;
       }
 
-      if (job.status && job.status !== 'approved') {
-        res.status(400).json({ error: 'This job is not currently accepting applications' });
+      if (job.status && job.status !== 'published' && job.status !== 'approved') {
+        res.status(400).json({ error: 'This job is not currently published' });
         return;
       }
 
@@ -275,6 +276,28 @@ export function registerApplicationsRoutes(
         }
       } catch (emailError) {
         console.error('Failed to send recruiter notification:', emailError);
+      }
+
+      // Enqueue ActiveKG graph sync job (non-blocking)
+      if (process.env.ACTIVEKG_SYNC_ENABLED === 'true' && application.organizationId) {
+        try {
+          const effectiveRecruiterId = job.postedBy;
+          const tenantId = resolveActiveKGTenantId(application.organizationId);
+          await storage.enqueueApplicationGraphSyncJob({
+            applicationId: application.id,
+            organizationId: application.organizationId,
+            jobId: application.jobId,
+            effectiveRecruiterId,
+            activekgTenantId: tenantId,
+          });
+        } catch (syncErr) {
+          console.error('[ACTIVEKG_SYNC] Failed to enqueue graph sync job (non-blocking):', {
+            applicationId: application.id,
+            jobId: application.jobId,
+            organizationId: application.organizationId,
+            error: syncErr instanceof Error ? syncErr.message : String(syncErr),
+          });
+        }
       }
 
       res.status(201).json({
@@ -458,6 +481,28 @@ export function registerApplicationsRoutes(
           source: applicationData.source,
           timestamp: new Date().toISOString()
         });
+
+        // Enqueue ActiveKG graph sync job (non-blocking)
+        if (process.env.ACTIVEKG_SYNC_ENABLED === 'true' && application.organizationId) {
+          try {
+            const effectiveRecruiterId = req.user!.id;
+            const tenantId = resolveActiveKGTenantId(application.organizationId);
+            await storage.enqueueApplicationGraphSyncJob({
+              applicationId: application.id,
+              organizationId: application.organizationId,
+              jobId: application.jobId,
+              effectiveRecruiterId,
+              activekgTenantId: tenantId,
+            });
+          } catch (syncErr) {
+            console.error('[ACTIVEKG_SYNC] Failed to enqueue graph sync job (non-blocking):', {
+              applicationId: application.id,
+              jobId: application.jobId,
+              organizationId: application.organizationId,
+              error: syncErr instanceof Error ? syncErr.message : String(syncErr),
+            });
+          }
+        }
 
         res.status(201).json({
           success: true,

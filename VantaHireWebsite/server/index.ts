@@ -8,6 +8,7 @@ import { createTestJobs } from "./createTestJobs";
 import { seedAllATSDefaults } from "./seedATSDefaults";
 import { ensureAtsSchema } from "./bootstrapSchema";
 import { seedDefaultWhatsAppTemplates } from "./seedWhatsAppTemplates";
+import { startApplicationGraphSyncProcessor, stopApplicationGraphSyncProcessor } from "./lib/applicationGraphSyncProcessor";
 
 const app = express();
 
@@ -149,5 +150,22 @@ app.use((req, res, next) => {
 
     // Start job scheduler for automatic job expiration
     startJobScheduler();
+
+    // Start ActiveKG graph sync processor (if enabled)
+    if (process.env.ACTIVEKG_SYNC_ENABLED === 'true') {
+      startApplicationGraphSyncProcessor();
+      console.log('✅ ActiveKG graph sync processor started');
+    }
   });
+
+  // Graceful shutdown
+  const gracefulShutdown = (signal: string) => {
+    console.log(`Received ${signal}, shutting down gracefully...`);
+    stopApplicationGraphSyncProcessor();
+    server.close(() => {
+      process.exit(0);
+    });
+  };
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 })();
