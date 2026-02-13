@@ -63,18 +63,6 @@ export function useOnboardingStatus(options: UseOnboardingStatusOptions = {}) {
     },
   });
 
-  // Skip profile step (user acknowledged warning)
-  const skipProfileMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/onboarding/skip-profile");
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to skip profile step");
-      }
-      return await res.json();
-    },
-  });
-
   return {
     // Data
     status,
@@ -90,15 +78,12 @@ export function useOnboardingStatus(options: UseOnboardingStatusOptions = {}) {
 
     // Actions (fire-and-forget)
     completeOnboarding: completeMutation.mutate,
-    skipProfile: skipProfileMutation.mutate,
     refetch,
 
     // Async actions (return promises)
     completeOnboardingAsync: completeMutation.mutateAsync,
-    skipProfileAsync: skipProfileMutation.mutateAsync,
 
     // Loading states
     isCompleting: completeMutation.isPending,
-    isSkippingProfile: skipProfileMutation.isPending,
   };
 }

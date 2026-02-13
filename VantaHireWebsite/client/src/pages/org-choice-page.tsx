@@ -53,7 +53,7 @@ export default function OrgChoicePage() {
   const [tryAnywayMode, setTryAnywayMode] = useState(false);
 
   // Debounce invite code input (400ms) to avoid spamming API
-  const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (debounceTimerRef.current) {
       clearTimeout(debounceTimerRef.current);
@@ -179,8 +179,8 @@ export default function OrgChoicePage() {
         title: "Joined organization",
         description: "Welcome to the team!",
       });
-      // Redirect to onboarding profile step with fromInvite flag so company is pre-filled
-      setLocation("/onboarding?step=profile&fromInvite=true");
+      // Redirect to onboarding profile step after joining the organization.
+      setLocation("/onboarding?step=profile");
     } catch (error: any) {
       toast({
         title: "Error",

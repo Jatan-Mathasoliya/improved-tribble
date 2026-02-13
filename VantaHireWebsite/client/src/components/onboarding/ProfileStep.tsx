@@ -7,15 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { User, Building, MapPin, Linkedin, Phone, Loader2, AlertTriangle } from "lucide-react";
+import { User, Building, MapPin, Linkedin, Phone, Loader2 } from "lucide-react";
 
 interface UserProfile {
   displayName: string | null;
@@ -39,8 +31,6 @@ interface ProfileData {
 
 interface ProfileStepProps {
   onComplete: () => void;
-  onSkip: () => void;
-  fromInvite?: boolean;
 }
 
 interface OrgData {
@@ -53,11 +43,10 @@ interface OrgData {
   };
 }
 
-export default function ProfileStep({ onComplete, onSkip, fromInvite }: ProfileStepProps) {
+export default function ProfileStep({ onComplete }: ProfileStepProps) {
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const [showSkipWarning, setShowSkipWarning] = useState(false);
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [company, setCompany] = useState("");
@@ -78,7 +67,7 @@ export default function ProfileStep({ onComplete, onSkip, fromInvite }: ProfileS
     enabled: !!user,
   });
 
-  // Fetch organization data (if user joined via invite, use org name for company)
+  // Fetch organization data to prefill company when profile company is missing.
   const { data: orgData } = useQuery<OrgData>({
     queryKey: ["/api/organizations/current"],
     queryFn: async () => {
@@ -86,7 +75,7 @@ export default function ProfileStep({ onComplete, onSkip, fromInvite }: ProfileS
       if (!response.ok) throw new Error("Failed to fetch organization");
       return response.json();
     },
-    enabled: !!user && !!fromInvite,
+    enabled: !!user,
   });
 
   // Initialize form with existing data
@@ -94,9 +83,9 @@ export default function ProfileStep({ onComplete, onSkip, fromInvite }: ProfileS
     if (profileData) {
       setFirstName(profileData.user.firstName || "");
       setLastName(profileData.user.lastName || "");
-      // If company is not set and user came from invite, use org name
+      // If company is not set, use org name.
       const existingCompany = profileData.profile.company || "";
-      if (!existingCompany && fromInvite && orgData?.organization?.name) {
+      if (!existingCompany && orgData?.organization?.name) {
         setCompany(orgData.organization.name);
       } else {
         setCompany(existingCompany);
@@ -107,7 +96,7 @@ export default function ProfileStep({ onComplete, onSkip, fromInvite }: ProfileS
       setLocation(profileData.profile.location || "");
       setBio(profileData.profile.bio || "");
     }
-  }, [profileData, fromInvite, orgData]);
+  }, [profileData, orgData]);
 
   // Update user (for first/last name)
   const updateUserMutation = useMutation({
@@ -184,35 +173,7 @@ export default function ProfileStep({ onComplete, onSkip, fromInvite }: ProfileS
     }
   };
 
-  // Skip profile mutation (for tracking/analytics)
-  const skipProfileMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/onboarding/skip-profile");
-      if (!res.ok) {
-        const error = await res.json();
-        throw new Error(error.error || "Failed to skip profile step");
-      }
-      return res.json();
-    },
-  });
-
-  const handleSkipClick = () => {
-    setShowSkipWarning(true);
-  };
-
-  const handleConfirmSkip = async () => {
-    setShowSkipWarning(false);
-    try {
-      // Call skip endpoint for tracking/analytics
-      await skipProfileMutation.mutateAsync();
-    } catch {
-      // Don't block skip if endpoint fails - just log it
-      console.warn('Failed to call skip-profile endpoint');
-    }
-    onSkip();
-  };
-
-  const isSubmitting = updateUserMutation.isPending || updateProfileMutation.isPending || skipProfileMutation.isPending;
+  const isSubmitting = updateUserMutation.isPending || updateProfileMutation.isPending;
 
   if (isLoading) {
     return (
@@ -352,15 +313,7 @@ export default function ProfileStep({ onComplete, onSkip, fromInvite }: ProfileS
           </div>
         </div>
 
-        <div className="flex justify-between pt-4">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={handleSkipClick}
-            disabled={isSubmitting}
-          >
-            Skip for now
-          </Button>
+        <div className="flex justify-end pt-4">
           <Button
             type="submit"
             disabled={isSubmitting || !firstName.trim() || !lastName.trim() || !company.trim() || !phone.trim()}
@@ -377,42 +330,6 @@ export default function ProfileStep({ onComplete, onSkip, fromInvite }: ProfileS
           </Button>
         </div>
       </form>
-
-      {/* Skip Warning Dialog */}
-      <Dialog open={showSkipWarning} onOpenChange={setShowSkipWarning}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-warning" />
-              Skip Profile Completion?
-            </DialogTitle>
-            <DialogDescription className="text-left pt-2">
-              Without a complete profile:
-            </DialogDescription>
-          </DialogHeader>
-
-          <ul className="space-y-2 text-sm text-muted-foreground list-disc list-inside pl-2">
-            <li>Your job postings will show limited recruiter info</li>
-            <li>Candidates may be less likely to respond</li>
-            <li>Some platform features may be limited</li>
-          </ul>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              variant="outline"
-              onClick={() => setShowSkipWarning(false)}
-            >
-              Complete Profile
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={handleConfirmSkip}
-            >
-              Skip for Now
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

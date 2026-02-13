@@ -27,10 +27,9 @@ export default function OnboardingPage() {
   const [, setLocation] = useLocation();
   const searchString = useSearch();
 
-  // Parse step and fromInvite from URL query params
+  // Parse step from URL query params
   const urlParams = new URLSearchParams(searchString);
   const urlStep = urlParams.get('step') as OnboardingStep | null;
-  const fromInvite = urlParams.get('fromInvite') === 'true';
 
   // Local state for current step (allows manual navigation)
   const [currentStep, setCurrentStep] = useState<OnboardingStep>('org');
@@ -50,11 +49,9 @@ export default function OnboardingPage() {
       setCurrentStep(serverStep);
 
       // Update URL to match server step if it differs (prevents confusion)
-      // Preserve fromInvite param for company pre-fill
       if (urlStep && urlStep !== serverStep) {
         const params = new URLSearchParams();
         params.set('step', serverStep);
-        if (fromInvite) params.set('fromInvite', 'true');
         setLocation(`/onboarding?${params.toString()}`, { replace: true });
       }
     }
@@ -102,10 +99,9 @@ export default function OnboardingPage() {
       if (nextStatus?.currentStep && nextStatus.currentStep !== 'complete') {
         const nextStep = nextStatus.currentStep as OnboardingStep;
         setCurrentStep(nextStep);
-        // Update URL - preserve fromInvite param
+        // Update URL to match current step.
         const params = new URLSearchParams();
         params.set('step', nextStep);
-        if (fromInvite) params.set('fromInvite', 'true');
         setLocation(`/onboarding?${params.toString()}`, { replace: true });
         return;
       }
@@ -117,10 +113,9 @@ export default function OnboardingPage() {
     const nextStep = STEP_ORDER[currentIndex + 1];
     if (nextStep) {
       setCurrentStep(nextStep);
-      // Update URL - preserve fromInvite param
+      // Update URL to match current step.
       const params = new URLSearchParams();
       params.set('step', nextStep);
-      if (fromInvite) params.set('fromInvite', 'true');
       setLocation(`/onboarding?${params.toString()}`, { replace: true });
     }
   };
@@ -216,8 +211,6 @@ export default function OnboardingPage() {
             {currentStep === 'profile' && (
               <ProfileStep
                 onComplete={() => handleStepComplete('profile')}
-                onSkip={() => handleStepComplete('profile')}
-                fromInvite={fromInvite}
               />
             )}
             {currentStep === 'plan' && (
