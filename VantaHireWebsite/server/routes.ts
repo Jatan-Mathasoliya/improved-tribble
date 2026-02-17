@@ -31,6 +31,8 @@ import { registerSubscriptionRoutes } from "./subscription.routes";
 import { registerBillingRoutes } from "./billing.routes";
 import { registerAdminSubscriptionRoutes } from "./admin-subscription.routes";
 import { registerCashfreeWebhook } from "./webhooks/cashfree.webhook";
+import { registerSignalWebhook } from "./webhooks/signal.webhook";
+import { registerSignalRoutes } from "./signal.routes";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup security middleware with environment-aware CSP
@@ -471,6 +473,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Register Cashfree webhook (payment callbacks)
   registerCashfreeWebhook(app);
+
+  // Register Signal webhook (sourcing callbacks — no CSRF, uses JWT auth)
+  registerSignalWebhook(app);
+
+  // Register Signal sourcing routes (recruiter-facing, with CSRF)
+  registerSignalRoutes(app, doubleCsrfProtection);
 
   // Register AI matching routes (resume library + fit scoring)
   registerAIRoutes(app);

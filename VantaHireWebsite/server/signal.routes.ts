@@ -1,0 +1,282 @@
+/**
+ * Signal sourcing routes — recruiter-facing endpoints for candidate discovery.
+ *
+ * POST /api/jobs/:id/find-candidates  — trigger Signal sourcing
+ * GET  /api/jobs/:id/sourcing-status  — poll run status
+ * GET  /api/jobs/:id/sourced-candidates — list sourced candidates
+ */
+
+import type { Express, Request, Response, NextFunction } from 'express';
+import { db } from './db';
+import { eq, and, desc } from 'drizzle-orm';
+import { jobs, jobSourcingRuns, jobSourcedCandidates, type JobSourcingRun, type JobSourcedCandidate } from '@shared/schema';
+import { requireRole } from './auth';
+import { requireSeat } from './auth';
+import { getUserOrganization, requireSignalTenantId } from './lib/organizationService';
+import { sourceJob } from './lib/services/signal-client';
+import {
+  CONTEXT_HASH_VERSION,
+  toDisplayBucket,
+  isTerminalStatus,
+  type ContextHashInput,
+  type SignalSourceRequest,
+  type SourcingRunStatus,
+} from './lib/services/signal-contracts';
+import crypto from 'crypto';
+
+/**
+ * Compute deterministic context hash from job fields.
+ * Uses jdDigest when available, falls back to raw fields.
+ */
+function computeContextHash(job: {
+  jdDigest: unknown;
+  jdDigestVersion: number | null;
+  location: string;
+  experienceYears: number | null;
+  educationRequirement: string | null;
+}): string {
+  const input: ContextHashInput = {
+    jdDigest: (job.jdDigest as Record<string, unknown>) ?? null,
+    jdDigestVersion: job.jdDigestVersion ?? null,
+    location: job.location,
+    experienceYears: job.experienceYears ?? null,
+    educationRequirement: job.educationRequirement ?? null,
+    contextVersion: CONTEXT_HASH_VERSION,
+  };
+
+  // Canonical JSON: sorted keys for determinism
+  const canonical = JSON.stringify(input, Object.keys(input).sort());
+  return crypto.createHash('sha256').update(canonical).digest('hex');
+}
+
+export function registerSignalRoutes(app: Express, csrfProtection: any) {
+
+  /**
+   * POST /api/jobs/:id/find-candidates
+   *
+   * Triggers a Signal sourcing run for the given job.
+   * - Fail-fast if org has no signal_tenant_id.
+   * - Context hash dedupe: returns existing run if one is active with same hash.
+   * - Creates run record, calls Signal /source, updates run status.
+   */
+  app.post('/api/jobs/:id/find-candidates', csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const jobId = parseInt(req.params.id || '', 10);
+      if (isNaN(jobId)) {
+        res.status(400).json({ error: 'Invalid job ID' });
+        return;
+      }
+
+      // Get org context
+      const orgResult = await getUserOrganization(req.user!.id);
+      if (!orgResult) {
+        res.status(403).json({ error: 'Organization required', code: 'NO_ORGANIZATION' });
+        return;
+      }
+      const org = orgResult.organization;
+
+      // Fail-fast: require Signal integration
+      const signalTenantId = await requireSignalTenantId(org.id);
+
+      // Verify job exists and belongs to org
+      const job = await db.query.jobs.findFirst({
+        where: and(eq(jobs.id, jobId), eq(jobs.organizationId, org.id)),
+      });
+      if (!job) {
+        res.status(404).json({ error: 'Job not found' });
+        return;
+      }
+
+      const externalJobId = `vanta:jobs:${job.id}`;
+      const contextHash = computeContextHash(job);
+
+      // Check for existing active (non-terminal) run with same context
+      const existingRun = await db.query.jobSourcingRuns.findFirst({
+        where: and(
+          eq(jobSourcingRuns.organizationId, org.id),
+          eq(jobSourcingRuns.externalJobId, externalJobId),
+          eq(jobSourcingRuns.contextHash, contextHash),
+        ),
+        orderBy: desc(jobSourcingRuns.createdAt),
+      });
+
+      if (existingRun && !isTerminalStatus(existingRun.status as SourcingRunStatus)) {
+        // Dedupe: return existing active run
+        res.status(200).json({
+          success: true,
+          requestId: existingRun.requestId,
+          status: existingRun.status,
+          idempotent: true,
+        });
+        return;
+      }
+
+      // Build callback URL
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+      const callbackUrl = `${baseUrl}/api/webhooks/signal/callback`;
+
+      // Create pending run record
+      const requestId = crypto.randomUUID();
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+
+      const [run] = await db.insert(jobSourcingRuns).values({
+        organizationId: org.id,
+        jobId: job.id,
+        requestId,
+        externalJobId,
+        status: 'pending',
+        contextHash,
+        callbackUrl,
+        expiresAt,
+      }).returning();
+
+      // Build Signal request
+      const sourceRequest: SignalSourceRequest = {
+        jobContext: {
+          jdDigest: job.jdDigest ? JSON.stringify(job.jdDigest) : '',
+          location: job.location,
+          experienceYears: job.experienceYears ?? undefined,
+          education: job.educationRequirement ?? undefined,
+        },
+        callbackUrl,
+      };
+
+      // Call Signal
+      try {
+        const signalResponse = await sourceJob(signalTenantId, externalJobId, sourceRequest);
+
+        // Update run with Signal's response
+        await db.update(jobSourcingRuns)
+          .set({
+            requestId: signalResponse.requestId, // Signal may assign its own ID
+            status: 'submitted',
+            submittedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(jobSourcingRuns.id, run.id));
+
+        res.status(202).json({
+          success: true,
+          requestId: signalResponse.requestId,
+          status: 'submitted',
+          idempotent: signalResponse.idempotent,
+        });
+      } catch (signalError: any) {
+        // Signal call failed — mark run as failed
+        await db.update(jobSourcingRuns)
+          .set({
+            status: 'failed',
+            errorMessage: signalError.message || 'Signal API call failed',
+            updatedAt: new Date(),
+          })
+          .where(eq(jobSourcingRuns.id, run.id));
+
+        throw signalError;
+      }
+    } catch (error: any) {
+      if (error.message?.includes('no Signal integration configured')) {
+        res.status(400).json({
+          error: 'Signal integration not configured',
+          code: 'NO_SIGNAL_TENANT',
+          message: 'Set signal_tenant_id in organization settings to enable candidate sourcing.',
+        });
+        return;
+      }
+      next(error);
+    }
+  });
+
+  /**
+   * GET /api/jobs/:id/sourcing-status
+   *
+   * Returns the latest sourcing run status for a job.
+   * Frontend polls this every 7s until terminal status or 10m timeout.
+   */
+  app.get('/api/jobs/:id/sourcing-status', requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const jobId = parseInt(req.params.id || '', 10);
+      if (isNaN(jobId)) {
+        res.status(400).json({ error: 'Invalid job ID' });
+        return;
+      }
+
+      const orgResult = await getUserOrganization(req.user!.id);
+      if (!orgResult) {
+        res.status(403).json({ error: 'Organization required', code: 'NO_ORGANIZATION' });
+        return;
+      }
+
+      const latestRun = await db.query.jobSourcingRuns.findFirst({
+        where: and(
+          eq(jobSourcingRuns.organizationId, orgResult.organization.id),
+          eq(jobSourcingRuns.jobId, jobId),
+        ),
+        orderBy: desc(jobSourcingRuns.createdAt),
+      });
+
+      if (!latestRun) {
+        res.json({ hasRun: false });
+        return;
+      }
+
+      res.json({
+        hasRun: true,
+        requestId: latestRun.requestId,
+        status: latestRun.status,
+        candidateCount: latestRun.candidateCount,
+        submittedAt: latestRun.submittedAt,
+        completedAt: latestRun.completedAt,
+        errorMessage: latestRun.status === 'failed' ? latestRun.errorMessage : undefined,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * GET /api/jobs/:id/sourced-candidates
+   *
+   * Returns sourced candidates for a job, grouped by UI display bucket.
+   * Stores raw Signal sourceType; derives talent_pool vs newly_discovered at read time.
+   */
+  app.get('/api/jobs/:id/sourced-candidates', requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const jobId = parseInt(req.params.id || '', 10);
+      if (isNaN(jobId)) {
+        res.status(400).json({ error: 'Invalid job ID' });
+        return;
+      }
+
+      const orgResult = await getUserOrganization(req.user!.id);
+      if (!orgResult) {
+        res.status(403).json({ error: 'Organization required', code: 'NO_ORGANIZATION' });
+        return;
+      }
+
+      const candidates: JobSourcedCandidate[] = await db.query.jobSourcedCandidates.findMany({
+        where: and(
+          eq(jobSourcedCandidates.organizationId, orgResult.organization.id),
+          eq(jobSourcedCandidates.jobId, jobId),
+        ),
+        orderBy: desc(jobSourcedCandidates.fitScore),
+      });
+
+      // Derive UI buckets at read time
+      const enriched = candidates.map((c: JobSourcedCandidate) => ({
+        ...c,
+        displayBucket: toDisplayBucket(c.sourceType as any),
+      }));
+
+      res.json({
+        candidates: enriched,
+        counts: {
+          total: enriched.length,
+          talentPool: enriched.filter((c: { displayBucket: string }) => c.displayBucket === 'talent_pool').length,
+          newlyDiscovered: enriched.filter((c: { displayBucket: string }) => c.displayBucket === 'newly_discovered').length,
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+}
