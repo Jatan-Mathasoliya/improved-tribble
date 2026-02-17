@@ -681,9 +681,13 @@ export const organizations = pgTable("organizations", {
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+
+  // Signal integration
+  signalTenantId: text("signal_tenant_id").unique(),
 }, (table) => ({
   slugIdx: uniqueIndex("organizations_slug_idx").on(table.slug),
   domainIdx: index("organizations_domain_idx").on(table.domain),
+  signalTenantIdx: uniqueIndex("organizations_signal_tenant_idx").on(table.signalTenantId),
 }));
 
 // Organization members
@@ -941,6 +945,67 @@ export const checkoutIntents = pgTable("checkout_intents", {
 }));
 
 // =====================================================
+// SIGNAL SOURCING TABLES
+// =====================================================
+
+// Job Sourcing Runs — tracks each Signal sourcing request per job
+export const jobSourcingRuns = pgTable("job_sourcing_runs", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  jobId: integer("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  requestId: text("request_id").notNull().unique(), // Vanta-generated UUID sent to Signal
+  externalJobId: text("external_job_id").notNull(), // e.g. "vanta:jobs:123"
+  status: text("status").notNull().default('pending'), // pending, submitted, processing, completed, failed, expired
+  contextHash: text("context_hash").notNull(), // sha256 of canonicalized job context
+  callbackUrl: text("callback_url"),
+  meta: jsonb("meta"), // Signal response metadata (candidate counts, etc.)
+  errorMessage: text("error_message"),
+  candidateCount: integer("candidate_count").default(0),
+  expiresAt: timestamp("expires_at"),
+  submittedAt: timestamp("submitted_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  orgJobIdx: index("job_sourcing_runs_org_job_idx").on(table.organizationId, table.jobId),
+  requestIdIdx: uniqueIndex("job_sourcing_runs_request_id_idx").on(table.requestId),
+  statusIdx: index("job_sourcing_runs_status_idx").on(table.status),
+  // NOTE: partial unique index for active run dedupe is in bootstrapSchema.ts
+  // (Drizzle doesn't support WHERE clause on unique indexes)
+  expiresAtIdx: index("job_sourcing_runs_expires_at_idx").on(table.expiresAt),
+}));
+
+// Job Sourced Candidates — links Signal candidates to Vanta jobs
+export const jobSourcedCandidates = pgTable("job_sourced_candidates", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  jobId: integer("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  requestId: text("request_id").notNull().references(() => jobSourcingRuns.requestId),
+  signalCandidateId: text("signal_candidate_id").notNull(), // Signal's candidate ID
+  fitScore: integer("fit_score"), // 0-100
+  fitBreakdown: jsonb("fit_breakdown"), // Signal's fit breakdown object
+  sourceType: text("source_type").notNull(), // raw Signal values: 'pool_enriched' | 'pool' | 'discovered'
+  state: text("state").notNull().default('new'), // new, shortlisted, hidden, converted
+  candidateSummary: jsonb("candidate_summary"), // Signal intelligence snapshot for display
+  convertedApplicationId: integer("converted_application_id").references(() => applications.id),
+  lastSyncedAt: timestamp("last_synced_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  // Primary dedup: one entry per job+signal candidate
+  jobCandidateIdx: uniqueIndex("job_sourced_candidates_job_candidate_idx").on(table.jobId, table.signalCandidateId),
+  orgJobIdx: index("job_sourced_candidates_org_job_idx").on(table.organizationId, table.jobId),
+  requestIdx: index("job_sourced_candidates_request_idx").on(table.requestId),
+  stateIdx: index("job_sourced_candidates_state_idx").on(table.state),
+  fitScoreIdx: index("job_sourced_candidates_fit_score_idx").on(table.fitScore),
+  sourceTypeIdx: index("job_sourced_candidates_source_type_idx").on(table.sourceType),
+}));
+
+// =====================================================
+// END SIGNAL SOURCING TABLES
+// =====================================================
+
+// =====================================================
 // END ORGANIZATION & SUBSCRIPTION TABLES
 // =====================================================
 
@@ -986,6 +1051,8 @@ export const jobsRelations = relations(jobs, ({ one, many }) => ({
     references: [jobAnalytics.jobId],
   }),
   shortlists: many(clientShortlists),
+  sourcingRuns: many(jobSourcingRuns),
+  sourcedCandidates: many(jobSourcedCandidates),
 }));
 
 export const applicationsRelations = relations(applications, ({ one, many }) => ({
@@ -1309,6 +1376,8 @@ export const organizationsRelations = relations(organizations, ({ many, one }) =
   emailTemplates: many(emailTemplates),
   pipelineStages: many(pipelineStages),
   talentPool: many(talentPool),
+  sourcingRuns: many(jobSourcingRuns),
+  sourcedCandidates: many(jobSourcedCandidates),
 }));
 
 export const organizationMembersRelations = relations(organizationMembers, ({ one }) => ({
@@ -1452,6 +1521,45 @@ export const checkoutIntentsRelations = relations(checkoutIntents, ({ one }) => 
     relationName: "claimedByUser",
   }),
 }));
+
+// =====================================================
+// SIGNAL SOURCING RELATIONS
+// =====================================================
+
+export const jobSourcingRunsRelations = relations(jobSourcingRuns, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [jobSourcingRuns.organizationId],
+    references: [organizations.id],
+  }),
+  job: one(jobs, {
+    fields: [jobSourcingRuns.jobId],
+    references: [jobs.id],
+  }),
+  candidates: many(jobSourcedCandidates),
+}));
+
+export const jobSourcedCandidatesRelations = relations(jobSourcedCandidates, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [jobSourcedCandidates.organizationId],
+    references: [organizations.id],
+  }),
+  job: one(jobs, {
+    fields: [jobSourcedCandidates.jobId],
+    references: [jobs.id],
+  }),
+  sourcingRun: one(jobSourcingRuns, {
+    fields: [jobSourcedCandidates.requestId],
+    references: [jobSourcingRuns.requestId],
+  }),
+  convertedApplication: one(applications, {
+    fields: [jobSourcedCandidates.convertedApplicationId],
+    references: [applications.id],
+  }),
+}));
+
+// =====================================================
+// END SIGNAL SOURCING RELATIONS
+// =====================================================
 
 // =====================================================
 // END ORGANIZATION & SUBSCRIPTION RELATIONS
@@ -1998,7 +2106,7 @@ export const paymentStatuses = ['pending', 'completed', 'failed', 'refunded'] as
 export type PaymentStatus = typeof paymentStatuses[number];
 
 // Webhook statuses
-export const webhookStatuses = ['processed', 'skipped', 'failed'] as const;
+export const webhookStatuses = ['processing', 'processed', 'skipped', 'failed'] as const;
 export type WebhookStatus = typeof webhookStatuses[number];
 
 // Subscription audit actions
@@ -2169,4 +2277,52 @@ export type InsertCheckoutIntent = z.infer<typeof insertCheckoutIntentSchema>;
 
 // =====================================================
 // END ORGANIZATION & SUBSCRIPTION INSERT SCHEMAS & TYPES
+// =====================================================
+
+// =====================================================
+// SIGNAL SOURCING ENUMS, INSERT SCHEMAS & TYPES
+// =====================================================
+
+// Sourcing run statuses
+export const sourcingRunStatuses = ['pending', 'submitted', 'processing', 'completed', 'failed', 'expired'] as const;
+export type SourcingRunStatus = typeof sourcingRunStatuses[number];
+
+// Raw Signal source types — store as-is, derive UI buckets at read time
+export const signalSourceTypes = ['pool_enriched', 'pool', 'discovered'] as const;
+export type SignalSourceType = typeof signalSourceTypes[number];
+
+// Recruiter-managed candidate states
+export const sourcedCandidateStates = ['new', 'shortlisted', 'hidden', 'converted'] as const;
+export type SourcedCandidateState = typeof sourcedCandidateStates[number];
+
+export const insertJobSourcingRunSchema = z.object({
+  organizationId: z.number().int().positive(),
+  jobId: z.number().int().positive(),
+  requestId: z.string().min(1).max(255),
+  externalJobId: z.string().min(1).max(255),
+  contextHash: z.string().min(1).max(128),
+  callbackUrl: z.string().url().optional(),
+  meta: z.record(z.any()).optional(),
+  expiresAt: z.date().optional(),
+});
+
+export const insertJobSourcedCandidateSchema = z.object({
+  organizationId: z.number().int().positive(),
+  jobId: z.number().int().positive(),
+  requestId: z.string().min(1).max(255),
+  signalCandidateId: z.string().min(1).max(255),
+  fitScore: z.number().int().min(0).max(100).optional(),
+  fitBreakdown: z.record(z.any()).optional(),
+  sourceType: z.enum(signalSourceTypes),
+  candidateSummary: z.record(z.any()).optional(),
+});
+
+export type JobSourcingRun = typeof jobSourcingRuns.$inferSelect;
+export type InsertJobSourcingRun = z.infer<typeof insertJobSourcingRunSchema>;
+
+export type JobSourcedCandidate = typeof jobSourcedCandidates.$inferSelect;
+export type InsertJobSourcedCandidate = z.infer<typeof insertJobSourcedCandidateSchema>;
+
+// =====================================================
+// END SIGNAL SOURCING INSERT SCHEMAS & TYPES
 // =====================================================

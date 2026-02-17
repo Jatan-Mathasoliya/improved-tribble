@@ -1312,6 +1312,70 @@ export async function ensureAtsSchema(): Promise<void> {
   console.log('  Adding paid_seats column to organization_subscriptions...');
   await db.execute(sql`ALTER TABLE organization_subscriptions ADD COLUMN IF NOT EXISTS paid_seats INTEGER NOT NULL DEFAULT 0;`);
 
+  // ============= SIGNAL SOURCING TABLES =============
+
+  // Add signal_tenant_id to organizations
+  console.log('  Adding signal_tenant_id to organizations...');
+  await db.execute(sql`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS signal_tenant_id TEXT UNIQUE;`);
+
+  // Job Sourcing Runs table
+  console.log('  Creating job_sourcing_runs table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS job_sourcing_runs (
+      id SERIAL PRIMARY KEY,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+      request_id TEXT NOT NULL UNIQUE,
+      external_job_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      context_hash TEXT NOT NULL,
+      callback_url TEXT,
+      meta JSONB,
+      error_message TEXT,
+      candidate_count INTEGER DEFAULT 0,
+      expires_at TIMESTAMP,
+      submitted_at TIMESTAMP,
+      completed_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+  `);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourcing_runs_org_job_idx ON job_sourcing_runs(organization_id, job_id);`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS job_sourcing_runs_request_id_idx ON job_sourcing_runs(request_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourcing_runs_status_idx ON job_sourcing_runs(status);`);
+  // Partial unique: only one non-terminal run per org+job+context. Terminal runs (completed/failed/expired) don't block reruns.
+  // DROP first: IF NOT EXISTS won't replace an existing non-partial index with the same name.
+  await db.execute(sql`DROP INDEX IF EXISTS job_sourcing_runs_active_idx;`);
+  await db.execute(sql`CREATE UNIQUE INDEX job_sourcing_runs_active_idx ON job_sourcing_runs(organization_id, external_job_id, context_hash) WHERE status NOT IN ('completed', 'failed', 'expired');`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourcing_runs_expires_at_idx ON job_sourcing_runs(expires_at);`);
+
+  // Job Sourced Candidates table
+  console.log('  Creating job_sourced_candidates table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS job_sourced_candidates (
+      id SERIAL PRIMARY KEY,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+      request_id TEXT NOT NULL REFERENCES job_sourcing_runs(request_id),
+      signal_candidate_id TEXT NOT NULL,
+      fit_score INTEGER,
+      fit_breakdown JSONB,
+      source_type TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'new',
+      candidate_summary JSONB,
+      converted_application_id INTEGER REFERENCES applications(id),
+      last_synced_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+  `);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS job_sourced_candidates_job_candidate_idx ON job_sourced_candidates(job_id, signal_candidate_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourced_candidates_org_job_idx ON job_sourced_candidates(organization_id, job_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourced_candidates_request_idx ON job_sourced_candidates(request_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourced_candidates_state_idx ON job_sourced_candidates(state);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourced_candidates_fit_score_idx ON job_sourced_candidates(fit_score);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourced_candidates_source_type_idx ON job_sourced_candidates(source_type);`);
+
   });
 
 
