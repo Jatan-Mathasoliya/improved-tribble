@@ -22,7 +22,7 @@ import {
   type SignalSourceRequest,
   type SourcingRunStatus,
 } from './lib/services/signal-contracts';
-import crypto from 'crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 /**
  * Compute deterministic context hash from job fields.
@@ -46,7 +46,7 @@ function computeContextHash(job: {
 
   // Canonical JSON: sorted keys for determinism
   const canonical = JSON.stringify(input, Object.keys(input).sort());
-  return crypto.createHash('sha256').update(canonical).digest('hex');
+  return createHash('sha256').update(canonical).digest('hex');
 }
 
 export function registerSignalRoutes(app: Express, csrfProtection: any) {
@@ -116,7 +116,7 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
       const callbackUrl = `${baseUrl}/api/webhooks/signal/callback`;
 
       // Create pending run record
-      const requestId = crypto.randomUUID();
+      const requestId = randomUUID();
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
       const [run] = await db.insert(jobSourcingRuns).values({

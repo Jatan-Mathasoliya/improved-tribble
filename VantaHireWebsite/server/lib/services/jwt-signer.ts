@@ -18,7 +18,7 @@
  */
 
 import { SignJWT, jwtVerify, importPKCS8, importSPKI, type JWTPayload } from 'jose';
-import crypto from 'crypto';
+import { randomUUID } from 'node:crypto';
 
 // Supported audiences for outbound JWT signing
 export type JwtAudience = 'signal' | 'activekg';
@@ -92,7 +92,7 @@ export async function signServiceJwt(
     .setAudience(audience)
     .setIssuedAt()
     .setExpirationTime(DEFAULT_EXPIRY)
-    .setJti(crypto.randomUUID());
+    .setJti(randomUUID());
 
   return jwt.sign(privateKey);
 }
