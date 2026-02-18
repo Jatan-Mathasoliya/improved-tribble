@@ -115,21 +115,6 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
       const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
       const callbackUrl = `${baseUrl}/api/webhooks/signal/callback`;
 
-      // Create pending run record
-      const requestId = randomUUID();
-      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
-
-      const [run] = await db.insert(jobSourcingRuns).values({
-        organizationId: org.id,
-        jobId: job.id,
-        requestId,
-        externalJobId,
-        status: 'pending',
-        contextHash,
-        callbackUrl,
-        expiresAt,
-      }).returning();
-
       // Build Signal request
       const sourceRequest: SignalSourceRequest = {
         jobContext: {
@@ -141,38 +126,70 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         callbackUrl,
       };
 
-      // Call Signal
+      // Call Signal first to get canonical requestId before persisting
+      let signalResponse;
       try {
-        const signalResponse = await sourceJob(signalTenantId, externalJobId, sourceRequest);
-
-        // Update run with Signal's response
-        await db.update(jobSourcingRuns)
-          .set({
-            requestId: signalResponse.requestId, // Signal may assign its own ID
-            status: 'submitted',
-            submittedAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(jobSourcingRuns.id, run.id));
-
-        res.status(202).json({
-          success: true,
-          requestId: signalResponse.requestId,
-          status: 'submitted',
-          idempotent: signalResponse.idempotent,
-        });
+        signalResponse = await sourceJob(signalTenantId, externalJobId, sourceRequest);
       } catch (signalError: any) {
-        // Signal call failed — mark run as failed
-        await db.update(jobSourcingRuns)
-          .set({
-            status: 'failed',
-            errorMessage: signalError.message || 'Signal API call failed',
-            updatedAt: new Date(),
-          })
-          .where(eq(jobSourcingRuns.id, run.id));
-
         throw signalError;
       }
+
+      // If Signal returned an existing requestId we already have, return it
+      const existingByRequestId = await db.query.jobSourcingRuns.findFirst({
+        where: eq(jobSourcingRuns.requestId, signalResponse.requestId),
+      });
+
+      if (existingByRequestId) {
+        res.status(200).json({
+          success: true,
+          requestId: existingByRequestId.requestId,
+          status: existingByRequestId.status,
+          candidateCount: existingByRequestId.candidateCount,
+          idempotent: true,
+        });
+        return;
+      }
+
+      // Persist run with Signal's canonical requestId (upsert-safe)
+      const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
+      try {
+        await db.insert(jobSourcingRuns).values({
+          organizationId: org.id,
+          jobId: job.id,
+          requestId: signalResponse.requestId,
+          externalJobId,
+          status: 'submitted',
+          contextHash,
+          callbackUrl,
+          expiresAt,
+          submittedAt: new Date(),
+        });
+      } catch (insertError: any) {
+        // 23505 = unique_violation — concurrent request already inserted this requestId
+        if (insertError.code === '23505') {
+          const conflictRun = await db.query.jobSourcingRuns.findFirst({
+            where: eq(jobSourcingRuns.requestId, signalResponse.requestId),
+          });
+          if (conflictRun) {
+            res.status(200).json({
+              success: true,
+              requestId: conflictRun.requestId,
+              status: conflictRun.status,
+              candidateCount: conflictRun.candidateCount,
+              idempotent: true,
+            });
+            return;
+          }
+        }
+        throw insertError;
+      }
+
+      res.status(202).json({
+        success: true,
+        requestId: signalResponse.requestId,
+        status: 'submitted',
+        idempotent: signalResponse.idempotent,
+      });
     } catch (error: any) {
       if (error.message?.includes('no Signal integration configured')) {
         res.status(400).json({
