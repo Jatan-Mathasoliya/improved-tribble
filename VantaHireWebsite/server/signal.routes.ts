@@ -24,6 +24,13 @@ import {
 } from './lib/services/signal-contracts';
 import { createHash, randomUUID } from 'node:crypto';
 
+function normalizeSkillList(skills: unknown): string[] {
+  if (!Array.isArray(skills)) {
+    return [];
+  }
+  return skills.filter((skill): skill is string => typeof skill === 'string');
+}
+
 /**
  * Compute deterministic context hash from job fields.
  * Uses jdDigest when available, falls back to raw fields.
@@ -31,13 +38,22 @@ import { createHash, randomUUID } from 'node:crypto';
 function computeContextHash(job: {
   jdDigest: unknown;
   jdDigestVersion: number | null;
+  title: string;
+  skills: string[] | null;
+  goodToHaveSkills: string[] | null;
   location: string;
   experienceYears: number | null;
   educationRequirement: string | null;
 }): string {
+  const skills = normalizeSkillList(job.skills);
+  const goodToHaveSkills = normalizeSkillList(job.goodToHaveSkills);
+
   const input: ContextHashInput = {
     jdDigest: (job.jdDigest as Record<string, unknown>) ?? null,
     jdDigestVersion: job.jdDigestVersion ?? null,
+    title: job.title,
+    skills,
+    goodToHaveSkills,
     location: job.location,
     experienceYears: job.experienceYears ?? null,
     educationRequirement: job.educationRequirement ?? null,
@@ -119,6 +135,9 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
       const sourceRequest: SignalSourceRequest = {
         jobContext: {
           jdDigest: job.jdDigest ? JSON.stringify(job.jdDigest) : '',
+          title: job.title,
+          skills: normalizeSkillList(job.skills),
+          goodToHaveSkills: normalizeSkillList(job.goodToHaveSkills),
           location: job.location,
           experienceYears: job.experienceYears ?? undefined,
           education: job.educationRequirement ?? undefined,

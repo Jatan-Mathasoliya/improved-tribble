@@ -35,6 +35,9 @@ export function toDisplayBucket(sourceType: SignalSourceType): SourceDisplayBuck
 export interface SignalSourceRequest {
   jobContext: {
     jdDigest: string;                       // required — Vanta's pre-analyzed JD digest (JSON-stringified)
+    title?: string;
+    skills?: string[];
+    goodToHaveSkills?: string[];
     location?: string;
     experienceYears?: number;
     education?: string;
@@ -146,6 +149,9 @@ export interface SignalCallbackPayload {
 export interface ContextHashInput {
   jdDigest: Record<string, unknown> | null;
   jdDigestVersion: number | null;
+  title: string;
+  skills: string[];
+  goodToHaveSkills: string[];
   location: string;
   experienceYears: number | null;
   educationRequirement: string | null;
@@ -153,7 +159,7 @@ export interface ContextHashInput {
 }
 
 /** Current context hash version. Bump when hash input fields change. */
-export const CONTEXT_HASH_VERSION = 1;
+export const CONTEXT_HASH_VERSION = 2;
 
 // =====================================================
 // SOURCING RUN STATUS (Vanta-side)
