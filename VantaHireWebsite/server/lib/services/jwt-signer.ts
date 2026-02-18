@@ -18,7 +18,12 @@
  */
 
 import { SignJWT, jwtVerify, importPKCS8, importSPKI, type JWTPayload } from 'jose';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, webcrypto } from 'node:crypto';
+
+// jose uses Web Crypto; ensure it exists on Node runtimes where globalThis.crypto is absent.
+if (!(globalThis as { crypto?: typeof webcrypto }).crypto) {
+  (globalThis as { crypto?: typeof webcrypto }).crypto = webcrypto;
+}
 
 // Supported audiences for outbound JWT signing
 export type JwtAudience = 'signal' | 'activekg';
