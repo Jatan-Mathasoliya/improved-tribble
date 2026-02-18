@@ -6,7 +6,8 @@
  * - GET  /api/v3/jobs/{externalJobId}/results (pepolehub/src/app/api/v3/jobs/[id]/results/route.ts)
  * - Callback: pepolehub/src/lib/sourcing/callback.ts + types.ts
  *
- * Raw Signal values are stored as-is; UI-level derivations happen at read time.
+ * Raw Signal source_type values are stored as-is; fit scores are normalized at ingest.
+ * UI-level derivations happen at read time.
  */
 
 // =====================================================

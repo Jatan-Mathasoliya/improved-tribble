@@ -33,6 +33,19 @@ import {
 const WEBHOOK_PROVIDER = 'signal';
 
 /**
+ * Normalize Signal fit score for job_sourced_candidates.fit_score (INTEGER 0-100).
+ * Signal may return either a ratio (0..1) or a percent-like number (0..100).
+ */
+function normalizeFitScoreForStorage(fitScore: number | null): number | null {
+  if (typeof fitScore !== 'number' || Number.isNaN(fitScore)) {
+    return null;
+  }
+
+  const scaled = fitScore <= 1 ? fitScore * 100 : fitScore;
+  return Math.max(0, Math.min(100, Math.round(scaled)));
+}
+
+/**
  * Atomically claim a webhook event for processing.
  * Returns true if this call acquired the lock (inserted successfully).
  * Returns false if another request already claimed it (conflict = already processing/processed).
@@ -85,6 +98,8 @@ async function upsertCandidates(
   let upserted = 0;
 
   for (const c of candidates) {
+    const fitScore = normalizeFitScoreForStorage(c.fitScore);
+
     // Build summary from Signal's candidate + snapshot data
     const summary = {
       nameHint: c.candidate.nameHint,
@@ -105,7 +120,7 @@ async function upsertCandidates(
         candidate_summary, last_synced_at, created_at, updated_at
       ) VALUES (
         ${organizationId}, ${jobId}, ${requestId}, ${c.candidateId},
-        ${c.fitScore}, ${JSON.stringify(c.fitBreakdown)}::jsonb, ${c.sourceType}, 'new',
+        ${fitScore}, ${JSON.stringify(c.fitBreakdown)}::jsonb, ${c.sourceType}, 'new',
         ${JSON.stringify(summary)}::jsonb, NOW(), NOW(), NOW()
       )
       ON CONFLICT (job_id, signal_candidate_id) DO UPDATE SET

@@ -3,6 +3,9 @@
   "version": "1.8.0",
   "type": "module",
   "license": "MIT",
+  "engines": {
+    "node": ">=20 <21"
+  },
   "scripts": {
     "dev": "NODE_ENV=development tsx --env-file=.env server/index.ts",
     "build": "vite build && npm run build:server",
