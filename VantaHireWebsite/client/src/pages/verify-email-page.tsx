@@ -5,12 +5,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import Layout from "@/components/Layout";
 
-type VerificationState = "loading" | "success" | "error" | "expired";
+type VerificationState = "ready" | "loading" | "success" | "error" | "expired";
 
 export default function VerifyEmailPage() {
   const [, params] = useRoute("/verify-email/:token");
   const searchString = useSearch();
-  const [state, setState] = useState<VerificationState>("loading");
+  const [state, setState] = useState<VerificationState>("ready");
   const [message, setMessage] = useState("");
   const [isVisible, setIsVisible] = useState(false);
 
@@ -33,37 +33,45 @@ export default function VerifyEmailPage() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Verify the token when the page loads
+  // Validate token format on load. Actual verification is user-initiated
+  // so email security bots that prefetch links don't consume tokens.
   useEffect(() => {
     if (!token) {
       setState("error");
       setMessage("Invalid verification link.");
-      return;
     }
-
-    const verifyEmail = async () => {
-      try {
-        const response = await fetch(`/api/verify-email/${token}`);
-        const data = await response.json();
-
-        if (response.ok && data.verified) {
-          setState("success");
-          setMessage(data.message || "Your email has been verified successfully!");
-        } else if (data.error?.includes("expired")) {
-          setState("expired");
-          setMessage(data.error || "Your verification link has expired.");
-        } else {
-          setState("error");
-          setMessage(data.error || "Failed to verify your email.");
-        }
-      } catch {
-        setState("error");
-        setMessage("An error occurred while verifying your email.");
-      }
-    };
-
-    verifyEmail();
   }, [token]);
+
+  const verifyEmail = async () => {
+    if (!token || state === "loading") return;
+    setState("loading");
+    setMessage("");
+
+    try {
+      const response = await fetch(`/api/verify-email/${token}`);
+      const data = await response.json();
+
+      if (response.ok && data.verified) {
+        setState("success");
+        setMessage(data.message || "Your email has been verified successfully!");
+      } else if (data.code === "VERIFICATION_TOKEN_EXPIRED") {
+        setState("expired");
+        setMessage(data.error || "Your verification link has expired.");
+      } else if (data.code === "VERIFICATION_TOKEN_INVALID") {
+        setState("error");
+        setMessage(data.error || "This verification link is invalid or already used.");
+      } else if (typeof data.error === "string" && data.error.toLowerCase().includes("expired")) {
+        setState("expired");
+        setMessage(data.error || "Your verification link has expired.");
+      } else {
+        setState("error");
+        setMessage(data.error || "Failed to verify your email.");
+      }
+    } catch {
+      setState("error");
+      setMessage("An error occurred while verifying your email.");
+    }
+  };
 
   return (
     <Layout>
@@ -76,6 +84,20 @@ export default function VerifyEmailPage() {
         <div className={`w-full max-w-md relative z-10 transition-opacity duration-1000 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
           <Card className="bg-muted/50 backdrop-blur-sm border-border">
             <CardHeader className="text-center">
+              {state === "ready" && (
+                <>
+                  <div className="flex justify-center mb-4">
+                    <div className="w-20 h-20 bg-primary/20 rounded-full flex items-center justify-center">
+                      <Mail className="h-12 w-12 text-primary" />
+                    </div>
+                  </div>
+                  <CardTitle className="text-foreground text-2xl">Confirm Email Verification</CardTitle>
+                  <CardDescription className="text-muted-foreground/50">
+                    Click the button below to verify your email address.
+                  </CardDescription>
+                </>
+              )}
+
               {state === "loading" && (
                 <>
                   <div className="flex justify-center mb-4">
@@ -132,6 +154,15 @@ export default function VerifyEmailPage() {
             </CardHeader>
 
             <CardContent className="space-y-4">
+              {state === "ready" && (
+                <Button
+                  onClick={verifyEmail}
+                  className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600"
+                >
+                  Verify Email
+                </Button>
+              )}
+
               {state === "success" && (
                 <Link href={redirectUrl}>
                   <Button className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600">

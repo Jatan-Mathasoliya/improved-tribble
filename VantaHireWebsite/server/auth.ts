@@ -33,6 +33,15 @@ function hashToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
 }
 
+function getPublicBaseUrl(): string {
+  const fromEnv =
+    process.env.BASE_URL ||
+    process.env.APP_URL ||
+    (process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN}` : null) ||
+    'http://localhost:5000';
+  return fromEnv.replace(/\/+$/, '');
+}
+
 // Rate limiter for resend verification endpoint
 const resendVerificationLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -64,7 +73,7 @@ async function sendVerificationEmail(
     return false;
   }
 
-  const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+  const baseUrl = getPublicBaseUrl();
   const verifyUrl = inviteToken
     ? `${baseUrl}/verify-email/${token}?invite=${inviteToken}`
     : `${baseUrl}/verify-email/${token}`;
@@ -672,7 +681,10 @@ export function setupAuth(app: Express) {
     try {
       const { token } = req.params;
       if (!token || token.length !== 64) {
-        res.status(400).json({ error: "Invalid verification token" });
+        res.status(400).json({
+          error: "Invalid verification token",
+          code: "VERIFICATION_TOKEN_INVALID",
+        });
         return;
       }
 
@@ -680,13 +692,19 @@ export function setupAuth(app: Express) {
       const user = await storage.getUserByVerificationToken(tokenHash);
 
       if (!user) {
-        res.status(400).json({ error: "Invalid or expired verification token" });
+        res.status(400).json({
+          error: "Invalid verification token. It may already be used or replaced by a newer link.",
+          code: "VERIFICATION_TOKEN_INVALID",
+        });
         return;
       }
 
       // Check if token has expired
       if (user.emailVerificationExpires && new Date(user.emailVerificationExpires) < new Date()) {
-        res.status(400).json({ error: "Verification token has expired. Please request a new one." });
+        res.status(400).json({
+          error: "Verification token has expired. Please request a new one.",
+          code: "VERIFICATION_TOKEN_EXPIRED",
+        });
         return;
       }
 
@@ -763,7 +781,7 @@ export function setupAuth(app: Express) {
       // Send password reset email
       const emailService = await getEmailService();
       if (emailService) {
-        const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+        const baseUrl = getPublicBaseUrl();
         const resetUrl = `${baseUrl}/reset-password/${token}`;
         const name = user.firstName || 'there';
 
