@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Monorepo wrapper for Railway to build VantaHireWebsite sub-app.",
   "engines": {
-    "node": ">=18"
+    "node": ">=20 <21"
   },
   "scripts": {
     "postinstall": "npm --prefix VantaHireWebsite ci --no-audit --no-fund || npm --prefix VantaHireWebsite install",

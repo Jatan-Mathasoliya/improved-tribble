@@ -3,7 +3,7 @@
  *
  * Used for:
  * - Signing outbound requests to Signal (audience: 'signal')
- * - Signing outbound requests to ActiveGraph (audience: 'activegraph')
+ * - Signing outbound requests to Active Graph KG (audience: 'activekg')
  * - Verifying inbound Signal callbacks (issuer: 'signal', audience: 'vantahire')
  *
  * Key configuration:
@@ -21,8 +21,9 @@ import { SignJWT, jwtVerify, importPKCS8, importSPKI, type JWTPayload } from 'jo
 import { randomUUID, webcrypto } from 'node:crypto';
 
 // jose uses Web Crypto; ensure it exists on Node runtimes where globalThis.crypto is absent.
-if (!(globalThis as { crypto?: typeof webcrypto }).crypto) {
-  (globalThis as { crypto?: typeof webcrypto }).crypto = webcrypto;
+// On Node 20+ this is a no-op (globalThis.crypto already exists).
+if (!(globalThis as unknown as { crypto?: unknown }).crypto) {
+  (globalThis as unknown as { crypto?: unknown }).crypto = webcrypto;
 }
 
 // Supported audiences for outbound JWT signing

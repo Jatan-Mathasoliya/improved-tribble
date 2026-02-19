@@ -57,6 +57,15 @@ import { normalizeStageName } from './lib/pipelineStageUtils';
 // Base URL for email links
 const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
 
+// ActiveKG tenant resolution — shared "default" tenant (Phase 1)
+const ACTIVEKG_TENANT_STRATEGY = process.env.ACTIVEKG_TENANT_STRATEGY || 'shared';
+function resolveActiveKGTenantId(organizationId: number): string {
+  if (ACTIVEKG_TENANT_STRATEGY === 'org_scoped') {
+    return `org_${organizationId}`;
+  }
+  return 'default';
+}
+
 // Validation schemas
 const updateStageSchema = z.object({
   stageId: z.number().int().positive(),
@@ -277,6 +286,28 @@ export function registerApplicationsRoutes(
         console.error('Failed to send recruiter notification:', emailError);
       }
 
+      // Enqueue ActiveKG graph sync job (non-blocking)
+      if (process.env.ACTIVEKG_SYNC_ENABLED === 'true' && application.organizationId) {
+        try {
+          const effectiveRecruiterId = job.postedBy;
+          const tenantId = resolveActiveKGTenantId(application.organizationId);
+          await storage.enqueueApplicationGraphSyncJob({
+            applicationId: application.id,
+            organizationId: application.organizationId,
+            jobId: application.jobId,
+            effectiveRecruiterId,
+            activekgTenantId: tenantId,
+          });
+        } catch (syncErr) {
+          console.error('[ACTIVEKG_SYNC] Failed to enqueue graph sync job (non-blocking):', {
+            applicationId: application.id,
+            jobId: application.jobId,
+            organizationId: application.organizationId,
+            error: syncErr instanceof Error ? syncErr.message : String(syncErr),
+          });
+        }
+      }
+
       res.status(201).json({
         success: true,
         message: 'Application submitted successfully',
@@ -458,6 +489,28 @@ export function registerApplicationsRoutes(
           source: applicationData.source,
           timestamp: new Date().toISOString()
         });
+
+        // Enqueue ActiveKG graph sync job (non-blocking)
+        if (process.env.ACTIVEKG_SYNC_ENABLED === 'true' && application.organizationId) {
+          try {
+            const effectiveRecruiterId = req.user!.id;
+            const tenantId = resolveActiveKGTenantId(application.organizationId);
+            await storage.enqueueApplicationGraphSyncJob({
+              applicationId: application.id,
+              organizationId: application.organizationId,
+              jobId: application.jobId,
+              effectiveRecruiterId,
+              activekgTenantId: tenantId,
+            });
+          } catch (syncErr) {
+            console.error('[ACTIVEKG_SYNC] Failed to enqueue graph sync job (non-blocking):', {
+              applicationId: application.id,
+              jobId: application.jobId,
+              organizationId: application.organizationId,
+              error: syncErr instanceof Error ? syncErr.message : String(syncErr),
+            });
+          }
+        }
 
         res.status(201).json({
           success: true,

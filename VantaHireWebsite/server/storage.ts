@@ -27,6 +27,7 @@ import {
   aiFitJobs,
   candidateResumes,
   organizationMembers,
+  applicationGraphSyncJobs,
   type User,
   type InsertUser,
   type ContactSubmission,
@@ -64,6 +65,8 @@ import {
   type AiFitJob,
   type InsertAiFitJob,
   type BatchFitResult,
+  type ApplicationGraphSyncJob,
+  type InsertApplicationGraphSyncJob,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, inArray, count, gte, lte, isNull } from "drizzle-orm";
@@ -314,6 +317,38 @@ export interface IStorage {
   updateCoRecruiterInvitationStatus(id: number, status: string): Promise<CoRecruiterInvitation | undefined>;
   markCoRecruiterInvitationAccepted(id: number): Promise<CoRecruiterInvitation | undefined>;
   deleteCoRecruiterInvitation(id: number): Promise<boolean>;
+
+  // ActiveKG Graph Sync operations
+  enqueueApplicationGraphSyncJob(input: {
+    applicationId: number;
+    organizationId: number | null;
+    jobId: number;
+    effectiveRecruiterId: number;
+    activekgTenantId: string;
+  }): Promise<ApplicationGraphSyncJob>;
+  claimPendingApplicationGraphSyncJobs(limit: number, now: Date): Promise<ApplicationGraphSyncJob[]>;
+  markApplicationGraphSyncJobSucceeded(id: number, parentNodeId: string, chunkCount: number): Promise<void>;
+  markApplicationGraphSyncJobRetry(id: number, error: string, nextAttemptAt: Date): Promise<void>;
+  markApplicationGraphSyncJobDeadLetter(id: number, error: string): Promise<void>;
+}
+
+function mapApplicationGraphSyncJobRow(row: any): ApplicationGraphSyncJob {
+  return {
+    id: row.id,
+    applicationId: row.application_id,
+    organizationId: row.organization_id,
+    jobId: row.job_id,
+    effectiveRecruiterId: row.effective_recruiter_id,
+    status: row.status,
+    attempts: row.attempts,
+    nextAttemptAt: row.next_attempt_at ? new Date(row.next_attempt_at) : new Date(),
+    lastError: row.last_error,
+    activekgTenantId: row.activekg_tenant_id,
+    activekgParentNodeId: row.activekg_parent_node_id,
+    chunkCount: row.chunk_count,
+    createdAt: row.created_at ? new Date(row.created_at) : new Date(),
+    updatedAt: row.updated_at ? new Date(row.updated_at) : new Date(),
+  };
 }
 
 // Database storage implementation using Drizzle ORM
@@ -3604,6 +3639,114 @@ export class DatabaseStorage implements IStorage {
       ))
       .returning();
     return updated || undefined;
+  }
+
+  // ============= ActiveKG Graph Sync Methods =============
+
+  async enqueueApplicationGraphSyncJob(input: {
+    applicationId: number;
+    organizationId: number | null;
+    jobId: number;
+    effectiveRecruiterId: number;
+    activekgTenantId: string;
+  }): Promise<ApplicationGraphSyncJob> {
+    // Upsert: if already succeeded, keep unchanged; otherwise reset to pending
+    const [job] = await db
+      .insert(applicationGraphSyncJobs)
+      .values({
+        applicationId: input.applicationId,
+        organizationId: input.organizationId,
+        jobId: input.jobId,
+        effectiveRecruiterId: input.effectiveRecruiterId,
+        activekgTenantId: input.activekgTenantId,
+        status: 'pending',
+        attempts: 0,
+        nextAttemptAt: new Date(),
+      })
+      .onConflictDoUpdate({
+        target: applicationGraphSyncJobs.applicationId,
+        set: {
+          status: sql`CASE WHEN ${applicationGraphSyncJobs.status} = 'succeeded' THEN ${applicationGraphSyncJobs.status} ELSE 'pending' END`,
+          attempts: sql`CASE WHEN ${applicationGraphSyncJobs.status} = 'succeeded' THEN ${applicationGraphSyncJobs.attempts} ELSE 0 END`,
+          lastError: sql`CASE WHEN ${applicationGraphSyncJobs.status} = 'succeeded' THEN ${applicationGraphSyncJobs.lastError} ELSE NULL END`,
+          nextAttemptAt: sql`CASE WHEN ${applicationGraphSyncJobs.status} = 'succeeded' THEN ${applicationGraphSyncJobs.nextAttemptAt} ELSE NOW() END`,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return job;
+  }
+
+  async claimPendingApplicationGraphSyncJobs(limit: number, now: Date): Promise<ApplicationGraphSyncJob[]> {
+    // Reclaim stale processing jobs that exceeded their lease
+    const leaseMs = parseInt(process.env.ACTIVEKG_SYNC_PROCESSING_LEASE_MS || '300000', 10);
+    const staleBefore = new Date(now.getTime() - leaseMs);
+
+    // Use raw SQL for FOR UPDATE SKIP LOCKED (not supported by Drizzle ORM natively)
+    const result = await db.execute(sql`
+      UPDATE application_graph_sync_jobs
+      SET status = 'processing',
+          attempts = attempts + 1,
+          updated_at = NOW()
+      WHERE id IN (
+        SELECT id FROM application_graph_sync_jobs
+        WHERE (status IN ('pending', 'failed') AND next_attempt_at <= ${now})
+           OR (status = 'processing' AND updated_at <= ${staleBefore})
+        ORDER BY next_attempt_at ASC
+        LIMIT ${limit}
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING *
+    `);
+    const rows = (result.rows ?? []) as any[];
+    return rows.map(mapApplicationGraphSyncJobRow);
+  }
+
+  async markApplicationGraphSyncJobSucceeded(
+    id: number,
+    parentNodeId: string,
+    chunkCount: number
+  ): Promise<void> {
+    await db
+      .update(applicationGraphSyncJobs)
+      .set({
+        status: 'succeeded',
+        activekgParentNodeId: parentNodeId,
+        chunkCount,
+        lastError: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(applicationGraphSyncJobs.id, id));
+  }
+
+  async markApplicationGraphSyncJobRetry(
+    id: number,
+    error: string,
+    nextAttemptAt: Date
+  ): Promise<void> {
+    await db
+      .update(applicationGraphSyncJobs)
+      .set({
+        status: 'failed',
+        lastError: error,
+        nextAttemptAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(applicationGraphSyncJobs.id, id));
+  }
+
+  async markApplicationGraphSyncJobDeadLetter(
+    id: number,
+    error: string
+  ): Promise<void> {
+    await db
+      .update(applicationGraphSyncJobs)
+      .set({
+        status: 'dead_letter',
+        lastError: error,
+        updatedAt: new Date(),
+      })
+      .where(eq(applicationGraphSyncJobs.id, id));
   }
 }
 

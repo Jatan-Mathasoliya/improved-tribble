@@ -2326,3 +2326,31 @@ export type InsertJobSourcedCandidate = z.infer<typeof insertJobSourcedCandidate
 // =====================================================
 // END SIGNAL SOURCING INSERT SCHEMAS & TYPES
 // =====================================================
+
+// =====================================================
+// ACTIVEKG GRAPH SYNC
+// =====================================================
+
+export const applicationGraphSyncJobs = pgTable("application_graph_sync_jobs", {
+  id: serial("id").primaryKey(),
+  applicationId: integer("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }).unique(),
+  organizationId: integer("organization_id").references(() => organizations.id),
+  jobId: integer("job_id").notNull().references(() => jobs.id),
+  effectiveRecruiterId: integer("effective_recruiter_id").notNull().references(() => users.id),
+  status: text("status").notNull().default("pending"), // pending, processing, succeeded, failed, dead_letter
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at").defaultNow().notNull(),
+  lastError: text("last_error"),
+  activekgTenantId: text("activekg_tenant_id").notNull(),
+  activekgParentNodeId: text("activekg_parent_node_id"),
+  chunkCount: integer("chunk_count"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  statusNextAttemptIdx: index("app_graph_sync_status_next_attempt_idx").on(table.status, table.nextAttemptAt),
+  orgIdx: index("app_graph_sync_org_idx").on(table.organizationId),
+  recruiterIdx: index("app_graph_sync_recruiter_idx").on(table.effectiveRecruiterId),
+}));
+
+export type ApplicationGraphSyncJob = typeof applicationGraphSyncJobs.$inferSelect;
+export type InsertApplicationGraphSyncJob = typeof applicationGraphSyncJobs.$inferInsert;

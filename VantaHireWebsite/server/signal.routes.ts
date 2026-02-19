@@ -19,6 +19,7 @@ import {
   toDisplayBucket,
   isTerminalStatus,
   type ContextHashInput,
+  type SignalIdentitySummary,
   type SignalSourceRequest,
   type SourcingRunStatus,
 } from './lib/services/signal-contracts';
@@ -29,6 +30,31 @@ function normalizeSkillList(skills: unknown): string[] {
     return [];
   }
   return skills.filter((skill): skill is string => typeof skill === 'string');
+}
+
+function isIdentityDisplayStatus(value: unknown): value is SignalIdentitySummary['displayStatus'] {
+  return value === 'verified' || value === 'review' || value === 'weak';
+}
+
+function readIdentitySummary(candidateSummary: unknown): SignalIdentitySummary | null {
+  if (!candidateSummary || typeof candidateSummary !== 'object') {
+    return null;
+  }
+
+  const identitySummary = (candidateSummary as { identitySummary?: unknown }).identitySummary;
+  if (!identitySummary || typeof identitySummary !== 'object') {
+    return null;
+  }
+
+  const parsed = identitySummary as { displayStatus?: unknown; platforms?: unknown };
+  if (!isIdentityDisplayStatus(parsed.displayStatus)) {
+    return null;
+  }
+  if (!Array.isArray(parsed.platforms) || parsed.platforms.some((p) => typeof p !== 'string')) {
+    return null;
+  }
+
+  return identitySummary as SignalIdentitySummary;
 }
 
 /**
@@ -300,6 +326,7 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
       // Derive UI buckets at read time
       const enriched = candidates.map((c: JobSourcedCandidate) => ({
         ...c,
+        identitySummary: readIdentitySummary(c.candidateSummary),
         displayBucket: toDisplayBucket(c.sourceType as any),
       }));
 

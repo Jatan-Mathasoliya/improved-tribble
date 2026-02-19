@@ -87,11 +87,24 @@ export interface SignalResultCandidate {
   enrichmentStatus: string;
   rank: number;
   candidate: SignalCandidateDetail;
+  identitySummary?: SignalIdentitySummary | null;
   snapshot: SignalIntelligenceSnapshot | null;
   freshness: {
     stale: boolean | null;
     lastEnrichedAt: string | null;          // ISO 8601
   };
+}
+
+export type IdentityDisplayStatus = 'verified' | 'review' | 'weak';
+
+export interface SignalIdentitySummary {
+  bestBridgeTier: number | null;
+  maxIdentityConfidence: number | null;
+  hasConfirmedIdentity: boolean;
+  needsReview: boolean;
+  platforms: string[];
+  displayStatus: IdentityDisplayStatus;
+  lastIdentityCheckAt: string | null;       // ISO 8601
 }
 
 export interface SignalCandidateDetail {

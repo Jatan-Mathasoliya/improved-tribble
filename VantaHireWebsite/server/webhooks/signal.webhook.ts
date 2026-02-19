@@ -109,6 +109,7 @@ async function upsertCandidates(
       linkedinUrl: c.candidate.linkedinUrl,
       enrichmentStatus: c.candidate.enrichmentStatus,
       confidenceScore: c.candidate.confidenceScore,
+      identitySummary: c.identitySummary ?? null,
       snapshot: c.snapshot,
       rank: c.rank,
     };
