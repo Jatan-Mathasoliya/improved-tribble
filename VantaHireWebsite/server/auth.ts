@@ -290,9 +290,19 @@ export function setupAuth(app: Express) {
 
   app.post("/api/register", async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { username, password, firstName, lastName, role = 'recruiter', invitationToken, coRecruiterInvitationToken, inviteToken } = req.body;
+      const {
+        username: usernameInput,
+        password,
+        firstName,
+        lastName,
+        role = 'recruiter',
+        invitationToken,
+        coRecruiterInvitationToken,
+        inviteToken,
+      } = req.body;
+      const username = typeof usernameInput === 'string' ? usernameInput.trim().toLowerCase() : '';
 
-      if (!username || !password) {
+      if (!username || typeof password !== 'string' || !password) {
         res.status(400).json({ error: "Email and password are required" });
         return;
       }
@@ -491,11 +501,16 @@ export function setupAuth(app: Express) {
         const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
         await storage.setVerificationToken(user.id, hash, expires);
 
-        // Send verification email (fire-and-forget, don't block registration)
-        // Pass inviteToken for organization invites to preserve it through verification flow
-        sendVerificationEmail(username, token, firstName, inviteToken).catch((err) => {
-          console.error('Failed to send verification email:', err);
-        });
+        // Pass inviteToken for organization invites to preserve it through verification flow.
+        const emailSent = await sendVerificationEmail(username, token, firstName, inviteToken);
+        if (!emailSent) {
+          res.status(201).json({
+            message: 'Registration successful, but we could not send the verification email right now. Please use "Resend Verification Email" on the login screen.',
+            requiresVerification: true,
+            emailDeliveryFailed: true,
+          });
+          return;
+        }
 
         res.status(201).json({
           message: 'Registration successful. Please check your email to verify your account.',
@@ -723,7 +738,8 @@ export function setupAuth(app: Express) {
   // Resend verification email endpoint (rate-limited)
   app.post("/api/resend-verification", resendVerificationLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { email, inviteToken } = req.body;
+      const { email: emailInput, inviteToken } = req.body;
+      const email = typeof emailInput === 'string' ? emailInput.trim().toLowerCase() : '';
       if (!email) {
         res.status(400).json({ error: "Email is required" });
         return;
@@ -741,13 +757,24 @@ export function setupAuth(app: Express) {
         return;
       }
 
+      const previousTokenHash = user.emailVerificationToken;
+      const previousExpiry = user.emailVerificationExpires ? new Date(user.emailVerificationExpires) : null;
+
       // Generate new verification token
       const { token, hash } = generateVerificationToken();
       const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
       await storage.setVerificationToken(user.id, hash, expires);
 
       // Send verification email - pass inviteToken to preserve org invite through verification
-      await sendVerificationEmail(email, token, user.firstName, inviteToken);
+      const sent = await sendVerificationEmail(email, token, user.firstName, inviteToken);
+      if (!sent) {
+        // Best effort rollback: don't strand users on an unsent token if an older valid token existed.
+        if (previousTokenHash && previousExpiry) {
+          await storage.setVerificationToken(user.id, previousTokenHash, previousExpiry);
+        }
+        res.status(503).json({ error: "Unable to send verification email right now. Please try again later." });
+        return;
+      }
 
       res.json({ message: "If an account exists with this email, a verification link has been sent." });
     } catch (error) {
@@ -758,7 +785,8 @@ export function setupAuth(app: Express) {
   // Forgot password - request password reset
   app.post("/api/forgot-password", passwordResetLimiter, async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { email } = req.body;
+      const { email: emailInput } = req.body;
+      const email = typeof emailInput === 'string' ? emailInput.trim().toLowerCase() : '';
       if (!email) {
         res.status(400).json({ error: "Email is required" });
         return;
