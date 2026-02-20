@@ -330,6 +330,11 @@ export interface IStorage {
   markApplicationGraphSyncJobSucceeded(id: number, parentNodeId: string, chunkCount: number): Promise<void>;
   markApplicationGraphSyncJobRetry(id: number, error: string, nextAttemptAt: Date): Promise<void>;
   markApplicationGraphSyncJobDeadLetter(id: number, error: string): Promise<void>;
+
+  // Semantic search / move helpers
+  getApplicationsByIdsForOrg(applicationIds: number[], organizationId: number): Promise<Application[]>;
+  findApplicationByJobAndEmail(jobId: number, email: string): Promise<Application | undefined>;
+  getJobsByIds(ids: number[]): Promise<Job[]>;
 }
 
 function mapApplicationGraphSyncJobRow(row: any): ApplicationGraphSyncJob {
@@ -3747,6 +3752,36 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date(),
       })
       .where(eq(applicationGraphSyncJobs.id, id));
+  }
+
+  // ── Semantic search / move helpers ───────────────────────────────
+
+  async getApplicationsByIdsForOrg(applicationIds: number[], organizationId: number): Promise<Application[]> {
+    if (applicationIds.length === 0) return [];
+    return db
+      .select()
+      .from(applications)
+      .where(and(
+        inArray(applications.id, applicationIds),
+        eq(applications.organizationId, organizationId),
+      ));
+  }
+
+  async findApplicationByJobAndEmail(jobId: number, email: string): Promise<Application | undefined> {
+    const [row] = await db
+      .select()
+      .from(applications)
+      .where(and(
+        eq(applications.jobId, jobId),
+        sql`LOWER(${applications.email}) = LOWER(${email})`,
+      ))
+      .limit(1);
+    return row || undefined;
+  }
+
+  async getJobsByIds(ids: number[]): Promise<Job[]> {
+    if (ids.length === 0) return [];
+    return db.select().from(jobs).where(inArray(jobs.id, ids));
   }
 }
 
