@@ -53,18 +53,10 @@ import { isQueueAvailable, enqueueSummaryBatch, removeJob, QUEUES } from './lib/
 import { randomUUID } from 'crypto';
 import type { CsrfMiddleware } from './types/routes';
 import { normalizeStageName } from './lib/pipelineStageUtils';
+import { resolveActiveKGTenantId } from './lib/activekgTenant';
 
 // Base URL for email links
 const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
-
-// ActiveKG tenant resolution — shared "default" tenant (Phase 1)
-const ACTIVEKG_TENANT_STRATEGY = process.env.ACTIVEKG_TENANT_STRATEGY || 'shared';
-function resolveActiveKGTenantId(organizationId: number): string {
-  if (ACTIVEKG_TENANT_STRATEGY === 'org_scoped') {
-    return `org_${organizationId}`;
-  }
-  return 'default';
-}
 
 // Validation schemas
 const updateStageSchema = z.object({
