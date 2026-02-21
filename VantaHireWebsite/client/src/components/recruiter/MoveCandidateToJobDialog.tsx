@@ -25,8 +25,8 @@ import { Loader2, ArrowRightLeft } from "lucide-react";
 interface SemanticCandidate {
   applicationId: number;
   name: string;
-  email: string;
-  currentJobId: number;
+  email: string | null;
+  currentJobId: number | null;
   currentJobTitle: string | null;
 }
 
@@ -87,8 +87,8 @@ export function MoveCandidateToJobDialog({
         });
       } else {
         toast({
-          title: "Candidate moved",
-          description: `${candidate!.name} was added to the selected job.`,
+          title: "Candidate added",
+          description: `${candidate!.name} was added to the selected job while keeping the current application.`,
         });
       }
       onMoveSuccess?.();
@@ -96,7 +96,7 @@ export function MoveCandidateToJobDialog({
     },
     onError: (error: Error) => {
       toast({
-        title: "Move failed",
+        title: "Add failed",
         description: error.message,
         variant: "destructive",
       });
@@ -126,11 +126,11 @@ export function MoveCandidateToJobDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ArrowRightLeft className="h-5 w-5 text-primary" />
-            Move Candidate to Job
+            Add Candidate to Job
           </DialogTitle>
           <DialogDescription>
-            Move <strong>{candidate.name}</strong> ({candidate.email}) to a
-            different job opening.
+            Add <strong>{candidate.name}</strong> ({candidate.email ?? "Email unavailable"}) to another
+            job opening without removing the current application.
             {candidate.currentJobTitle && (
               <span className="block mt-1 text-xs">
                 Currently in: {candidate.currentJobTitle}
@@ -149,7 +149,7 @@ export function MoveCandidateToJobDialog({
               </div>
             ) : availableJobs.length === 0 ? (
               <p className="text-sm text-muted-foreground py-2">
-                No other jobs available to move this candidate to.
+                No other jobs available to add this candidate to.
               </p>
             ) : (
               <Select value={targetJobId} onValueChange={setTargetJobId}>
@@ -171,7 +171,7 @@ export function MoveCandidateToJobDialog({
             <Label htmlFor="move-notes">Notes (optional)</Label>
             <Textarea
               id="move-notes"
-              placeholder="Add a note about why this candidate is being moved..."
+              placeholder="Add a note about why this candidate is being added..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               maxLength={2000}
@@ -189,7 +189,7 @@ export function MoveCandidateToJobDialog({
             disabled={!targetJobId || moveMutation.isPending}
           >
             {moveMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Move Candidate
+            Add Candidate
           </Button>
         </DialogFooter>
       </DialogContent>

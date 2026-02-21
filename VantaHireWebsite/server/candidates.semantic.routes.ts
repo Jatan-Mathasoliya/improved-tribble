@@ -10,13 +10,14 @@ import { z } from 'zod';
 import { requireRole, requireSeat } from './auth';
 import { getUserOrganization } from './lib/organizationService';
 import { storage } from './storage';
-import { resolveActiveKGTenantId } from './lib/activekgTenant';
+import { getTenantStrategy, resolveActiveKGTenantId } from './lib/activekgTenant';
 import { getSearchDefaults } from './lib/activekgSearchConfig';
 import { search as activekgSearch, type ActiveKGSearchResult } from './lib/services/activekg-client';
 import { getSignedDownloadUrl } from './gcs-storage';
 import type { CsrfMiddleware } from './types/routes';
 import { db } from './db';
-import { applicationStageHistory } from '@shared/schema';
+import { applicationStageHistory, applications, organizations, type Application } from '@shared/schema';
+import { inArray } from 'drizzle-orm';
 
 // ── Validation schemas ─────────────────────────────────────────────
 
@@ -83,6 +84,10 @@ function groupByApplication(results: ActiveKGSearchResult[]): GroupedResult[] {
   return Array.from(map.values()).sort((a, b) => b.bestScore - a.bestScore);
 }
 
+function asNonEmptyString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
+}
+
 // ── Route registration ─────────────────────────────────────────────
 
 export function registerCandidateSemanticRoutes(
@@ -98,17 +103,20 @@ export function registerCandidateSemanticRoutes(
   app.post(
     '/api/candidates/semantic-search',
     requireRole(['recruiter', 'super_admin']),
-    requireSeat(),
+    requireSeat({ allowNoOrg: true }),
     csrfProtection,
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         // ── Auth & org ─────────────────────────────────────────
         const orgResult = await getUserOrganization(req.user!.id);
-        if (!orgResult) {
+        const isSuperAdmin = req.user!.role === 'super_admin';
+        const isSuperAdminGlobalSearch = isSuperAdmin;
+
+        if (!orgResult && !isSuperAdminGlobalSearch) {
           res.status(403).json({ error: 'You must belong to an organization' });
           return;
         }
-        const orgId = orgResult.organization.id;
+        const orgId = orgResult?.organization.id;
 
         // ── Validate body ──────────────────────────────────────
         const parsed = semanticSearchSchema.safeParse(req.body);
@@ -119,7 +127,7 @@ export function registerCandidateSemanticRoutes(
         const { query, top_k, use_reranker, metadata_filters } = parsed.data;
 
         // ── Resolve config ─────────────────────────────────────
-        const tenantId = resolveActiveKGTenantId(orgId);
+        const tenantId = orgId != null ? resolveActiveKGTenantId(orgId) : 'default';
         const defaults = getSearchDefaults();
 
         // ── Check feature gate ─────────────────────────────────
@@ -129,38 +137,120 @@ export function registerCandidateSemanticRoutes(
         }
 
         // ── Call ActiveKG /search ──────────────────────────────
-        const searchResponse = await activekgSearch(tenantId, {
+        const searchPayloadBase = {
           query,
           top_k: top_k ?? defaults.topK,
           use_hybrid: defaults.mode === 'hybrid',
           use_reranker: use_reranker ?? defaults.useReranker,
-          tenant_id: tenantId,
-          metadata_filters: {
-            ...metadata_filters,
-            source: 'vantahire',
-            org_id: orgId,
-          },
-        });
+        };
+        const superAdminSearchPayload = {
+          ...searchPayloadBase,
+          top_k: 100,
+          use_reranker: false,
+        };
+
+        let activekgResults: ActiveKGSearchResult[] = [];
+        const strategy = getTenantStrategy();
+        if (isSuperAdminGlobalSearch) {
+          if (strategy === 'org_scoped') {
+            const orgRows = await db.select({ id: organizations.id }).from(organizations) as Array<{ id: number }>;
+            const tenantIds: string[] = orgRows.map((row) => resolveActiveKGTenantId(row.id));
+            // Compatibility: include shared default tenant to surface legacy indexed data.
+            tenantIds.push('default');
+            const uniqueTenantIds: string[] = Array.from(new Set(tenantIds));
+
+            if (uniqueTenantIds.length > 0) {
+              const responses = await Promise.all(
+                uniqueTenantIds.map((tenant) =>
+                  activekgSearch(tenant, {
+                    ...superAdminSearchPayload,
+                    tenant_id: tenant,
+                    ...(metadata_filters && { metadata_filters }),
+                  }),
+                ),
+              );
+              activekgResults = responses.flatMap((r) => r.results);
+            }
+          } else {
+            const response = await activekgSearch(tenantId, {
+              ...superAdminSearchPayload,
+              tenant_id: tenantId,
+              ...(metadata_filters && { metadata_filters }),
+            });
+            activekgResults = response.results;
+          }
+        } else {
+          const response = await activekgSearch(tenantId, {
+            ...searchPayloadBase,
+            tenant_id: tenantId,
+            metadata_filters: {
+              ...metadata_filters,
+              source: 'vantahire',
+              org_id: orgId,
+            },
+          });
+          activekgResults = response.results;
+
+          // Compatibility fallback for mixed deployments:
+          // if org-scoped is configured but data still exists only in shared tenant,
+          // do a second search against default and merge results.
+          if (strategy === 'org_scoped' && tenantId !== 'default' && activekgResults.length === 0) {
+            const legacyResponse = await activekgSearch('default', {
+              ...searchPayloadBase,
+              tenant_id: 'default',
+              metadata_filters: {
+                ...metadata_filters,
+                source: 'vantahire',
+                org_id: orgId,
+              },
+            });
+            activekgResults = legacyResponse.results;
+          }
+        }
 
         // ── Group by application ───────────────────────────────
-        const grouped = groupByApplication(searchResponse.results);
-        if (grouped.length === 0) {
-          res.json({ candidates: [], total: 0 });
+        const grouped = groupByApplication(activekgResults);
+        if (!isSuperAdminGlobalSearch && grouped.length === 0) {
+          res.json({
+            query,
+            count: 0,
+            results: [],
+            candidates: [],
+            total: 0,
+          });
           return;
         }
 
-        // ── Hydrate applications (org-scoped) ──────────────────
+        // ── Hydrate applications ───────────────────────────────
         const appIds = grouped.map((g) => g.applicationId);
-        const apps = await storage.getApplicationsByIdsForOrg(appIds, orgId);
+        let apps: Application[] = [];
+        if (appIds.length > 0) {
+          apps = isSuperAdminGlobalSearch
+            ? await db.select().from(applications).where(inArray(applications.id, appIds))
+            : await storage.getApplicationsByIdsForOrg(appIds, orgId!);
+        }
         const appMap = new Map(apps.map((a) => [a.id, a]));
         const jobIds = Array.from(new Set(apps.map((a) => a.jobId)));
         const jobs = await storage.getJobsByIds(jobIds);
         const jobMap = new Map(jobs.map((j) => [j.id, j]));
-        const stages = await storage.getPipelineStages(orgId);
-        const stageMap = new Map(stages.map((s) => [s.id, s]));
+        const stageMap = new Map<number, { name: string }>();
+        if (isSuperAdminGlobalSearch) {
+          const orgIds = Array.from(new Set(apps.map((a) => a.organizationId).filter((id): id is number => id != null)));
+          const stageLists = await Promise.all(orgIds.map((id) => storage.getPipelineStages(id)));
+          for (const list of stageLists) {
+            for (const stage of list) {
+              stageMap.set(stage.id, { name: stage.name });
+            }
+          }
+        } else {
+          const stages = await storage.getPipelineStages(orgId!);
+          for (const stage of stages) {
+            stageMap.set(stage.id, { name: stage.name });
+          }
+        }
 
         // ── Build response, generate signed resume URLs ────────
-        const results = [];
+        const results: Array<Record<string, unknown>> = [];
         for (const g of grouped) {
           const app = appMap.get(g.applicationId);
           if (!app) continue; // filtered out by org isolation
@@ -201,7 +291,104 @@ export function registerCandidateSemanticRoutes(
               signedUrl: signedResumeUrl,
               expiresAt,
             },
+            source: 'vantahire',
+            isExternal: false,
+            canMoveToJob: true,
+            canOpenResume: Boolean(app.resumeUrl),
           });
+        }
+
+        // For super_admin global search, include non-VantaHire/non-application hits too.
+        if (isSuperAdminGlobalSearch) {
+          const externalMap = new Map<string, {
+            bestScore: number;
+            matchedChunks: number;
+            highlights: string[];
+            sample: ActiveKGSearchResult;
+          }>();
+
+          for (const r of activekgResults) {
+            const appId = Number(r.metadata?.application_id ?? r.props?.application_id);
+            if (Number.isFinite(appId) && appId > 0 && appMap.has(appId)) {
+              continue;
+            }
+
+            const key = Number.isFinite(appId) && appId > 0 ? `app:${appId}` : `node:${r.id}`;
+            const snippet = String(r.props?.text ?? r.props?.chunk_text ?? '').slice(0, 300);
+            const existing = externalMap.get(key);
+
+            if (existing) {
+              if (r.similarity > existing.bestScore) existing.bestScore = r.similarity;
+              existing.matchedChunks += 1;
+              if (snippet && !existing.highlights.includes(snippet) && existing.highlights.length < 3) {
+                existing.highlights.push(snippet);
+              }
+            } else {
+              externalMap.set(key, {
+                bestScore: r.similarity,
+                matchedChunks: 1,
+                highlights: snippet ? [snippet] : [],
+                sample: r,
+              });
+            }
+          }
+
+          let syntheticId = -1;
+          const externalSorted = Array.from(externalMap.values()).sort((a, b) => b.bestScore - a.bestScore);
+          for (const item of externalSorted) {
+            const props = (item.sample.props ?? {}) as Record<string, unknown>;
+            const metadata = (item.sample.metadata ?? {}) as Record<string, unknown>;
+
+            const name =
+              asNonEmptyString(props.name) ??
+              asNonEmptyString(props.full_name) ??
+              asNonEmptyString(props.title) ??
+              asNonEmptyString(metadata.name) ??
+              'External Candidate';
+
+            const email =
+              asNonEmptyString(props.email) ??
+              asNonEmptyString(props.contact_email) ??
+              asNonEmptyString(metadata.email);
+
+            const phone =
+              asNonEmptyString(props.phone) ??
+              asNonEmptyString(props.mobile) ??
+              asNonEmptyString(metadata.phone);
+
+            const externalResumeUrl =
+              asNonEmptyString(props.resume_url) ??
+              asNonEmptyString(props.url) ??
+              asNonEmptyString(metadata.url);
+
+            const safeExternalResumeUrl =
+              externalResumeUrl && /^https?:\/\//i.test(externalResumeUrl)
+                ? externalResumeUrl
+                : null;
+
+            results.push({
+              applicationId: syntheticId--,
+              name,
+              email,
+              phone,
+              currentJobId: null,
+              currentJobTitle: null,
+              currentStageId: null,
+              currentStageName: null,
+              matchScore: Math.round(item.bestScore * 100),
+              matchedChunks: item.matchedChunks,
+              highlights: item.highlights,
+              resume: {
+                resumeFilename: null,
+                signedUrl: safeExternalResumeUrl,
+                expiresAt: null,
+              },
+              source: asNonEmptyString(metadata.source) ?? asNonEmptyString(props.source) ?? 'external',
+              isExternal: true,
+              canMoveToJob: false,
+              canOpenResume: Boolean(safeExternalResumeUrl),
+            });
+          }
         }
 
         // Keep both shapes for backward compatibility with in-flight clients.
@@ -298,7 +485,7 @@ export function registerCandidateSemanticRoutes(
         }
 
         if (!moveNotes) {
-          moveNotes = 'Moved from another job via semantic search';
+          moveNotes = 'Added to another job via semantic search';
         }
 
         const now = new Date();

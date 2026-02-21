@@ -146,8 +146,8 @@ export function registerApplicationsRoutes(
       // Increment apply click count for analytics (after duplicate check)
       await storage.incrementApplyClicks(jobId);
 
-      // Upload resume to Google Cloud Storage or use placeholder if not configured
-      let resumeUrl = 'placeholder-resume.pdf';
+      // Upload resume to Google Cloud Storage
+      let resumeUrl = '';
       let resumeRecordId: number | null = null;
       let resumeCountForCompletion: number | null = null;
       let extractedResumeText: string | null = null;
@@ -155,8 +155,18 @@ export function registerApplicationsRoutes(
         try {
           resumeUrl = await uploadToGCS(req.file.buffer, req.file.originalname);
         } catch (error) {
-          console.log('Google Cloud Storage not configured, using placeholder resume URL');
-          resumeUrl = `resume-${Date.now()}-${req.file.originalname}`;
+          const message = error instanceof Error ? error.message : String(error);
+          console.error('[APPLICATION_SUBMIT] Resume upload failed:', {
+            filename: req.file.originalname,
+            mimetype: req.file.mimetype,
+            size: req.file.size,
+            error: message,
+          });
+          const isValidationError = message.toLowerCase().includes('invalid file format');
+          res.status(isValidationError ? 400 : 503).json({
+            error: isValidationError ? message : 'Resume upload failed. Please try again.',
+          });
+          return;
         }
         try {
           const extraction = await extractResumeText(req.file.buffer);
@@ -386,12 +396,22 @@ export function registerApplicationsRoutes(
         }
 
         // Upload resume
-        let resumeUrl = 'placeholder-resume.pdf';
+        let resumeUrl = '';
         try {
           resumeUrl = await uploadToGCS(req.file.buffer, req.file.originalname);
         } catch (error) {
-          console.log('Google Cloud Storage not configured, using placeholder resume URL');
-          resumeUrl = `resume-${Date.now()}-${req.file.originalname}`;
+          const message = error instanceof Error ? error.message : String(error);
+          console.error('[RECRUITER_ADD] Resume upload failed:', {
+            filename: req.file.originalname,
+            mimetype: req.file.mimetype,
+            size: req.file.size,
+            error: message,
+          });
+          const isValidationError = message.toLowerCase().includes('invalid file format');
+          res.status(isValidationError ? 400 : 503).json({
+            error: isValidationError ? message : 'Resume upload failed. Please try again.',
+          });
+          return;
         }
 
         // Extract resume text for AI summary (recruiter-add has no candidateResumes record)

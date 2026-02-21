@@ -1,8 +1,7 @@
 import { useState } from "react";
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
-import { useToast } from "@/hooks/use-toast";
 import { Redirect, useLocation } from "wouter";
 import {
   Users,
@@ -47,9 +46,9 @@ interface Candidate {
 interface SemanticResult {
   applicationId: number;
   name: string;
-  email: string;
-  phone: string;
-  currentJobId: number;
+  email: string | null;
+  phone: string | null;
+  currentJobId: number | null;
   currentJobTitle: string | null;
   currentStageId: number | null;
   currentStageName: string | null;
@@ -61,6 +60,10 @@ interface SemanticResult {
     signedUrl: string | null;
     expiresAt: string | null;
   };
+  source?: string | null;
+  isExternal?: boolean;
+  canMoveToJob?: boolean;
+  canOpenResume?: boolean;
 }
 
 interface SemanticSearchResponse {
@@ -77,7 +80,6 @@ const TAB_ITEMS: SubNavItem[] = [
 
 export default function CandidatesPage() {
   const { user } = useAuth();
-  const { toast } = useToast();
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState("all");
 
@@ -109,33 +111,35 @@ export default function CandidatesPage() {
     },
   });
 
-  // ── Semantic Search mutation ────────────────────────────────────
-  const semanticSearchMutation = useMutation<SemanticSearchResponse, Error, string>({
-    mutationFn: async (query: string) => {
+  // ── Semantic Search query ───────────────────────────────────────
+  const semanticSearchQuery = useQuery<SemanticSearchResponse, Error>({
+    queryKey: ["/api/candidates/semantic-search", user.id, user.role, submittedQuery],
+    enabled: submittedQuery.trim().length > 0,
+    queryFn: async () => {
       const res = await apiRequest("POST", "/api/candidates/semantic-search", {
-        query,
+        query: submittedQuery,
         top_k: 20,
         use_reranker: true,
       });
       return res.json();
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Search failed",
-        description: error.message,
-        variant: "destructive",
-      });
     },
   });
 
   const handleSemanticSearch = () => {
     const q = semanticQuery.trim();
     if (!q) return;
+    if (q === submittedQuery) {
+      void semanticSearchQuery.refetch();
+      return;
+    }
     setSubmittedQuery(q);
-    semanticSearchMutation.mutate(q);
   };
 
   const handleOpenResume = (result: SemanticResult) => {
+    if (result.isExternal && result.resume.signedUrl) {
+      window.open(result.resume.signedUrl, "_blank", "noopener");
+      return;
+    }
     // Match kanban/job-tracking behavior: always use permission-gated resume endpoint.
     window.open(`/api/applications/${result.applicationId}/resume?download=1`, "_blank", "noopener");
   };
@@ -148,7 +152,7 @@ export default function CandidatesPage() {
   const handleMoveSuccess = () => {
     const q = submittedQuery.trim();
     if (!q) return;
-    semanticSearchMutation.mutate(q);
+    void semanticSearchQuery.refetch();
   };
 
   const formatDate = (dateString: string) => {
@@ -163,7 +167,7 @@ export default function CandidatesPage() {
     setLocation(`/applications?email=${encodeURIComponent(email)}`);
   };
 
-  const semanticResults = semanticSearchMutation.data?.results ?? [];
+  const semanticResults = semanticSearchQuery.data?.results ?? [];
 
   return (
     <Layout>
@@ -376,9 +380,9 @@ export default function CandidatesPage() {
                   </div>
                   <Button
                     onClick={handleSemanticSearch}
-                    disabled={!semanticQuery.trim() || semanticSearchMutation.isPending}
+                    disabled={!semanticQuery.trim() || semanticSearchQuery.isFetching}
                   >
-                    {semanticSearchMutation.isPending ? (
+                    {semanticSearchQuery.isFetching ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     ) : (
                       <Search className="h-4 w-4 mr-2" />
@@ -386,7 +390,7 @@ export default function CandidatesPage() {
                     Search
                   </Button>
                 </div>
-                {submittedQuery && semanticSearchMutation.isSuccess && (
+                {submittedQuery && semanticSearchQuery.isSuccess && (
                   <p className="text-sm text-muted-foreground mt-2">
                     {semanticResults.length} result{semanticResults.length !== 1 ? "s" : ""} for "{submittedQuery}"
                   </p>
@@ -395,25 +399,25 @@ export default function CandidatesPage() {
             </Card>
 
             {/* Semantic Results */}
-            {semanticSearchMutation.isPending && (
+            {semanticSearchQuery.isFetching && (
               <div className="text-center py-12">
                 <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
                 <p className="text-muted-foreground mt-4">Searching candidates...</p>
               </div>
             )}
 
-            {semanticSearchMutation.isError && (
+            {semanticSearchQuery.isError && (
               <Card className="shadow-sm">
                 <CardContent className="p-6 text-center">
                   <AlertCircle className="h-12 w-12 text-destructive/50 mx-auto mb-3" />
                   <p className="text-muted-foreground">
-                    {semanticSearchMutation.error?.message || "Search failed. Please try again."}
+                    {semanticSearchQuery.error?.message || "Search failed. Please try again."}
                   </p>
                 </CardContent>
               </Card>
             )}
 
-            {semanticSearchMutation.isSuccess && semanticResults.length === 0 && (
+            {semanticSearchQuery.isSuccess && semanticResults.length === 0 && (
               <Card className="shadow-sm">
                 <CardContent className="p-6 text-center">
                   <Search className="h-16 w-16 text-muted-foreground/50 mx-auto mb-4" />
@@ -425,7 +429,7 @@ export default function CandidatesPage() {
               </Card>
             )}
 
-            {semanticSearchMutation.isSuccess && semanticResults.length > 0 && (
+            {semanticSearchQuery.isSuccess && semanticResults.length > 0 && (
               <div className="space-y-3">
                 {semanticResults.map((result) => (
                   <Card key={result.applicationId} className="shadow-sm hover:shadow-md transition-shadow">
@@ -448,8 +452,13 @@ export default function CandidatesPage() {
                           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground mb-2">
                             <span className="flex items-center gap-1">
                               <Mail className="h-3.5 w-3.5" />
-                              {result.email}
+                              {result.email ?? "Email unavailable"}
                             </span>
+                            {result.source && (
+                              <Badge variant="secondary" className="text-xs">
+                                {result.source}
+                              </Badge>
+                            )}
                             {result.currentJobTitle && (
                               <span className="flex items-center gap-1">
                                 <Briefcase className="h-3.5 w-3.5" />
@@ -480,7 +489,7 @@ export default function CandidatesPage() {
 
                         {/* Actions */}
                         <div className="flex flex-col gap-2 shrink-0">
-                          {(result.resume.resumeFilename || result.resume.signedUrl) && (
+                          {(result.canOpenResume ?? Boolean(result.resume.resumeFilename || result.resume.signedUrl)) && (
                             <Button
                               variant="outline"
                               size="sm"
@@ -490,14 +499,16 @@ export default function CandidatesPage() {
                               Resume
                             </Button>
                           )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleMoveClick(result)}
-                          >
-                            <ArrowRightLeft className="h-4 w-4 mr-1" />
-                            Move
-                          </Button>
+                          {result.canMoveToJob !== false && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleMoveClick(result)}
+                            >
+                              <ArrowRightLeft className="h-4 w-4 mr-1" />
+                              Add to Job
+                            </Button>
+                          )}
                         </div>
                       </div>
                     </CardContent>
@@ -507,9 +518,9 @@ export default function CandidatesPage() {
             )}
 
             {/* Empty state before any search */}
-            {!semanticSearchMutation.isPending &&
-              !semanticSearchMutation.isSuccess &&
-              !semanticSearchMutation.isError && (
+            {!semanticSearchQuery.isFetching &&
+              !semanticSearchQuery.isSuccess &&
+              !semanticSearchQuery.isError && (
               <Card className="shadow-sm">
                 <CardContent className="p-12 text-center">
                   <Sparkles className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
