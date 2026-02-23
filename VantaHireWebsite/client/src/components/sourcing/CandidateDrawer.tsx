@@ -162,6 +162,12 @@ export function CandidateDrawer({
                 )}
               >
                 {c.identitySummary.displayStatus}
+                {typeof c.identitySummary.maxIdentityConfidence === "number" &&
+                  c.identitySummary.maxIdentityConfidence >= 0.5 && (
+                    <span className="ml-1 font-mono text-[10px]">
+                      {Math.round(c.identitySummary.maxIdentityConfidence * 100)}%
+                    </span>
+                  )}
               </Badge>
             )}
           </div>

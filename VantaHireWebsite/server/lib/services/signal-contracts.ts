@@ -220,6 +220,8 @@ export interface SourcedCandidateForUI {
   companyHint: string | null;
   linkedinUrl: string | null;
   enrichmentStatus: string | null;
+  confidenceScore: number | null;
+  searchSnippet: string | null;
 
   // Identity (extracted from candidateSummary.identitySummary)
   identitySummary: SignalIdentitySummary | null;
@@ -327,6 +329,8 @@ export function flattenCandidateForUI(row: {
     companyHint: safeString(cs.companyHint),
     linkedinUrl: safeString(cs.linkedinUrl),
     enrichmentStatus: safeString(cs.enrichmentStatus),
+    confidenceScore: typeof cs.confidenceScore === 'number' ? cs.confidenceScore : null,
+    searchSnippet: safeString(cs.searchSnippet),
 
     identitySummary,
     snapshot,

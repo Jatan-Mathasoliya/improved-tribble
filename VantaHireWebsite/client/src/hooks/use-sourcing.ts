@@ -22,6 +22,8 @@ export interface SourcedCandidateForUI {
   companyHint: string | null;
   linkedinUrl: string | null;
   enrichmentStatus: string | null;
+  confidenceScore: number | null;
+  searchSnippet: string | null;
   identitySummary: {
     bestBridgeTier: number | null;
     maxIdentityConfidence: number | null;
