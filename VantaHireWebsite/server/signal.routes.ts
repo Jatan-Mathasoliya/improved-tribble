@@ -8,7 +8,7 @@
 
 import type { Express, Request, Response, NextFunction } from 'express';
 import { db } from './db';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, asc } from 'drizzle-orm';
 import { jobs, jobSourcingRuns, jobSourcedCandidates, type JobSourcingRun, type JobSourcedCandidate } from '@shared/schema';
 import { requireRole } from './auth';
 import { requireSeat } from './auth';
@@ -18,12 +18,14 @@ import {
   CONTEXT_HASH_VERSION,
   toDisplayBucket,
   isTerminalStatus,
+  flattenCandidateForUI,
   type ContextHashInput,
   type SignalIdentitySummary,
   type SignalSourceRequest,
   type SourcingRunStatus,
 } from './lib/services/signal-contracts';
 import { createHash, randomUUID } from 'node:crypto';
+import { z } from 'zod';
 
 function normalizeSkillList(skills: unknown): string[] {
   if (!Array.isArray(skills)) {
@@ -320,24 +322,102 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
           eq(jobSourcedCandidates.organizationId, orgResult.organization.id),
           eq(jobSourcedCandidates.jobId, jobId),
         ),
-        orderBy: desc(jobSourcedCandidates.fitScore),
+        orderBy: [desc(jobSourcedCandidates.fitScore), asc(jobSourcedCandidates.id)],
       });
 
-      // Derive UI buckets at read time
-      const enriched = candidates.map((c: JobSourcedCandidate) => ({
-        ...c,
-        identitySummary: readIdentitySummary(c.candidateSummary),
-        displayBucket: toDisplayBucket(c.sourceType as any),
-      }));
+      // Flatten to UI shape with deterministic sort (fitScore desc, id asc)
+      const enriched = candidates.map((c: JobSourcedCandidate) => flattenCandidateForUI(c));
 
       res.json({
         candidates: enriched,
         counts: {
           total: enriched.length,
-          talentPool: enriched.filter((c: { displayBucket: string }) => c.displayBucket === 'talent_pool').length,
-          newlyDiscovered: enriched.filter((c: { displayBucket: string }) => c.displayBucket === 'newly_discovered').length,
+          talentPool: enriched.filter((c) => c.displayBucket === 'talent_pool').length,
+          newlyDiscovered: enriched.filter((c) => c.displayBucket === 'newly_discovered').length,
         },
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * PATCH /api/jobs/:id/sourced-candidates/:candidateId
+   *
+   * Update candidate state (shortlist/hide/unhide).
+   * Blocks updates while the candidate's sourcing run is still active.
+   */
+  const patchStateSchema = z.object({
+    state: z.enum(['new', 'shortlisted', 'hidden']),
+  });
+
+  app.patch('/api/jobs/:id/sourced-candidates/:candidateId', csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const jobId = parseInt(req.params.id || '', 10);
+      const candidateId = parseInt(req.params.candidateId || '', 10);
+      if (isNaN(jobId) || isNaN(candidateId)) {
+        res.status(400).json({ error: 'Invalid job ID or candidate ID' });
+        return;
+      }
+
+      const parseResult = patchStateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        res.status(400).json({ error: 'Invalid body', details: parseResult.error.flatten() });
+        return;
+      }
+      const { state: newState } = parseResult.data;
+
+      const orgResult = await getUserOrganization(req.user!.id);
+      if (!orgResult) {
+        res.status(403).json({ error: 'Organization required', code: 'NO_ORGANIZATION' });
+        return;
+      }
+
+      // Fetch candidate — verify it belongs to org + job
+      const candidate = await db.query.jobSourcedCandidates.findFirst({
+        where: and(
+          eq(jobSourcedCandidates.id, candidateId),
+          eq(jobSourcedCandidates.jobId, jobId),
+          eq(jobSourcedCandidates.organizationId, orgResult.organization.id),
+        ),
+      });
+
+      if (!candidate) {
+        res.status(404).json({ error: 'Candidate not found' });
+        return;
+      }
+
+      // Block updates while the candidate's sourcing run is still active
+      const run = await db.query.jobSourcingRuns.findFirst({
+        where: eq(jobSourcingRuns.requestId, candidate.requestId),
+      });
+      if (run && !isTerminalStatus(run.status as SourcingRunStatus)) {
+        res.status(409).json({
+          error: 'Cannot update candidate while sourcing run is still active',
+          code: 'RUN_NOT_TERMINAL',
+        });
+        return;
+      }
+
+      // Reject transition to 'converted' (separate flow)
+      const currentState = candidate.state;
+      if (currentState === 'converted') {
+        res.status(400).json({ error: 'Cannot update converted candidates' });
+        return;
+      }
+
+      if (currentState === newState) {
+        // No-op — return current state
+        res.json({ success: true, id: candidate.id, state: newState });
+        return;
+      }
+
+      await db
+        .update(jobSourcedCandidates)
+        .set({ state: newState, updatedAt: new Date() })
+        .where(eq(jobSourcedCandidates.id, candidateId));
+
+      res.json({ success: true, id: candidate.id, state: newState });
     } catch (error) {
       next(error);
     }

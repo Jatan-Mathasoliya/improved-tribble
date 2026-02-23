@@ -35,6 +35,7 @@ const ApplicationManagementPage = lazy(() => import("@/pages/application-managem
 const JobEditPage = lazy(() => import("@/pages/job-edit-page"));
 const JobPipelinePage = lazy(() => import("@/pages/job-pipeline-page"));
 const JobAnalyticsPage = lazy(() => import("@/pages/job-analytics-page"));
+const JobSourcingPage = lazy(() => import("@/pages/job-sourcing-page"));
 const CandidateDashboard = lazy(() => import("@/pages/candidate-dashboard"));
 const JobAnalyticsDashboard = lazy(() => import("@/pages/job-analytics-dashboard"));
 const RecruiterDashboard = lazy(() => import("@/pages/recruiter-dashboard"));
@@ -122,6 +123,7 @@ function Router() {
       <ProtectedRoute path="/jobs/:id/edit" component={JobEditPage} requiredRole={['recruiter', 'super_admin']} />
       <ProtectedRoute path="/jobs/:id/pipeline" component={JobPipelinePage} requiredRole={['recruiter', 'super_admin']} />
       <ProtectedRoute path="/jobs/:id/analytics" component={JobAnalyticsPage} requiredRole={['recruiter', 'super_admin']} />
+      <ProtectedRoute path="/jobs/:id/sourcing" component={JobSourcingPage} requiredRole={['recruiter', 'super_admin']} />
       <Route path="/jobs/:id" component={JobDetailsPage} />
       <ProtectedRoute path="/my-dashboard" component={CandidateDashboard} requiredRole={['candidate']} />
       <ProtectedRoute path="/recruiter-dashboard" component={RecruiterDashboard} requiredRole={['recruiter', 'super_admin']} />

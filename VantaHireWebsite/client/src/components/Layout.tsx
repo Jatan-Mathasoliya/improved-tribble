@@ -84,7 +84,7 @@ const Layout = ({ children }: LayoutProps) => {
     }
 
     // Check for job management route patterns: /jobs/:id/applications, /jobs/:id/edit, /jobs/:id/pipeline, /jobs/:id/analytics
-    if (path.match(/^\/jobs\/\d+\/(applications|edit|pipeline|analytics)/)) {
+    if (path.match(/^\/jobs\/\d+\/(applications|edit|pipeline|analytics|sourcing)/)) {
       return true;
     }
 

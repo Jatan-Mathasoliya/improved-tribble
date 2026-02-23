@@ -199,6 +199,153 @@ export function mapCallbackStatusToRunStatus(callbackStatus: SignalCallbackPaylo
 }
 
 // =====================================================
+// UI RESPONSE TYPES
+// =====================================================
+
+/** Flattened candidate shape for UI consumption. */
+export interface SourcedCandidateForUI {
+  id: number;
+  jobId: number;
+  signalCandidateId: string;
+  fitScore: number | null;
+  fitBreakdown: Record<string, unknown> | null;
+  sourceType: SignalSourceType;
+  displayBucket: SourceDisplayBucket;
+  state: 'new' | 'shortlisted' | 'hidden' | 'converted';
+
+  // Flattened from candidateSummary
+  nameHint: string | null;
+  headlineHint: string | null;
+  locationHint: string | null;
+  companyHint: string | null;
+  linkedinUrl: string | null;
+  enrichmentStatus: string | null;
+
+  // Identity (extracted from candidateSummary.identitySummary)
+  identitySummary: SignalIdentitySummary | null;
+
+  // Snapshot highlights
+  snapshot: {
+    skillsNormalized: unknown;
+    roleType: string | null;
+    seniorityBand: string | null;
+    location: string | null;
+    computedAt: string | null;
+  } | null;
+
+  // Freshness (computed at read time)
+  freshness: {
+    lastEnrichedAt: string | null;
+    lastIdentityCheckAt: string | null;
+    enrichedDaysAgo: number | null;
+    identityCheckDaysAgo: number | null;
+  };
+
+  // Legacy blob — kept for backward compatibility
+  candidateSummary: unknown;
+
+  // Metadata
+  lastSyncedAt: string | null;
+  createdAt: string | null;
+}
+
+function daysAgo(isoDate: string | null | undefined): number | null {
+  if (!isoDate) return null;
+  const d = new Date(isoDate);
+  if (isNaN(d.getTime())) return null;
+  return Math.max(0, Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24)));
+}
+
+function safeString(val: unknown): string | null {
+  return typeof val === 'string' ? val : null;
+}
+
+function extractIdentitySummary(cs: Record<string, unknown>): SignalIdentitySummary | null {
+  const is = cs.identitySummary;
+  if (!is || typeof is !== 'object') return null;
+  const parsed = is as Record<string, unknown>;
+  const displayStatus = parsed.displayStatus;
+  if (displayStatus !== 'verified' && displayStatus !== 'review' && displayStatus !== 'weak') return null;
+  const platforms = parsed.platforms;
+  if (!Array.isArray(platforms) || platforms.some((p) => typeof p !== 'string')) return null;
+  return is as SignalIdentitySummary;
+}
+
+function extractSnapshot(cs: Record<string, unknown>): SourcedCandidateForUI['snapshot'] {
+  const snap = cs.snapshot as Record<string, unknown> | undefined;
+  if (!snap || typeof snap !== 'object') return null;
+  return {
+    skillsNormalized: snap.skillsNormalized ?? null,
+    roleType: safeString(snap.roleType),
+    seniorityBand: safeString(snap.seniorityBand),
+    location: safeString(snap.location),
+    computedAt: safeString(snap.computedAt),
+  };
+}
+
+/** Map a DB row to the flat UI shape. Null-safe throughout. */
+export function flattenCandidateForUI(row: {
+  id: number;
+  jobId: number;
+  signalCandidateId: string;
+  fitScore: number | null;
+  fitBreakdown: unknown;
+  sourceType: string;
+  state: string;
+  candidateSummary: unknown;
+  lastSyncedAt: Date | string | null;
+  createdAt: Date | string | null;
+}): SourcedCandidateForUI {
+  const cs: Record<string, unknown> =
+    row.candidateSummary && typeof row.candidateSummary === 'object'
+      ? (row.candidateSummary as Record<string, unknown>)
+      : {};
+
+  const identitySummary = extractIdentitySummary(cs);
+  const snapshot = extractSnapshot(cs);
+
+  const lastEnrichedAt = safeString((cs as any)?.lastEnrichedAt) ?? safeString(snapshot?.computedAt);
+  const lastIdentityCheckAt = identitySummary?.lastIdentityCheckAt ?? null;
+
+  return {
+    id: row.id,
+    jobId: row.jobId,
+    signalCandidateId: row.signalCandidateId,
+    fitScore: row.fitScore ?? null,
+    fitBreakdown: (row.fitBreakdown && typeof row.fitBreakdown === 'object'
+      ? row.fitBreakdown as Record<string, unknown>
+      : null),
+    sourceType: (row.sourceType as SignalSourceType) || 'discovered',
+    displayBucket: toDisplayBucket((row.sourceType as SignalSourceType) || 'discovered'),
+    state: (['new', 'shortlisted', 'hidden', 'converted'].includes(row.state)
+      ? row.state
+      : 'new') as SourcedCandidateForUI['state'],
+
+    nameHint: safeString(cs.nameHint),
+    headlineHint: safeString(cs.headlineHint),
+    locationHint: safeString(cs.locationHint),
+    companyHint: safeString(cs.companyHint),
+    linkedinUrl: safeString(cs.linkedinUrl),
+    enrichmentStatus: safeString(cs.enrichmentStatus),
+
+    identitySummary,
+    snapshot,
+
+    freshness: {
+      lastEnrichedAt,
+      lastIdentityCheckAt,
+      enrichedDaysAgo: daysAgo(lastEnrichedAt),
+      identityCheckDaysAgo: daysAgo(lastIdentityCheckAt),
+    },
+
+    candidateSummary: row.candidateSummary,
+
+    lastSyncedAt: row.lastSyncedAt instanceof Date ? row.lastSyncedAt.toISOString() : (row.lastSyncedAt ?? null),
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : (row.createdAt ?? null),
+  };
+}
+
+// =====================================================
 // AUTH SCOPES (for signServiceJwt)
 // =====================================================
 
