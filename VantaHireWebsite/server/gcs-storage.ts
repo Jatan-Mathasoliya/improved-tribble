@@ -2,7 +2,6 @@ import { Storage } from '@google-cloud/storage';
 import { Request } from 'express';
 import multer from 'multer';
 import fileTypeMod from 'file-type';
-import fs from 'node:fs';
 
 // Initialize Google Cloud Storage
 let storage: Storage | null = null;
@@ -36,16 +35,12 @@ function parseServiceAccountKey(raw: string): Record<string, unknown> {
 }
 
 try {
-  const keyFilePath = process.env.GCS_SERVICE_ACCOUNT_KEY_FILE;
   const inlineKey = process.env.GCS_SERVICE_ACCOUNT_KEY;
-  if (!process.env.GCS_PROJECT_ID || !process.env.GCS_BUCKET_NAME || (!keyFilePath && !inlineKey)) {
+  if (!process.env.GCS_PROJECT_ID || !process.env.GCS_BUCKET_NAME || !inlineKey) {
     console.warn('Google Cloud Storage environment variables not set. File uploads will be disabled.');
   } else {
-    // Load service account key from file first (preferred for local/dev),
-    // then fall back to inline JSON string env.
-    const serviceAccountKey = keyFilePath
-      ? JSON.parse(fs.readFileSync(keyFilePath, 'utf-8'))
-      : parseServiceAccountKey(inlineKey!);
+    // Always load service account key from inline JSON env.
+    const serviceAccountKey = parseServiceAccountKey(inlineKey);
 
     storage = new Storage({
       projectId: process.env.GCS_PROJECT_ID,

@@ -96,6 +96,63 @@ function getResumeContentType(filename?: string | null): string {
   return 'application/octet-stream';
 }
 
+function extractEmailFromText(text: string): string | null {
+  const match = text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i);
+  return match ? match[0].toLowerCase() : null;
+}
+
+function extractNameFromText(text: string): string | null {
+  const firstLine = text
+    .replace(/\r/g, '\n')
+    .split('\n')
+    .map((line) => line.trim())
+    .find((line) => line.length > 0);
+
+  if (!firstLine) return null;
+
+  let candidate = firstLine.replace(/[•·]/g, ' ').replace(/\s+/g, ' ').trim();
+  const delimiterMatches = [
+    candidate.indexOf('|'),
+    candidate.indexOf(';'),
+    candidate.indexOf(','),
+    candidate.indexOf(' - '),
+    candidate.indexOf(' – '),
+    candidate.indexOf(' — '),
+  ].filter((idx) => idx > 0);
+  const cutAt = delimiterMatches.length > 0 ? Math.min(...delimiterMatches) : -1;
+  if (cutAt > 0) {
+    candidate = candidate.slice(0, cutAt).trim();
+  }
+
+  candidate = candidate
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/ig, ' ')
+    .replace(/\+?\d[\d\s()-]{7,}\d/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (!candidate || candidate.length < 3) return null;
+  if (!/[A-Za-z]/.test(candidate)) return null;
+
+  const words = candidate.split(' ');
+  const upper = candidate.toUpperCase();
+  const blacklist = new Set([
+    'SUMMARY',
+    'PROFILE',
+    'RESUME',
+    'CURRICULUM VITAE',
+  ]);
+  if (blacklist.has(upper)) return null;
+
+  if (words.length > 6) {
+    candidate = words.slice(0, 6).join(' ');
+  }
+  if (candidate.length > 60) {
+    candidate = candidate.slice(0, 60).trim();
+  }
+
+  return candidate;
+}
+
 function extractGsPathFromGcsId(raw: string): string | null {
   // ActiveKG GCS connector IDs commonly look like:
   // gcs:<tenant>:<bucket>/<object> or gcs:<bucket>/<object>
@@ -406,10 +463,20 @@ export function registerCandidateSemanticRoutes(
           for (const item of externalSorted) {
             const props = (item.sample.props ?? {}) as Record<string, unknown>;
             const metadata = (item.sample.metadata ?? {}) as Record<string, unknown>;
+            const textForIdentity = [
+              asNonEmptyString(props.text),
+              asNonEmptyString(props.chunk_text),
+              ...item.highlights,
+            ]
+              .filter((part): part is string => Boolean(part && part.trim().length > 0))
+              .join('\n');
+            const extractedName = extractNameFromText(textForIdentity);
+            const extractedEmail = extractEmailFromText(textForIdentity);
 
             const name =
               asNonEmptyString(props.name) ??
               asNonEmptyString(props.full_name) ??
+              extractedName ??
               asNonEmptyString(props.title) ??
               asNonEmptyString(metadata.name) ??
               'External Candidate';
@@ -417,7 +484,8 @@ export function registerCandidateSemanticRoutes(
             const email =
               asNonEmptyString(props.email) ??
               asNonEmptyString(props.contact_email) ??
-              asNonEmptyString(metadata.email);
+              asNonEmptyString(metadata.email) ??
+              extractedEmail;
 
             const phone =
               asNonEmptyString(props.phone) ??
