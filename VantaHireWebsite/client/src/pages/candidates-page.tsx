@@ -13,6 +13,8 @@ import {
   Tag,
   Sparkles,
   FileText,
+  Download,
+  ExternalLink,
   ArrowRightLeft,
   Loader2,
   AlertCircle,
@@ -33,6 +35,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface Candidate {
   email: string;
@@ -57,7 +60,9 @@ interface SemanticResult {
   highlights: string[];
   resume: {
     resumeFilename: string | null;
+    previewUrl?: string | null;
     signedUrl: string | null;
+    locator?: string | null;
     expiresAt: string | null;
   };
   source?: string | null;
@@ -92,6 +97,7 @@ export default function CandidatesPage() {
   const [submittedQuery, setSubmittedQuery] = useState("");
   const [moveCandidate, setMoveCandidate] = useState<SemanticResult | null>(null);
   const [moveDialogOpen, setMoveDialogOpen] = useState(false);
+  const [resumePreviewCandidate, setResumePreviewCandidate] = useState<SemanticResult | null>(null);
 
   if (!user || !['recruiter', 'super_admin'].includes(user.role)) {
     return <Redirect to="/auth" />;
@@ -136,12 +142,7 @@ export default function CandidatesPage() {
   };
 
   const handleOpenResume = (result: SemanticResult) => {
-    if (result.isExternal && result.resume.signedUrl) {
-      window.open(result.resume.signedUrl, "_blank", "noopener");
-      return;
-    }
-    // Match kanban/job-tracking behavior: always use permission-gated resume endpoint.
-    window.open(`/api/applications/${result.applicationId}/resume?download=1`, "_blank", "noopener");
+    setResumePreviewCandidate(result);
   };
 
   const handleMoveClick = (result: SemanticResult) => {
@@ -168,6 +169,37 @@ export default function CandidatesPage() {
   };
 
   const semanticResults = semanticSearchQuery.data?.results ?? [];
+  const externalPreviewProxyUrl = resumePreviewCandidate?.isExternal && resumePreviewCandidate?.resume.locator
+    ? `/api/candidates/external-resume?locator=${encodeURIComponent(resumePreviewCandidate.resume.locator)}&filename=${encodeURIComponent(resumePreviewCandidate.resume.resumeFilename ?? "resume.pdf")}`
+    : null;
+  const externalDownloadProxyUrl = resumePreviewCandidate?.isExternal && resumePreviewCandidate?.resume.locator
+    ? `${externalPreviewProxyUrl}&download=1`
+    : null;
+  const resumePreviewUrl = resumePreviewCandidate
+    ? (
+      resumePreviewCandidate.isExternal
+        ? (externalPreviewProxyUrl ?? resumePreviewCandidate.resume.previewUrl ?? resumePreviewCandidate.resume.signedUrl)
+        : `/api/applications/${resumePreviewCandidate.applicationId}/resume`
+    )
+    : null;
+  const resumeDownloadUrl = resumePreviewCandidate
+    ? (
+      resumePreviewCandidate.isExternal
+        ? (externalDownloadProxyUrl ?? resumePreviewCandidate.resume.signedUrl)
+        : `/api/applications/${resumePreviewCandidate.applicationId}/resume?download=1`
+    )
+    : null;
+  const resumeNameForType = (
+    resumePreviewCandidate?.resume.resumeFilename ||
+    resumePreviewUrl ||
+    ""
+  ).toLowerCase();
+  const previewIsPdf = resumeNameForType.endsWith(".pdf") || resumeNameForType.includes(".pdf");
+  const previewDisplayFilename =
+    resumePreviewCandidate?.resume.resumeFilename ||
+    "resume.pdf";
+  const cleanDisplayFilename = previewDisplayFilename.split("?")[0] || "resume.pdf";
+    "Resume";
 
   return (
     <Layout>
@@ -545,6 +577,87 @@ export default function CandidatesPage() {
           searchQuery={submittedQuery}
           onMoveSuccess={handleMoveSuccess}
         />
+
+        <Dialog
+          open={Boolean(resumePreviewCandidate)}
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) setResumePreviewCandidate(null);
+          }}
+        >
+          <DialogContent className="max-w-5xl w-[95vw] h-[90vh] max-h-[90vh] p-0 gap-0 flex flex-col">
+            <DialogHeader className="px-6 py-4 border-b border-border shrink-0">
+              <DialogTitle className="text-xl font-semibold text-foreground">
+                {resumePreviewCandidate?.name ?? "Resume Preview"}
+              </DialogTitle>
+              {resumePreviewCandidate?.email && (
+                <p className="text-sm text-muted-foreground">{resumePreviewCandidate.email}</p>
+              )}
+            </DialogHeader>
+
+            <div className="h-full flex flex-col p-4">
+              <div className="flex items-center justify-between mb-4 shrink-0">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-sm text-muted-foreground">
+                    {cleanDisplayFilename}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {previewIsPdf && resumePreviewUrl && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => window.open(resumePreviewUrl, "_blank", "noopener")}
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Open in New Tab
+                    </Button>
+                  )}
+                  {resumeDownloadUrl && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => window.open(resumeDownloadUrl, "_blank", "noopener")}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download
+                    </Button>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex-1 border border-border rounded-lg overflow-hidden bg-muted/50">
+                {resumePreviewUrl ? (
+                  previewIsPdf ? (
+                    <iframe
+                      src={`${resumePreviewUrl}#toolbar=0&navpanes=0`}
+                      className="w-full h-full"
+                      title="Resume Preview"
+                    />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                      <FileText className="h-16 w-16 text-muted-foreground/50 mb-4" />
+                      <p className="text-muted-foreground mb-4">
+                        Unable to preview this file type in browser.
+                      </p>
+                      {resumeDownloadUrl && (
+                        <Button onClick={() => window.open(resumeDownloadUrl, "_blank", "noopener")}>
+                          <Download className="h-4 w-4 mr-2" />
+                          Download to View
+                        </Button>
+                      )}
+                    </div>
+                  )
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                    <AlertCircle className="h-16 w-16 text-muted-foreground/50 mb-4" />
+                    <p className="text-muted-foreground">No resume available</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   );

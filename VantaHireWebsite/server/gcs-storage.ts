@@ -220,6 +220,40 @@ export async function getSignedDownloadUrl(
 }
 
 /**
+ * Generate signed URL for inline viewing from GCS
+ * @param gcsPath - Full GCS path (gs://bucket/path)
+ * @param expiresInMinutes - URL expiration time (default: 60 minutes)
+ * @returns Signed URL for inline read (preview)
+ */
+export async function getSignedViewUrl(
+  gcsPath: string,
+  expiresInMinutes: number = 60
+): Promise<string> {
+  if (!storage) {
+    throw new Error('Google Cloud Storage not configured');
+  }
+
+  const match = gcsPath.match(/^gs:\/\/([^/]+)\/(.+)$/);
+  if (!match) {
+    throw new Error('Invalid GCS path format');
+  }
+
+  const [, bucket, filepath] = match;
+  if (!bucket || !filepath) {
+    throw new Error('Invalid GCS path components');
+  }
+  const file = storage.bucket(bucket).file(filepath);
+
+  const [signedUrl] = await file.getSignedUrl({
+    version: 'v4',
+    action: 'read',
+    expires: Date.now() + expiresInMinutes * 60 * 1000,
+  });
+
+  return signedUrl;
+}
+
+/**
  * Download file buffer from GCS
  * @param gcsPath - Full GCS path (gs://bucket/path)
  * @returns File buffer
