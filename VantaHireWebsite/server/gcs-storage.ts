@@ -2,17 +2,50 @@ import { Storage } from '@google-cloud/storage';
 import { Request } from 'express';
 import multer from 'multer';
 import fileTypeMod from 'file-type';
+import fs from 'node:fs';
 
 // Initialize Google Cloud Storage
 let storage: Storage | null = null;
 let bucketName: string | null = null;
 
+function parseServiceAccountKey(raw: string): Record<string, unknown> {
+  // 1) direct JSON object string
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    // 2) some loaders decode to a JSON string literal first
+    if (typeof parsed === 'string') {
+      const nested = JSON.parse(parsed);
+      if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+        return nested as Record<string, unknown>;
+      }
+    }
+  } catch {
+    // continue to normalized parsing
+  }
+
+  // 3) handle over-escaped env formats like {\"type\":\"service_account\",...}
+  const normalized = raw.replace(/\\"/g, '"').replace(/\\n/g, '\n');
+  const reparsed = JSON.parse(normalized);
+  if (reparsed && typeof reparsed === 'object' && !Array.isArray(reparsed)) {
+    return reparsed as Record<string, unknown>;
+  }
+  throw new Error('Unable to parse GCS service account key');
+}
+
 try {
-  if (!process.env.GCS_PROJECT_ID || !process.env.GCS_BUCKET_NAME || !process.env.GCS_SERVICE_ACCOUNT_KEY) {
+  const keyFilePath = process.env.GCS_SERVICE_ACCOUNT_KEY_FILE;
+  const inlineKey = process.env.GCS_SERVICE_ACCOUNT_KEY;
+  if (!process.env.GCS_PROJECT_ID || !process.env.GCS_BUCKET_NAME || (!keyFilePath && !inlineKey)) {
     console.warn('Google Cloud Storage environment variables not set. File uploads will be disabled.');
   } else {
-    // Parse service account key from environment variable (JSON string)
-    const serviceAccountKey = JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY);
+    // Load service account key from file first (preferred for local/dev),
+    // then fall back to inline JSON string env.
+    const serviceAccountKey = keyFilePath
+      ? JSON.parse(fs.readFileSync(keyFilePath, 'utf-8'))
+      : parseServiceAccountKey(inlineKey!);
 
     storage = new Storage({
       projectId: process.env.GCS_PROJECT_ID,

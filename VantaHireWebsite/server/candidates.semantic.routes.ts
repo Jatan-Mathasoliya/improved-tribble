@@ -88,6 +88,32 @@ function asNonEmptyString(value: unknown): string | null {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null;
 }
 
+function extractGsPathFromGcsId(raw: string): string | null {
+  // ActiveKG GCS connector IDs commonly look like:
+  // gcs:<tenant>:<bucket>/<object> or gcs:<bucket>/<object>
+  if (!raw.startsWith('gcs:')) return null;
+  const parts = raw.split(':');
+  if (parts.length >= 3) {
+    const bucketAndObject = parts.slice(2).join(':');
+    const slashIdx = bucketAndObject.indexOf('/');
+    if (slashIdx > 0) {
+      const bucket = bucketAndObject.slice(0, slashIdx);
+      const object = bucketAndObject.slice(slashIdx + 1);
+      if (bucket && object) return `gs://${bucket}/${object}`;
+    }
+  }
+  if (parts.length === 2) {
+    const bucketAndObject = parts[1]!;
+    const slashIdx = bucketAndObject.indexOf('/');
+    if (slashIdx > 0) {
+      const bucket = bucketAndObject.slice(0, slashIdx);
+      const object = bucketAndObject.slice(slashIdx + 1);
+      if (bucket && object) return `gs://${bucket}/${object}`;
+    }
+  }
+  return null;
+}
+
 // ── Route registration ─────────────────────────────────────────────
 
 export function registerCandidateSemanticRoutes(
@@ -360,11 +386,49 @@ export function registerCandidateSemanticRoutes(
               asNonEmptyString(props.resume_url) ??
               asNonEmptyString(props.url) ??
               asNonEmptyString(metadata.url);
+            const gcsBucket =
+              asNonEmptyString(props.bucket) ??
+              asNonEmptyString(metadata.bucket);
+            const gcsObject =
+              asNonEmptyString(props.object) ??
+              asNonEmptyString(metadata.object);
+            const derivedGsUrl = gcsBucket && gcsObject ? `gs://${gcsBucket}/${gcsObject}` : null;
+            const externalResumeFilename =
+              asNonEmptyString(props.resume_filename) ??
+              asNonEmptyString(metadata.resume_filename) ??
+              asNonEmptyString(props.title) ??
+              asNonEmptyString(metadata.title);
+            const gcsFromParent =
+              extractGsPathFromGcsId(asNonEmptyString(props.parent_id) ?? '') ??
+              extractGsPathFromGcsId(asNonEmptyString(metadata.parent_id) ?? '');
+            const gcsFromExternalId =
+              extractGsPathFromGcsId(asNonEmptyString(props.external_id) ?? '') ??
+              extractGsPathFromGcsId(asNonEmptyString(metadata.external_id) ?? '');
+            const gcsFromSourceFile =
+              asNonEmptyString(props.source_file)?.startsWith('gs://')
+                ? asNonEmptyString(props.source_file)
+                : asNonEmptyString(metadata.source_file)?.startsWith('gs://')
+                  ? asNonEmptyString(metadata.source_file)
+                  : null;
 
-            const safeExternalResumeUrl =
-              externalResumeUrl && /^https?:\/\//i.test(externalResumeUrl)
-                ? externalResumeUrl
-                : null;
+            let safeExternalResumeUrl: string | null = null;
+            const candidateResumeLocator =
+              externalResumeUrl ?? derivedGsUrl ?? gcsFromParent ?? gcsFromExternalId ?? gcsFromSourceFile;
+            if (candidateResumeLocator) {
+              if (/^https?:\/\//i.test(candidateResumeLocator)) {
+                safeExternalResumeUrl = candidateResumeLocator;
+              } else if (candidateResumeLocator.startsWith('gs://')) {
+                try {
+                  safeExternalResumeUrl = await getSignedDownloadUrl(
+                    candidateResumeLocator,
+                    externalResumeFilename,
+                    defaults.signedUrlMinutes,
+                  );
+                } catch {
+                  // Non-blocking: keep null if signing fails
+                }
+              }
+            }
 
             results.push({
               applicationId: syntheticId--,
@@ -379,7 +443,7 @@ export function registerCandidateSemanticRoutes(
               matchedChunks: item.matchedChunks,
               highlights: item.highlights,
               resume: {
-                resumeFilename: null,
+                resumeFilename: externalResumeFilename,
                 signedUrl: safeExternalResumeUrl,
                 expiresAt: null,
               },
