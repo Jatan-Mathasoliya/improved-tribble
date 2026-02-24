@@ -114,6 +114,8 @@ async function upsertCandidates(
       identitySummary: c.identitySummary ?? null,
       snapshot: c.snapshot,
       rank: c.rank,
+      matchTier: c.matchTier ?? null,
+      locationMatchType: c.locationMatchType ?? null,
     };
 
     await db.execute(sql`

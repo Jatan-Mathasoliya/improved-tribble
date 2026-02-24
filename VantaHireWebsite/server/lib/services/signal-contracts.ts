@@ -86,6 +86,8 @@ export interface SignalResultCandidate {
   sourceType: string;                       // raw Signal value
   enrichmentStatus: string;
   rank: number;
+  matchTier?: CandidateMatchTier | null;    // Signal tiering: best_matches | broader_pool
+  locationMatchType?: CandidateLocationMatchType | null; // city_exact | city_alias | country_only | none
   candidate: SignalCandidateDetail;
   identitySummary?: SignalIdentitySummary | null;
   snapshot: SignalIntelligenceSnapshot | null;

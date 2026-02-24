@@ -245,25 +245,29 @@ export default function JobSourcingPage() {
 
         {(counts.total > 0 || candidatesLoading) && (
           <>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+            <div className={`grid grid-cols-1 ${grouped.tierModel !== "fallback" ? "sm:grid-cols-3" : "sm:grid-cols-1"} gap-3 mb-4`}>
               <Card>
                 <CardContent className="p-4">
                   <p className="text-xs text-muted-foreground">Total</p>
                   <p className="text-base font-semibold">{counts.total}</p>
                 </CardContent>
               </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground">Best Matches</p>
-                  <p className="text-base font-semibold">{bestMatches.length}</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground">Broader Pool</p>
-                  <p className="text-base font-semibold">{broaderPool.length}</p>
-                </CardContent>
-              </Card>
+              {grouped.tierModel !== "fallback" && (
+                <>
+                  <Card>
+                    <CardContent className="p-4">
+                      <p className="text-xs text-muted-foreground">Best Matches</p>
+                      <p className="text-base font-semibold">{bestMatches.length}</p>
+                    </CardContent>
+                  </Card>
+                  <Card>
+                    <CardContent className="p-4">
+                      <p className="text-xs text-muted-foreground">Broader Pool</p>
+                      <p className="text-base font-semibold">{broaderPool.length}</p>
+                    </CardContent>
+                  </Card>
+                </>
+              )}
             </div>
 
             {!bestMatchesOnly && broaderPool.length > 0 && (
@@ -291,6 +295,7 @@ export default function JobSourcingPage() {
                 totalCount={counts.total}
                 bestMatchesOnly={bestMatchesOnly}
                 onBestMatchesOnlyChange={handleBestMatchesOnlyChange}
+                hasTierData={grouped.tierModel !== "fallback"}
               />
             </div>
 
@@ -298,7 +303,9 @@ export default function JobSourcingPage() {
               <section>
                 <div className="flex items-center justify-between mb-2">
                   <h2 className="text-sm font-medium text-muted-foreground">
-                    {requestedLocation ? `Best Matches in ${requestedLocation}` : "Best Matches"}
+                    {grouped.tierModel === "fallback"
+                      ? "Candidates"
+                      : requestedLocation ? `Best Matches in ${requestedLocation}` : "Best Matches"}
                   </h2>
                   <Badge variant="secondary">{bestMatches.length}</Badge>
                 </div>
