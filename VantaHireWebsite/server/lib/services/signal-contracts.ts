@@ -90,9 +90,12 @@ export interface SignalResultCandidate {
   identitySummary?: SignalIdentitySummary | null;
   snapshot: SignalIntelligenceSnapshot | null;
   freshness: {
-    stale: boolean | null;
+    stale?: boolean | null;
+    staleServed?: boolean | null;           // Signal v3 name
+    snapshotAgeDays?: number | null;
     lastEnrichedAt: string | null;          // ISO 8601
   };
+  professionalValidation?: unknown;
 }
 
 export type IdentityDisplayStatus = 'verified' | 'review' | 'weak';
