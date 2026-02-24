@@ -27,10 +27,21 @@ import { getResults } from '../lib/services/signal-client';
 import {
   mapCallbackStatusToRunStatus,
   type SignalCallbackPayload,
+  type SignalResultsResponse,
   type SignalResultCandidate,
 } from '../lib/services/signal-contracts';
 
 const WEBHOOK_PROVIDER = 'signal';
+
+function readOptionalStringOrNull(
+  input: Record<string, unknown> | null | undefined,
+  key: string,
+): string | null | undefined {
+  if (!input || !(key in input)) return undefined;
+  const value = input[key];
+  if (value == null) return null;
+  return typeof value === 'string' ? value : undefined;
+}
 
 /**
  * Normalize Signal fit score for job_sourced_candidates.fit_score (INTEGER 0-100).
@@ -216,16 +227,21 @@ export function registerSignalWebhook(app: Express) {
       const runStatus = mapCallbackStatusToRunStatus(payload.status);
       let processError: string | undefined;
       let candidateCount = payload.candidateCount || 0;
+      let fetchedResults: SignalResultsResponse | null = null;
 
       // 8. If completed/partial, fetch results and upsert candidates
       if (runStatus === 'completed') {
         try {
-          const results = await getResults(
+          fetchedResults = await getResults(
             org.signalTenantId,
             run.externalJobId,
             payload.requestId,
           );
+          const results = fetchedResults;
 
+          candidateCount = Array.isArray(results.candidates)
+            ? results.candidates.length
+            : (results.resultCount ?? 0);
           if (results.candidates?.length) {
             await upsertCandidates(
               run.organizationId,
@@ -241,24 +257,55 @@ export function registerSignalWebhook(app: Express) {
         }
       }
 
-      // 9. Update run status
+      // 9. Update run status — downgrade to 'failed' if result fetch threw
+      const finalStatus = processError ? 'failed' : runStatus;
+      const finalCandidateCount = finalStatus === 'failed' ? 0 : candidateCount;
+      const runMeta = (run.meta as Record<string, unknown>) || {};
+      const resultGroupCounts = fetchedResults?.groupCounts && typeof fetchedResults.groupCounts === 'object'
+        ? fetchedResults.groupCounts as unknown as Record<string, unknown>
+        : null;
+      const resultDiagnostics = fetchedResults?.diagnostics && typeof fetchedResults.diagnostics === 'object'
+        ? fetchedResults.diagnostics as Record<string, unknown>
+        : null;
+      const groupRequestedLocation = readOptionalStringOrNull(resultGroupCounts, 'requestedLocation');
+      const diagnosticsRequestedLocation = readOptionalStringOrNull(resultDiagnostics, 'requestedLocation');
+      const requestedLocation = groupRequestedLocation !== undefined
+        ? groupRequestedLocation
+        : diagnosticsRequestedLocation;
+      const groupExpansionReason = readOptionalStringOrNull(resultGroupCounts, 'expansionReason');
+      const diagnosticsExpansionReason = readOptionalStringOrNull(resultDiagnostics, 'expansionReason');
+      const expansionReason = groupExpansionReason !== undefined
+        ? groupExpansionReason
+        : diagnosticsExpansionReason;
+
       await db.update(jobSourcingRuns)
         .set({
-          status: runStatus,
-          candidateCount,
+          status: finalStatus,
+          candidateCount: finalCandidateCount,
           completedAt: new Date(),
           errorMessage: payload.error || processError || null,
           meta: {
-            ...(run.meta as Record<string, unknown> || {}),
+            ...runMeta,
             callbackStatus: payload.status,
             enrichedCount: payload.enrichedCount,
+            ...(fetchedResults ? {
+              signalStatus: fetchedResults.status,
+              resultCount: fetchedResults.resultCount,
+              ...(fetchedResults.trackDecision ? { trackDecision: fetchedResults.trackDecision } : {}),
+              ...(fetchedResults.groupCounts ? { groupCounts: fetchedResults.groupCounts } : {}),
+              ...(fetchedResults.snapshotStats ? { snapshotStats: fetchedResults.snapshotStats } : {}),
+              ...(fetchedResults.diagnostics ? { diagnostics: fetchedResults.diagnostics } : {}),
+            } : {}),
+            ...(requestedLocation !== undefined ? { requestedLocation } : {}),
+            ...(expansionReason !== undefined ? { expansionReason } : {}),
+            ...(processError ? { errorCode: 'RESULTS_FETCH_FAILED' } : {}),
           },
           updatedAt: new Date(),
         })
         .where(eq(jobSourcingRuns.id, run.id));
 
       // 10. Finalize webhook event
-      await finalizeWebhookEvent(claims.jti, processError ? 'failed' : 'processed', processError);
+      await finalizeWebhookEvent(claims.jti, finalStatus === 'failed' ? 'failed' : 'processed', processError);
 
       res.json({ success: true });
     } catch (error: any) {

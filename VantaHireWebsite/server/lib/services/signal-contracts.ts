@@ -75,8 +75,26 @@ export interface SignalResultsResponse {
   requestedAt: string;                      // ISO 8601
   completedAt: string | null;
   resultCount: number | null;
+  diagnostics?: Record<string, unknown> | null;
+  trackDecision?: Record<string, unknown> | null;
+  groupCounts?: SignalResultsGroupCounts | null;
+  snapshotStats?: Record<string, unknown> | null;
   candidates: SignalResultCandidate[];
   error?: string;
+}
+
+export interface SignalResultsGroupCounts {
+  bestMatches: number;
+  broaderPool: number;
+  strictMatchedCount?: number;
+  expandedCount?: number;
+  expansionReason?: string | null;
+  requestedLocation?: string | null;
+  strictDemotedCount?: number;
+  locationMatchCounts?: Record<string, number> | null;
+  demotedStrictWithCityMatch?: number;
+  strictBeforeDemotion?: number;
+  selectedSnapshotTrack?: string | null;
 }
 
 export interface SignalResultCandidate {
@@ -177,7 +195,7 @@ export interface ContextHashInput {
 }
 
 /** Current context hash version. Bump when hash input fields change. */
-export const CONTEXT_HASH_VERSION = 2;
+export const CONTEXT_HASH_VERSION = 3;
 
 // =====================================================
 // SOURCING RUN STATUS (Vanta-side)

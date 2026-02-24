@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { trackEvent } from "@/lib/analytics";
 import { useParams } from "wouter";
 import Layout from "@/components/Layout";
@@ -113,7 +113,24 @@ export default function JobSourcingPage() {
   const bestMatches = grouped.bestMatches;
   const broaderPool = grouped.broaderPool;
 
-  const visibleCandidates = bestMatchesOnly ? bestMatches : [...bestMatches, ...broaderPool];
+  // Detect all-broader edge case: explicit tier data exists, but zero best matches
+  const allBroader = grouped.tierModel === "explicit" && bestMatches.length === 0 && broaderPool.length > 0;
+
+  // Auto-disable bestMatchesOnly when all candidates are broader pool
+  useEffect(() => {
+    if (allBroader && bestMatchesOnly) {
+      setBestMatchesOnly(false);
+      trackEvent("sourcing_all_broader_auto_expand", {
+        location: "job_sourcing",
+        job_id: jobId ?? 0,
+        broader_count: broaderPool.length,
+        tier_model: grouped.tierModel,
+        all_broader_mode: true,
+      });
+    }
+  }, [allBroader]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const visibleCandidates = bestMatchesOnly && !allBroader ? bestMatches : [...bestMatches, ...broaderPool];
   const handleBestMatchesOnlyChange = (checked: boolean) => {
     setBestMatchesOnly(checked);
     trackEvent("sourcing_best_matches_only_toggled", {
@@ -123,6 +140,7 @@ export default function JobSourcingPage() {
       has_broader_pool: broaderPool.length > 0,
       tier_model: grouped.tierModel,
       total_candidates: counts.total,
+      all_broader_mode: allBroader,
     });
   };
 
@@ -137,6 +155,7 @@ export default function JobSourcingPage() {
   const runStatus = status?.status;
   const isRunning = hasRun && !["completed", "failed", "expired"].includes(runStatus ?? "");
   const isFailed = runStatus === "failed";
+  const isExpired = runStatus === "expired";
   const isCompleted = runStatus === "completed";
 
   const handleCardClick = (c: SourcedCandidateForUI) => {
@@ -218,6 +237,21 @@ export default function JobSourcingPage() {
           </div>
         )}
 
+        {isExpired && (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-4 mb-4 flex items-center gap-3">
+            <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-amber-800 dark:text-amber-200">Sourcing run expired</p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                The search timed out. This can happen if results take longer than expected.
+              </p>
+            </div>
+            <Button variant="outline" size="sm" onClick={() => findCandidates()} disabled={findPending}>
+              Retry
+            </Button>
+          </div>
+        )}
+
         {!hasRun && !statusLoading && (
           <div className="flex flex-col items-center justify-center py-16 text-center">
             <div className="rounded-full bg-primary/10 p-4 mb-4">
@@ -245,14 +279,16 @@ export default function JobSourcingPage() {
 
         {(counts.total > 0 || candidatesLoading) && (
           <>
-            <div className={`grid grid-cols-1 ${grouped.tierModel !== "fallback" ? "sm:grid-cols-3" : "sm:grid-cols-1"} gap-3 mb-4`}>
+            <div className={`grid grid-cols-1 ${grouped.tierModel !== "fallback" && !allBroader ? "sm:grid-cols-3" : "sm:grid-cols-1"} gap-3 mb-4`}>
               <Card>
                 <CardContent className="p-4">
-                  <p className="text-xs text-muted-foreground">Total</p>
+                  <p className="text-xs text-muted-foreground">
+                    {allBroader ? "Broader Pool Results" : "Total"}
+                  </p>
                   <p className="text-base font-semibold">{counts.total}</p>
                 </CardContent>
               </Card>
-              {grouped.tierModel !== "fallback" && (
+              {grouped.tierModel !== "fallback" && !allBroader && (
                 <>
                   <Card>
                     <CardContent className="p-4">
@@ -270,7 +306,22 @@ export default function JobSourcingPage() {
               )}
             </div>
 
-            {!bestMatchesOnly && broaderPool.length > 0 && (
+            {allBroader && (
+              <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 p-3 mb-4">
+                <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+                  {requestedLocation
+                    ? `No strict location+quality matches found for ${requestedLocation}. Showing broader matches.`
+                    : "No strict matches found. Showing broader matches."}
+                </p>
+                {expansionReason && (
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                    Reason: {expansionReason}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {!allBroader && !bestMatchesOnly && broaderPool.length > 0 && (
               <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 mb-4">
                 <p className="text-sm text-warning-foreground font-medium">
                   {requestedLocation
@@ -296,34 +347,49 @@ export default function JobSourcingPage() {
                 bestMatchesOnly={bestMatchesOnly}
                 onBestMatchesOnlyChange={handleBestMatchesOnlyChange}
                 hasTierData={grouped.tierModel !== "fallback"}
+                allBroader={allBroader}
               />
             </div>
 
             <div className="space-y-6">
-              <section>
-                <div className="flex items-center justify-between mb-2">
-                  <h2 className="text-sm font-medium text-muted-foreground">
-                    {grouped.tierModel === "fallback"
-                      ? "Candidates"
-                      : requestedLocation ? `Best Matches in ${requestedLocation}` : "Best Matches"}
-                  </h2>
-                  <Badge variant="secondary">{bestMatches.length}</Badge>
-                </div>
-                {renderList(bestMatches)}
-              </section>
-
-              {!bestMatchesOnly && broaderPool.length > 0 && (
+              {allBroader ? (
                 <section>
-                  <button
-                    type="button"
-                    className="flex items-center gap-2 mb-2 text-sm font-medium text-muted-foreground"
-                    onClick={() => setShowBroader((v) => !v)}
-                  >
-                    {showBroader ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                    Broader Pool ({broaderPool.length})
-                  </button>
-                  {showBroader && renderList(broaderPool)}
+                  <div className="flex items-center justify-between mb-2">
+                    <h2 className="text-sm font-medium text-muted-foreground">
+                      {requestedLocation ? `Broader Matches for ${requestedLocation}` : "Broader Pool Results"}
+                    </h2>
+                    <Badge variant="secondary">{broaderPool.length}</Badge>
+                  </div>
+                  {renderList(broaderPool)}
                 </section>
+              ) : (
+                <>
+                  <section>
+                    <div className="flex items-center justify-between mb-2">
+                      <h2 className="text-sm font-medium text-muted-foreground">
+                        {grouped.tierModel === "fallback"
+                          ? "Candidates"
+                          : requestedLocation ? `Best Matches in ${requestedLocation}` : "Best Matches"}
+                      </h2>
+                      <Badge variant="secondary">{bestMatches.length}</Badge>
+                    </div>
+                    {renderList(bestMatches)}
+                  </section>
+
+                  {!bestMatchesOnly && broaderPool.length > 0 && (
+                    <section>
+                      <button
+                        type="button"
+                        className="flex items-center gap-2 mb-2 text-sm font-medium text-muted-foreground"
+                        onClick={() => setShowBroader((v) => !v)}
+                      >
+                        {showBroader ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                        Broader Pool ({broaderPool.length})
+                      </button>
+                      {showBroader && renderList(broaderPool)}
+                    </section>
+                  )}
+                </>
               )}
             </div>
           </>

@@ -59,11 +59,42 @@ function readIdentitySummary(candidateSummary: unknown): SignalIdentitySummary |
   return identitySummary as SignalIdentitySummary;
 }
 
+function readFiniteNumber(input: Record<string, unknown> | null | undefined, key: string): number | undefined {
+  if (!input) return undefined;
+  const value = input[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function readOptionalStringOrNull(input: Record<string, unknown> | null | undefined, key: string): string | null | undefined {
+  if (!input || !(key in input)) return undefined;
+  const value = input[key];
+  if (value == null) return null;
+  return typeof value === 'string' ? value : undefined;
+}
+
+/**
+ * Recursively sort object keys for deterministic JSON serialization.
+ * Arrays preserve element order; only object key order is normalized.
+ */
+export function deepSortKeys(value: unknown): unknown {
+  if (value === null || value === undefined || typeof value !== 'object') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(deepSortKeys);
+  }
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+    sorted[key] = deepSortKeys((value as Record<string, unknown>)[key]);
+  }
+  return sorted;
+}
+
 /**
  * Compute deterministic context hash from job fields.
  * Uses jdDigest when available, falls back to raw fields.
  */
-function computeContextHash(job: {
+export function computeContextHash(job: {
   jdDigest: unknown;
   jdDigestVersion: number | null;
   title: string;
@@ -88,8 +119,8 @@ function computeContextHash(job: {
     contextVersion: CONTEXT_HASH_VERSION,
   };
 
-  // Canonical JSON: sorted keys for determinism
-  const canonical = JSON.stringify(input, Object.keys(input).sort());
+  // Canonical JSON: deep-sort all keys for determinism (handles nested jdDigest)
+  const canonical = JSON.stringify(deepSortKeys(input));
   return createHash('sha256').update(canonical).digest('hex');
 }
 
@@ -210,6 +241,7 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
           callbackUrl,
           expiresAt,
           submittedAt: new Date(),
+          meta: { requestedLocation: job.location },
         });
       } catch (insertError: any) {
         // 23505 = unique_violation — concurrent request already inserted this requestId
@@ -283,6 +315,34 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         return;
       }
 
+      // Lazy expiry: mark stale non-terminal runs as expired on poll
+      const STALE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
+      if (!isTerminalStatus(latestRun.status as SourcingRunStatus)) {
+        const submittedMs = latestRun.submittedAt
+          ? new Date(latestRun.submittedAt).getTime()
+          : new Date(latestRun.createdAt).getTime();
+        const isStale = Date.now() - submittedMs > STALE_THRESHOLD_MS;
+        const isPastExpiry = latestRun.expiresAt &&
+          new Date(latestRun.expiresAt).getTime() < Date.now();
+
+        if (isStale || isPastExpiry) {
+          const expiredMsg = isPastExpiry
+            ? 'Run expired'
+            : 'Run timed out (no callback received)';
+          await db.update(jobSourcingRuns)
+            .set({
+              status: 'expired',
+              errorMessage: expiredMsg,
+              updatedAt: new Date(),
+            })
+            .where(eq(jobSourcingRuns.id, latestRun.id));
+
+          // Mutate local object so the response below reflects the new status
+          (latestRun as any).status = 'expired';
+          (latestRun as any).errorMessage = expiredMsg;
+        }
+      }
+
       res.json({
         hasRun: true,
         requestId: latestRun.requestId,
@@ -290,7 +350,8 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         candidateCount: latestRun.candidateCount,
         submittedAt: latestRun.submittedAt,
         completedAt: latestRun.completedAt,
-        errorMessage: latestRun.status === 'failed' ? latestRun.errorMessage : undefined,
+        errorMessage: latestRun.status === 'failed' || latestRun.status === 'expired'
+          ? latestRun.errorMessage : undefined,
       });
     } catch (error) {
       next(error);
@@ -349,12 +410,80 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         broaderPool = enriched.filter((c) => c.locationMatchType === 'none').length;
       }
 
+      // Look up latest run meta for diagnostics
+      const latestRunForMeta = await db.query.jobSourcingRuns.findFirst({
+        where: and(
+          eq(jobSourcingRuns.organizationId, orgResult.organization.id),
+          eq(jobSourcingRuns.jobId, jobId),
+        ),
+        orderBy: desc(jobSourcingRuns.createdAt),
+        columns: { meta: true },
+      });
+      const runMeta = (latestRunForMeta?.meta as Record<string, unknown>) ?? {};
+      const runMetaGroupCounts = runMeta.groupCounts && typeof runMeta.groupCounts === 'object'
+        ? runMeta.groupCounts as Record<string, unknown>
+        : null;
+      const resolvedBestMatches =
+        readFiniteNumber(runMetaGroupCounts, 'bestMatches') ??
+        readFiniteNumber(runMetaGroupCounts, 'strictMatchedCount') ??
+        bestMatches;
+      const resolvedBroaderPool =
+        readFiniteNumber(runMetaGroupCounts, 'broaderPool') ??
+        readFiniteNumber(runMetaGroupCounts, 'expandedCount') ??
+        broaderPool;
+      const groupExpansionReason = readOptionalStringOrNull(runMetaGroupCounts, 'expansionReason');
+      const metaExpansionReason = readOptionalStringOrNull(runMeta, 'expansionReason');
+      const resolvedExpansionReason = groupExpansionReason !== undefined
+        ? groupExpansionReason
+        : metaExpansionReason !== undefined
+          ? metaExpansionReason
+          : (resolvedBestMatches === 0 && resolvedBroaderPool > 0
+              ? 'strict_low_quality'
+              : resolvedBroaderPool > 0
+                ? 'expanded_location_results'
+                : null);
+      const groupRequestedLocation = readOptionalStringOrNull(runMetaGroupCounts, 'requestedLocation');
+      const metaRequestedLocation = readOptionalStringOrNull(runMeta, 'requestedLocation');
+      const resolvedRequestedLocation = groupRequestedLocation !== undefined
+        ? groupRequestedLocation
+        : metaRequestedLocation !== undefined
+          ? metaRequestedLocation
+          : null;
+
+      const groupCounts = {
+        bestMatches: resolvedBestMatches,
+        broaderPool: resolvedBroaderPool,
+        ...(readFiniteNumber(runMetaGroupCounts, 'strictMatchedCount') !== undefined
+          ? { strictMatchedCount: readFiniteNumber(runMetaGroupCounts, 'strictMatchedCount')! }
+          : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'expandedCount') !== undefined
+          ? { expandedCount: readFiniteNumber(runMetaGroupCounts, 'expandedCount')! }
+          : {}),
+        ...(groupExpansionReason !== undefined ? { expansionReason: groupExpansionReason } : {}),
+        ...(groupRequestedLocation !== undefined ? { requestedLocation: groupRequestedLocation } : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'strictDemotedCount') !== undefined
+          ? { strictDemotedCount: readFiniteNumber(runMetaGroupCounts, 'strictDemotedCount')! }
+          : {}),
+        ...(runMetaGroupCounts && typeof runMetaGroupCounts.locationMatchCounts === 'object' && runMetaGroupCounts.locationMatchCounts !== null
+          ? { locationMatchCounts: runMetaGroupCounts.locationMatchCounts as Record<string, number> }
+          : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'demotedStrictWithCityMatch') !== undefined
+          ? { demotedStrictWithCityMatch: readFiniteNumber(runMetaGroupCounts, 'demotedStrictWithCityMatch')! }
+          : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'strictBeforeDemotion') !== undefined
+          ? { strictBeforeDemotion: readFiniteNumber(runMetaGroupCounts, 'strictBeforeDemotion')! }
+          : {}),
+        ...(readOptionalStringOrNull(runMetaGroupCounts, 'selectedSnapshotTrack') !== undefined
+          ? { selectedSnapshotTrack: readOptionalStringOrNull(runMetaGroupCounts, 'selectedSnapshotTrack') }
+          : {}),
+      };
+
       res.json({
         candidates: enriched,
         counts,
-        groupCounts: { bestMatches, broaderPool },
-        expansionReason: broaderPool > 0 ? 'expanded_location_results' : null,
-        requestedLocation: null,
+        groupCounts,
+        expansionReason: resolvedExpansionReason,
+        requestedLocation: resolvedRequestedLocation,
       });
     } catch (error) {
       next(error);

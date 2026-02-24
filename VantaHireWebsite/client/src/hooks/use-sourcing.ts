@@ -80,6 +80,15 @@ export interface SourcedCandidatesResponse {
   groupCounts?: {
     bestMatches: number;
     broaderPool: number;
+    strictMatchedCount?: number;
+    expandedCount?: number;
+    expansionReason?: string | null;
+    requestedLocation?: string | null;
+    strictDemotedCount?: number;
+    locationMatchCounts?: Record<string, number> | null;
+    demotedStrictWithCityMatch?: number;
+    strictBeforeDemotion?: number;
+    selectedSnapshotTrack?: string | null;
   };
   expansionReason?: string | null;
   requestedLocation?: string | null;
