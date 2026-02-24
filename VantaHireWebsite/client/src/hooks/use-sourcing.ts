@@ -92,6 +92,17 @@ export interface SourcedCandidatesResponse {
   };
   expansionReason?: string | null;
   requestedLocation?: string | null;
+  discoverySummary?: {
+    mode: string;
+    strictQueriesExecuted: number;
+    fallbackQueriesExecuted: number;
+    queriesExecuted: number;
+    strictYield: number;
+    fallbackYield: number;
+    stoppedReason?: string | null;
+    providerUsage?: Record<string, number> | null;
+    groqUsed?: boolean;
+  } | null;
 }
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "expired"]);

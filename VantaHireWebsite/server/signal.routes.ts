@@ -420,6 +420,12 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         columns: { meta: true },
       });
       const runMeta = (latestRunForMeta?.meta as Record<string, unknown>) ?? {};
+      const runDiagnostics = runMeta.diagnostics && typeof runMeta.diagnostics === 'object'
+        ? runMeta.diagnostics as Record<string, unknown>
+        : null;
+      const runDiscoveryTelemetry = runDiagnostics?.discoveryTelemetry && typeof runDiagnostics.discoveryTelemetry === 'object'
+        ? runDiagnostics.discoveryTelemetry as Record<string, unknown>
+        : null;
       const runMetaGroupCounts = runMeta.groupCounts && typeof runMeta.groupCounts === 'object'
         ? runMeta.groupCounts as Record<string, unknown>
         : null;
@@ -477,6 +483,26 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
           ? { selectedSnapshotTrack: readOptionalStringOrNull(runMetaGroupCounts, 'selectedSnapshotTrack') }
           : {}),
       };
+      const strictExecuted = readFiniteNumber(runDiscoveryTelemetry, 'strictQueriesExecuted');
+      const fallbackExecuted = readFiniteNumber(runDiscoveryTelemetry, 'fallbackQueriesExecuted');
+      const providerUsage = runDiscoveryTelemetry?.providerUsage && typeof runDiscoveryTelemetry.providerUsage === 'object'
+        ? runDiscoveryTelemetry.providerUsage as Record<string, number>
+        : null;
+      const discoverySummary = runDiscoveryTelemetry
+        ? {
+            mode: readOptionalStringOrNull(runDiscoveryTelemetry, 'mode') ?? 'deterministic',
+            strictQueriesExecuted: strictExecuted ?? 0,
+            fallbackQueriesExecuted: fallbackExecuted ?? 0,
+            queriesExecuted: (strictExecuted ?? 0) + (fallbackExecuted ?? 0),
+            strictYield: readFiniteNumber(runDiscoveryTelemetry, 'strictYield') ?? 0,
+            fallbackYield: readFiniteNumber(runDiscoveryTelemetry, 'fallbackYield') ?? 0,
+            stoppedReason: readOptionalStringOrNull(runDiscoveryTelemetry, 'stoppedReason'),
+            providerUsage,
+            groqUsed: runDiscoveryTelemetry.groq && typeof runDiscoveryTelemetry.groq === 'object'
+              ? Boolean((runDiscoveryTelemetry.groq as Record<string, unknown>).used)
+              : false,
+          }
+        : null;
 
       res.json({
         candidates: enriched,
@@ -484,6 +510,7 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         groupCounts,
         expansionReason: resolvedExpansionReason,
         requestedLocation: resolvedRequestedLocation,
+        discoverySummary,
       });
     } catch (error) {
       next(error);
