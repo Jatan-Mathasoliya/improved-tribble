@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
@@ -10,22 +11,22 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { cn } from "@/lib/utils";
+import { SlidersHorizontal } from "lucide-react";
 
 export interface SourcingFilterState {
-  identityStatus: string[];
+  identityStatus: "all" | "verified" | "review" | "weak";
   enrichedOnly: boolean;
   location: string;
   seniority: string;
-  candidateState: string[];
+  candidateState: "all" | "new" | "shortlisted" | "hidden";
 }
 
 export const defaultFilters: SourcingFilterState = {
-  identityStatus: [],
+  identityStatus: "all",
   enrichedOnly: false,
   location: "",
   seniority: "all",
-  candidateState: [],
+  candidateState: "all",
 };
 
 interface SourcingFiltersProps {
@@ -35,30 +36,8 @@ interface SourcingFiltersProps {
   onSortChange: (sort: string) => void;
   resultCount: number;
   totalCount: number;
-}
-
-function ToggleBadge({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <Badge
-      variant={active ? "default" : "outline"}
-      className={cn("cursor-pointer select-none", active && "bg-primary")}
-      onClick={onClick}
-    >
-      {label}
-    </Badge>
-  );
-}
-
-function toggleInArray(arr: string[], value: string): string[] {
-  return arr.includes(value) ? arr.filter((v) => v !== value) : [...arr, value];
+  bestMatchesOnly: boolean;
+  onBestMatchesOnlyChange: (checked: boolean) => void;
 }
 
 export function SourcingFilters({
@@ -68,70 +47,45 @@ export function SourcingFilters({
   onSortChange,
   resultCount,
   totalCount,
+  bestMatchesOnly,
+  onBestMatchesOnlyChange,
 }: SourcingFiltersProps) {
+  const [showAdvanced, setShowAdvanced] = useState(false);
+
   const update = (partial: Partial<SourcingFilterState>) =>
     onChange({ ...filters, ...partial });
 
   return (
     <Card className="shadow-sm">
-      <CardContent className="p-4">
-        <div className="flex flex-wrap items-center gap-4">
-          {/* Identity status toggles */}
-          <div className="flex items-center gap-1.5">
-            <Label className="text-xs text-muted-foreground mr-1">Identity</Label>
-            <ToggleBadge
-              label="Verified"
-              active={filters.identityStatus.includes("verified")}
-              onClick={() =>
-                update({ identityStatus: toggleInArray(filters.identityStatus, "verified") })
-              }
-            />
-            <ToggleBadge
-              label="Review"
-              active={filters.identityStatus.includes("review")}
-              onClick={() =>
-                update({ identityStatus: toggleInArray(filters.identityStatus, "review") })
-              }
-            />
-            <ToggleBadge
-              label="Weak"
-              active={filters.identityStatus.includes("weak")}
-              onClick={() =>
-                update({ identityStatus: toggleInArray(filters.identityStatus, "weak") })
-              }
-            />
-          </div>
-
-          {/* Enriched toggle */}
-          <div className="flex items-center gap-2">
+      <CardContent className="p-4 space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-2 rounded-md border px-2 h-8">
             <Switch
-              id="enriched-only"
-              checked={filters.enrichedOnly}
-              onCheckedChange={(checked) => update({ enrichedOnly: checked })}
+              id="best-matches-only"
+              checked={bestMatchesOnly}
+              onCheckedChange={onBestMatchesOnlyChange}
             />
-            <Label htmlFor="enriched-only" className="text-xs text-muted-foreground">
-              Enriched only
+            <Label htmlFor="best-matches-only" className="text-xs cursor-pointer">
+              Best matches only
             </Label>
           </div>
 
-          {/* Location text filter */}
           <Input
-            placeholder="Filter by location..."
+            placeholder="Location"
             value={filters.location}
             onChange={(e) => update({ location: e.target.value })}
-            className="w-40 h-8 text-sm"
+            className="w-44 h-8 text-sm"
           />
 
-          {/* Seniority select */}
           <Select
             value={filters.seniority}
             onValueChange={(val) => update({ seniority: val })}
           >
-            <SelectTrigger className="w-32 h-8 text-sm">
+            <SelectTrigger className="w-36 h-8 text-sm">
               <SelectValue placeholder="Seniority" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All levels</SelectItem>
+              <SelectItem value="all">All seniority</SelectItem>
               <SelectItem value="junior">Junior</SelectItem>
               <SelectItem value="mid">Mid</SelectItem>
               <SelectItem value="senior">Senior</SelectItem>
@@ -140,51 +94,98 @@ export function SourcingFilters({
             </SelectContent>
           </Select>
 
-          {/* Candidate state toggles */}
-          <div className="flex items-center gap-1.5">
-            <Label className="text-xs text-muted-foreground mr-1">State</Label>
-            <ToggleBadge
-              label="New"
-              active={filters.candidateState.includes("new")}
-              onClick={() =>
-                update({ candidateState: toggleInArray(filters.candidateState, "new") })
-              }
-            />
-            <ToggleBadge
-              label="Shortlisted"
-              active={filters.candidateState.includes("shortlisted")}
-              onClick={() =>
-                update({
-                  candidateState: toggleInArray(filters.candidateState, "shortlisted"),
-                })
-              }
-            />
-            <ToggleBadge
-              label="Hidden"
-              active={filters.candidateState.includes("hidden")}
-              onClick={() =>
-                update({ candidateState: toggleInArray(filters.candidateState, "hidden") })
-              }
-            />
-          </div>
-
-          {/* Sort */}
           <Select value={sortBy} onValueChange={onSortChange}>
-            <SelectTrigger className="w-36 h-8 text-sm">
+            <SelectTrigger className="w-40 h-8 text-sm">
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="fitScore">Fit Score</SelectItem>
-              <SelectItem value="source">Source Priority</SelectItem>
-              <SelectItem value="freshness">Freshness</SelectItem>
+              <SelectItem value="fitScore">Sort: Fit score</SelectItem>
+              <SelectItem value="freshness">Sort: Freshness</SelectItem>
+              <SelectItem value="source">Sort: Source</SelectItem>
             </SelectContent>
           </Select>
 
-          {/* Result count */}
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8"
+            onClick={() => setShowAdvanced((v) => !v)}
+          >
+            <SlidersHorizontal className="h-3.5 w-3.5 mr-1" />
+            More filters
+          </Button>
+
           <span className="text-xs text-muted-foreground ml-auto whitespace-nowrap">
-            Showing {resultCount} of {totalCount} candidates
+            Showing {resultCount} of {totalCount}
           </span>
         </div>
+
+        {showAdvanced && (
+          <div className="border rounded-md p-3 grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Identity</Label>
+              <Select
+                value={filters.identityStatus}
+                onValueChange={(val) =>
+                  update({ identityStatus: val as SourcingFilterState["identityStatus"] })
+                }
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="verified">Verified</SelectItem>
+                  <SelectItem value="review">Review</SelectItem>
+                  <SelectItem value="weak">Weak</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">State</Label>
+              <Select
+                value={filters.candidateState}
+                onValueChange={(val) =>
+                  update({ candidateState: val as SourcingFilterState["candidateState"] })
+                }
+              >
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="new">New</SelectItem>
+                  <SelectItem value="shortlisted">Shortlisted</SelectItem>
+                  <SelectItem value="hidden">Hidden</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center justify-between rounded-md border px-2 py-1.5 mt-5 sm:mt-0">
+              <Label htmlFor="enriched-only" className="text-xs text-muted-foreground">
+                Enriched only
+              </Label>
+              <Switch
+                id="enriched-only"
+                checked={filters.enrichedOnly}
+                onCheckedChange={(checked) => update({ enrichedOnly: checked })}
+              />
+            </div>
+
+            <div className="sm:col-span-3 flex justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => onChange(defaultFilters)}
+              >
+                Reset filters
+              </Button>
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

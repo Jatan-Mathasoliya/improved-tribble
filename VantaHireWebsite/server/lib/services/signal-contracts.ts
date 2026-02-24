@@ -205,6 +205,9 @@ export function mapCallbackStatusToRunStatus(callbackStatus: SignalCallbackPaylo
 // UI RESPONSE TYPES
 // =====================================================
 
+export type CandidateMatchTier = 'best_matches' | 'broader_pool';
+export type CandidateLocationMatchType = 'city_exact' | 'city_alias' | 'country_only' | 'none';
+
 /** Flattened candidate shape for UI consumption. */
 export interface SourcedCandidateForUI {
   id: number;
@@ -225,6 +228,12 @@ export interface SourcedCandidateForUI {
   enrichmentStatus: string | null;
   confidenceScore: number | null;
   searchSnippet: string | null;
+
+  // Tiering/quality metadata (additive, null-safe)
+  matchTier: CandidateMatchTier | null;
+  locationMatchType: CandidateLocationMatchType | null;
+  roleScore: number | null;
+  experienceScore: number | null;
 
   // Identity (extracted from candidateSummary.identitySummary)
   identitySummary: SignalIdentitySummary | null;
@@ -265,6 +274,10 @@ function safeString(val: unknown): string | null {
   return typeof val === 'string' ? val : null;
 }
 
+function safeNumber(val: unknown): number | null {
+  return typeof val === 'number' && Number.isFinite(val) ? val : null;
+}
+
 function extractIdentitySummary(cs: Record<string, unknown>): SignalIdentitySummary | null {
   const is = cs.identitySummary;
   if (!is || typeof is !== 'object') return null;
@@ -286,6 +299,18 @@ function extractSnapshot(cs: Record<string, unknown>): SourcedCandidateForUI['sn
     location: safeString(snap.location),
     computedAt: safeString(snap.computedAt),
   };
+}
+
+function extractMatchTier(cs: Record<string, unknown>): CandidateMatchTier | null {
+  const val = cs.matchTier;
+  return val === 'best_matches' || val === 'broader_pool' ? val : null;
+}
+
+function extractLocationMatchType(cs: Record<string, unknown>): CandidateLocationMatchType | null {
+  const val = cs.locationMatchType;
+  return val === 'city_exact' || val === 'city_alias' || val === 'country_only' || val === 'none'
+    ? val
+    : null;
 }
 
 /** Map a DB row to the flat UI shape. Null-safe throughout. */
@@ -334,6 +359,10 @@ export function flattenCandidateForUI(row: {
     enrichmentStatus: safeString(cs.enrichmentStatus),
     confidenceScore: typeof cs.confidenceScore === 'number' ? cs.confidenceScore : null,
     searchSnippet: safeString(cs.searchSnippet),
+    matchTier: extractMatchTier(cs),
+    locationMatchType: extractLocationMatchType(cs),
+    roleScore: safeNumber(cs.roleScore),
+    experienceScore: safeNumber(cs.experienceScore),
 
     identitySummary,
     snapshot,

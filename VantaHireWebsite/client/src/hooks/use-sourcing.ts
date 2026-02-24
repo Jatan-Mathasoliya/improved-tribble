@@ -3,9 +3,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useRef, useEffect } from "react";
 
-// =====================================================
-// Types (mirror server SourcedCandidateForUI)
-// =====================================================
+export type MatchTier = "best_matches" | "broader_pool";
+export type LocationMatchType = "city_exact" | "city_alias" | "country_only" | "none";
 
 export interface SourcedCandidateForUI {
   id: number;
@@ -16,6 +15,7 @@ export interface SourcedCandidateForUI {
   sourceType: string;
   displayBucket: "talent_pool" | "newly_discovered";
   state: "new" | "shortlisted" | "hidden" | "converted";
+
   nameHint: string | null;
   headlineHint: string | null;
   locationHint: string | null;
@@ -24,6 +24,12 @@ export interface SourcedCandidateForUI {
   enrichmentStatus: string | null;
   confidenceScore: number | null;
   searchSnippet: string | null;
+
+  matchTier?: MatchTier | null;
+  locationMatchType?: LocationMatchType | null;
+  roleScore?: number | null;
+  experienceScore?: number | null;
+
   identitySummary: {
     bestBridgeTier: number | null;
     maxIdentityConfidence: number | null;
@@ -33,6 +39,7 @@ export interface SourcedCandidateForUI {
     displayStatus: "verified" | "review" | "weak";
     lastIdentityCheckAt: string | null;
   } | null;
+
   snapshot: {
     skillsNormalized: unknown;
     roleType: string | null;
@@ -40,12 +47,14 @@ export interface SourcedCandidateForUI {
     location: string | null;
     computedAt: string | null;
   } | null;
+
   freshness: {
     lastEnrichedAt: string | null;
     lastIdentityCheckAt: string | null;
     enrichedDaysAgo: number | null;
     identityCheckDaysAgo: number | null;
   };
+
   candidateSummary: unknown;
   lastSyncedAt: string | null;
   createdAt: string | null;
@@ -61,27 +70,25 @@ export interface SourcingStatus {
   errorMessage?: string;
 }
 
-interface SourcedCandidatesResponse {
+export interface SourcedCandidatesResponse {
   candidates: SourcedCandidateForUI[];
   counts: {
     total: number;
     talentPool: number;
     newlyDiscovered: number;
   };
+  groupCounts?: {
+    bestMatches: number;
+    broaderPool: number;
+  };
+  expansionReason?: string | null;
+  requestedLocation?: string | null;
 }
-
-// =====================================================
-// Terminal status check
-// =====================================================
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "expired"]);
 function isTerminal(status: string | undefined): boolean {
   return !!status && TERMINAL_STATUSES.has(status);
 }
-
-// =====================================================
-// useSourcingStatus
-// =====================================================
 
 export function useSourcingStatus(jobId: number | undefined) {
   const queryClient = useQueryClient();
@@ -94,26 +101,19 @@ export function useSourcingStatus(jobId: number | undefined) {
       return res.json();
     },
     enabled: !!jobId,
-    refetchInterval: (query) => {
-      const data = query.state.data;
+    refetchInterval: (q) => {
+      const data = q.state.data;
       if (!data?.hasRun) return false;
       return isTerminal(data.status) ? false : 7000;
     },
   });
 
-  // When status transitions from non-terminal to terminal, force a final
-  // refetch of sourced-candidates to pick up any late webhook upserts.
   useEffect(() => {
     const currentStatus = query.data?.status;
     const prevStatus = prevStatusRef.current;
     prevStatusRef.current = currentStatus;
 
-    if (
-      currentStatus &&
-      prevStatus &&
-      !isTerminal(prevStatus) &&
-      isTerminal(currentStatus)
-    ) {
+    if (currentStatus && prevStatus && !isTerminal(prevStatus) && isTerminal(currentStatus)) {
       queryClient.invalidateQueries({
         queryKey: ["/api/jobs", jobId, "sourced-candidates"],
       });
@@ -127,10 +127,6 @@ export function useSourcingStatus(jobId: number | undefined) {
   };
 }
 
-// =====================================================
-// useSourcedCandidates
-// =====================================================
-
 export function useSourcedCandidates(jobId: number | undefined) {
   return useQuery<SourcedCandidatesResponse>({
     queryKey: ["/api/jobs", jobId, "sourced-candidates"],
@@ -141,10 +137,6 @@ export function useSourcedCandidates(jobId: number | undefined) {
     enabled: !!jobId,
   });
 }
-
-// =====================================================
-// useFindCandidates
-// =====================================================
 
 export function useFindCandidates(jobId: number | undefined) {
   const queryClient = useQueryClient();
@@ -179,10 +171,6 @@ export function useFindCandidates(jobId: number | undefined) {
   };
 }
 
-// =====================================================
-// useUpdateCandidateState
-// =====================================================
-
 export function useUpdateCandidateState(jobId: number | undefined) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -203,19 +191,16 @@ export function useUpdateCandidateState(jobId: number | undefined) {
       return res.json();
     },
     onMutate: async ({ candidateId, state }) => {
-      // Cancel outgoing refetches
       await queryClient.cancelQueries({
         queryKey: ["/api/jobs", jobId, "sourced-candidates"],
       });
 
-      // Snapshot previous value
       const previous = queryClient.getQueryData<SourcedCandidatesResponse>([
         "/api/jobs",
         jobId,
         "sourced-candidates",
       ]);
 
-      // Optimistically update candidate state
       if (previous) {
         queryClient.setQueryData<SourcedCandidatesResponse>(
           ["/api/jobs", jobId, "sourced-candidates"],
@@ -231,7 +216,6 @@ export function useUpdateCandidateState(jobId: number | undefined) {
       return { previous };
     },
     onError: (error: Error, _vars, context) => {
-      // Rollback on error
       if (context?.previous) {
         queryClient.setQueryData(
           ["/api/jobs", jobId, "sourced-candidates"],

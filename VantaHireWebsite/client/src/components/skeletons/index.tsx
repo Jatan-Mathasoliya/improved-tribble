@@ -139,15 +139,20 @@ export function CandidateListSkeleton({ count = 6 }: { count?: number }) {
 // Sourcing candidate card skeleton
 export function SourcingCardSkeleton() {
   return (
-    <div className="p-4 rounded-lg border border-border bg-white">
-      <div className="flex items-center justify-between">
+    <div className="p-4 rounded-lg border border-border bg-card">
+      <div className="flex items-start justify-between gap-3">
         <div className="space-y-2 flex-1">
-          <Skeleton className="h-5 w-48" />
-          <Skeleton className="h-4 w-64" />
-          <div className="flex gap-2">
+          <div className="flex items-center gap-1.5">
+            <Skeleton className="h-4 w-36" />
+            <Skeleton className="h-5 w-14 rounded-full" />
+            <Skeleton className="h-5 w-20 rounded-full" />
             <Skeleton className="h-5 w-16 rounded-full" />
-            <Skeleton className="h-5 w-20 rounded-full" />
-            <Skeleton className="h-5 w-20 rounded-full" />
+          </div>
+          <Skeleton className="h-4 w-64" />
+          <div className="flex gap-1.5">
+            <Skeleton className="h-4 w-14 rounded-full" />
+            <Skeleton className="h-4 w-16 rounded-full" />
+            <Skeleton className="h-4 w-12 rounded-full" />
           </div>
           <Skeleton className="h-3 w-40" />
         </div>

@@ -328,13 +328,33 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
       // Flatten to UI shape with deterministic sort (fitScore desc, id asc)
       const enriched = candidates.map((c: JobSourcedCandidate) => flattenCandidateForUI(c));
 
+      const counts = {
+        total: enriched.length,
+        talentPool: enriched.filter((c) => c.displayBucket === 'talent_pool').length,
+        newlyDiscovered: enriched.filter((c) => c.displayBucket === 'newly_discovered').length,
+      };
+
+      // Grouping metadata for UI clarity (strict-vs-broader).
+      const hasExplicitTier = enriched.some((c) => c.matchTier === 'best_matches' || c.matchTier === 'broader_pool');
+      const hasLocationMatchType = enriched.some((c) => !!c.locationMatchType);
+
+      let bestMatches = enriched.length;
+      let broaderPool = 0;
+
+      if (hasExplicitTier) {
+        bestMatches = enriched.filter((c) => c.matchTier !== 'broader_pool').length;
+        broaderPool = enriched.filter((c) => c.matchTier === 'broader_pool').length;
+      } else if (hasLocationMatchType) {
+        bestMatches = enriched.filter((c) => c.locationMatchType !== 'none').length;
+        broaderPool = enriched.filter((c) => c.locationMatchType === 'none').length;
+      }
+
       res.json({
         candidates: enriched,
-        counts: {
-          total: enriched.length,
-          talentPool: enriched.filter((c) => c.displayBucket === 'talent_pool').length,
-          newlyDiscovered: enriched.filter((c) => c.displayBucket === 'newly_discovered').length,
-        },
+        counts,
+        groupCounts: { bestMatches, broaderPool },
+        expansionReason: broaderPool > 0 ? 'expanded_location_results' : null,
+        requestedLocation: null,
       });
     } catch (error) {
       next(error);
