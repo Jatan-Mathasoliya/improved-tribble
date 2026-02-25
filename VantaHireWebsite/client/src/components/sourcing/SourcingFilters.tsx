@@ -106,6 +106,7 @@ export function SourcingFilters({
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="rank">Sort: Pipeline rank</SelectItem>
               <SelectItem value="fitScore">Sort: Fit score</SelectItem>
               <SelectItem value="freshness">Sort: Freshness</SelectItem>
               <SelectItem value="source">Sort: Source</SelectItem>

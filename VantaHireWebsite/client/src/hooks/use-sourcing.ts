@@ -10,6 +10,7 @@ export interface SourcedCandidateForUI {
   id: number;
   jobId: number;
   signalCandidateId: string;
+  signalRank: number | null;
   fitScore: number | null;
   fitBreakdown: Record<string, unknown> | null;
   sourceType: string;
@@ -107,6 +108,12 @@ export interface SourcedCandidatesResponse {
     strictRescueApplied?: boolean;
     strictRescueMinFitScoreUsed?: number | null;
     countryGuardFilteredCount?: number;
+    minDiscoveryPerRunApplied?: number;
+    minDiscoveredInOutputApplied?: number;
+    discoveredPromotedCount?: number;
+    discoveredPromotedInTopCount?: number;
+    discoveredOrphanCount?: number;
+    discoveredOrphanQueued?: number;
     locationMatchCounts?: Record<string, number> | null;
     demotedStrictWithCityMatch?: number;
     strictBeforeDemotion?: number;

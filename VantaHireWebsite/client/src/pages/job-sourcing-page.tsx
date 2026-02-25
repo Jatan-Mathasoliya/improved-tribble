@@ -25,7 +25,7 @@ import {
 import { SourcingListSkeleton } from "@/components/skeletons";
 import { splitByTier } from "@/lib/sourcing-tiering";
 
-type SortKey = "fitScore" | "source" | "freshness";
+type SortKey = "rank" | "fitScore" | "source" | "freshness";
 
 const SOURCE_PRIORITY: Record<string, number> = {
   pool_enriched: 0,
@@ -35,19 +35,26 @@ const SOURCE_PRIORITY: Record<string, number> = {
 
 function sortCandidates(candidates: SourcedCandidateForUI[], sortBy: SortKey): SourcedCandidateForUI[] {
   const sorted = [...candidates];
+  const signalRank = (candidate: SourcedCandidateForUI): number =>
+    typeof candidate.signalRank === "number" ? candidate.signalRank : Number.MAX_SAFE_INTEGER;
   const recencyDays = (candidate: SourcedCandidateForUI): number =>
     candidate.freshness.enrichedDaysAgo
     ?? candidate.searchSignals.serpDateDaysAgo
     ?? 999;
+  const rankTieBreak = (a: SourcedCandidateForUI, b: SourcedCandidateForUI): number =>
+    signalRank(a) - signalRank(b) || a.id - b.id;
   const recencyTieBreak = (a: SourcedCandidateForUI, b: SourcedCandidateForUI): number =>
-    recencyDays(a) - recencyDays(b) || a.id - b.id;
+    recencyDays(a) - recencyDays(b) || rankTieBreak(a, b);
   switch (sortBy) {
+    case "rank":
+      return sorted.sort((a, b) => rankTieBreak(a, b));
     case "fitScore":
-      return sorted.sort((a, b) => (b.fitScore ?? -1) - (a.fitScore ?? -1) || recencyTieBreak(a, b));
+      return sorted.sort((a, b) => (b.fitScore ?? -1) - (a.fitScore ?? -1) || rankTieBreak(a, b));
     case "source":
       return sorted.sort(
         (a, b) =>
           (SOURCE_PRIORITY[a.sourceType] ?? 9) - (SOURCE_PRIORITY[b.sourceType] ?? 9) ||
+          rankTieBreak(a, b) ||
           (b.fitScore ?? -1) - (a.fitScore ?? -1) ||
           recencyTieBreak(a, b),
       );
@@ -116,7 +123,7 @@ export default function JobSourcingPage() {
   const [selectedCandidate, setSelectedCandidate] = useState<SourcedCandidateForUI | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [filters, setFilters] = useState<SourcingFilterState>(defaultFilters);
-  const [sortBy, setSortBy] = useState<SortKey>("fitScore");
+  const [sortBy, setSortBy] = useState<SortKey>("rank");
   const [bestMatchesOnly, setBestMatchesOnly] = useState(true);
   const [showBroader, setShowBroader] = useState(false);
 

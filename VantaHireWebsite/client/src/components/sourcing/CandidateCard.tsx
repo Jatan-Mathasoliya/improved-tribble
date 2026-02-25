@@ -107,6 +107,9 @@ function freshnessText(daysAgo: number | null, label: string): string | null {
 
 export function CandidateCard({ candidate, onClick, onShortlist, isUpdating }: CandidateCardProps) {
   const isShortlisted = candidate.state === "shortlisted";
+  const isDiscoveredPendingEnrichment = candidate.sourceType === "discovered" &&
+    candidate.enrichmentStatus !== "completed" &&
+    candidate.enrichmentStatus !== "enriched";
   const skills = Array.isArray(candidate.snapshot?.skillsNormalized)
     ? (candidate.snapshot?.skillsNormalized as string[]).slice(0, 3)
     : [];
@@ -135,6 +138,11 @@ export function CandidateCard({ candidate, onClick, onShortlist, isUpdating }: C
             <span className="font-semibold text-sm truncate max-w-[200px]">{candidate.nameHint || "Unknown Candidate"}</span>
             <FitBadge score={candidate.fitScore} />
             <TierBadge candidate={candidate} />
+            {isDiscoveredPendingEnrichment && (
+              <Badge variant="outline" className="text-xs bg-sky-50 text-sky-700 border-sky-200">
+                New source - Enrichment in progress
+              </Badge>
+            )}
             <IdentityBadge
               status={candidate.identitySummary?.displayStatus}
               confidence={candidate.identitySummary?.maxIdentityConfidence}

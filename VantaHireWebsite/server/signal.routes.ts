@@ -93,6 +93,23 @@ function toPercent(numerator: number, denominator: number): number {
   return Number(((numerator / denominator) * 100).toFixed(1));
 }
 
+function sortSourcedCandidatesForDisplay(
+  candidates: ReturnType<typeof flattenCandidateForUI>[],
+): ReturnType<typeof flattenCandidateForUI>[] {
+  return [...candidates].sort((a, b) => {
+    const rankA = typeof a.signalRank === 'number' && Number.isFinite(a.signalRank) ? a.signalRank : null;
+    const rankB = typeof b.signalRank === 'number' && Number.isFinite(b.signalRank) ? b.signalRank : null;
+    if (rankA !== null && rankB !== null) return rankA - rankB;
+    if (rankA !== null) return -1;
+    if (rankB !== null) return 1;
+
+    const fitA = typeof a.fitScore === 'number' ? a.fitScore : -1;
+    const fitB = typeof b.fitScore === 'number' ? b.fitScore : -1;
+    if (fitA !== fitB) return fitB - fitA;
+    return a.id - b.id;
+  });
+}
+
 /**
  * Recursively sort object keys for deterministic JSON serialization.
  * Arrays preserve element order; only object key order is normalized.
@@ -445,8 +462,10 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         orderBy: [desc(jobSourcedCandidates.fitScore), asc(jobSourcedCandidates.id)],
       });
 
-      // Flatten to UI shape with deterministic sort (fitScore desc, id asc)
-      const enriched = candidates.map((c: JobSourcedCandidate) => flattenCandidateForUI(c));
+      // Flatten to UI shape and preserve Signal's assembly order when rank exists.
+      const enriched = sortSourcedCandidatesForDisplay(
+        candidates.map((c: JobSourcedCandidate) => flattenCandidateForUI(c)),
+      );
 
       const counts = {
         total: enriched.length,
@@ -540,6 +559,24 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
           : {}),
         ...(readFiniteNumber(runMetaGroupCounts, 'countryGuardFilteredCount') !== undefined
           ? { countryGuardFilteredCount: readFiniteNumber(runMetaGroupCounts, 'countryGuardFilteredCount')! }
+          : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'minDiscoveryPerRunApplied') !== undefined
+          ? { minDiscoveryPerRunApplied: readFiniteNumber(runMetaGroupCounts, 'minDiscoveryPerRunApplied')! }
+          : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'minDiscoveredInOutputApplied') !== undefined
+          ? { minDiscoveredInOutputApplied: readFiniteNumber(runMetaGroupCounts, 'minDiscoveredInOutputApplied')! }
+          : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'discoveredPromotedCount') !== undefined
+          ? { discoveredPromotedCount: readFiniteNumber(runMetaGroupCounts, 'discoveredPromotedCount')! }
+          : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'discoveredPromotedInTopCount') !== undefined
+          ? { discoveredPromotedInTopCount: readFiniteNumber(runMetaGroupCounts, 'discoveredPromotedInTopCount')! }
+          : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'discoveredOrphanCount') !== undefined
+          ? { discoveredOrphanCount: readFiniteNumber(runMetaGroupCounts, 'discoveredOrphanCount')! }
+          : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'discoveredOrphanQueued') !== undefined
+          ? { discoveredOrphanQueued: readFiniteNumber(runMetaGroupCounts, 'discoveredOrphanQueued')! }
           : {}),
         ...(runMetaGroupCounts && typeof runMetaGroupCounts.locationMatchCounts === 'object' && runMetaGroupCounts.locationMatchCounts !== null
           ? { locationMatchCounts: runMetaGroupCounts.locationMatchCounts as Record<string, number> }

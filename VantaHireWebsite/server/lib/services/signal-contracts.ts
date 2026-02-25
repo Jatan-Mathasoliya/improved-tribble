@@ -95,6 +95,12 @@ export interface SignalResultsGroupCounts {
   strictRescueApplied?: boolean;
   strictRescueMinFitScoreUsed?: number | null;
   countryGuardFilteredCount?: number;
+  minDiscoveryPerRunApplied?: number;
+  minDiscoveredInOutputApplied?: number;
+  discoveredPromotedCount?: number;
+  discoveredPromotedInTopCount?: number;
+  discoveredOrphanCount?: number;
+  discoveredOrphanQueued?: number;
   locationMatchCounts?: Record<string, number> | null;
   demotedStrictWithCityMatch?: number;
   strictBeforeDemotion?: number;
@@ -247,6 +253,7 @@ export interface SourcedCandidateForUI {
   id: number;
   jobId: number;
   signalCandidateId: string;
+  signalRank: number | null;
   fitScore: number | null;
   fitBreakdown: Record<string, unknown> | null;
   sourceType: SignalSourceType;
@@ -407,6 +414,7 @@ export function flattenCandidateForUI(row: {
     id: row.id,
     jobId: row.jobId,
     signalCandidateId: row.signalCandidateId,
+    signalRank: safeNumber(cs.rank),
     fitScore: row.fitScore ?? null,
     fitBreakdown: (row.fitBreakdown && typeof row.fitBreakdown === 'object'
       ? row.fitBreakdown as Record<string, unknown>
