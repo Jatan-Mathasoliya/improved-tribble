@@ -55,6 +55,8 @@ interface SemanticResult {
   currentJobTitle: string | null;
   currentStageId: number | null;
   currentStageName: string | null;
+  rankingScoreRaw?: number;
+  matchScoreRaw?: number;
   matchScore: number;
   matchedChunks: number;
   highlights: string[];
@@ -74,6 +76,17 @@ interface SemanticResult {
 interface SemanticSearchResponse {
   query: string;
   count: number;
+  scoreType?: "rrf_fused" | "weighted_fusion" | "cosine" | "unknown";
+  displayScoreType?: "rrf_fused" | "weighted_fusion" | "cosine" | "unknown";
+  scoreDiagnostics?: {
+    topRawScore: number | null;
+    bottomRawScore: number | null;
+    spreadRawScore: number | null;
+    rankingTopRawScore: number | null;
+    rankingBottomRawScore: number | null;
+    rankingSpreadRawScore: number | null;
+    resultCount: number;
+  };
   results: SemanticResult[];
   candidates: SemanticResult[];
 }
@@ -169,6 +182,9 @@ export default function CandidatesPage() {
   };
 
   const semanticResults = semanticSearchQuery.data?.results ?? [];
+  const semanticScoreType = semanticSearchQuery.data?.scoreType ?? "unknown";
+  const semanticDisplayScoreType = semanticSearchQuery.data?.displayScoreType ?? semanticScoreType;
+  const semanticScoreIsPercent = semanticDisplayScoreType === "cosine" || semanticDisplayScoreType === "weighted_fusion";
   const externalPreviewProxyUrl = resumePreviewCandidate?.isExternal && resumePreviewCandidate?.resume.locator
     ? `/api/candidates/external-resume?locator=${encodeURIComponent(resumePreviewCandidate.resume.locator)}&filename=${encodeURIComponent(resumePreviewCandidate.resume.resumeFilename ?? "resume.pdf")}`
     : null;
@@ -423,9 +439,16 @@ export default function CandidatesPage() {
                   </Button>
                 </div>
                 {submittedQuery && semanticSearchQuery.isSuccess && (
-                  <p className="text-sm text-muted-foreground mt-2">
-                    {semanticResults.length} result{semanticResults.length !== 1 ? "s" : ""} for "{submittedQuery}"
-                  </p>
+                  <div className="mt-2 space-y-1">
+                    <p className="text-sm text-muted-foreground">
+                      {semanticResults.length} result{semanticResults.length !== 1 ? "s" : ""} for "{submittedQuery}"
+                    </p>
+                    {semanticScoreType === "rrf_fused" && semanticDisplayScoreType === "cosine" && (
+                      <p className="text-xs text-muted-foreground">
+                        Ranked by hybrid RRF, score shown as cosine semantic match.
+                      </p>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>
@@ -474,10 +497,14 @@ export default function CandidatesPage() {
                               {result.name}
                             </h3>
                             <Badge
-                              variant={result.matchScore >= 80 ? "default" : result.matchScore >= 50 ? "secondary" : "outline"}
+                              variant={semanticScoreIsPercent
+                                ? (result.matchScore >= 80 ? "default" : result.matchScore >= 50 ? "secondary" : "outline")
+                                : "outline"}
                               className="font-mono text-xs shrink-0"
                             >
-                              {result.matchScore}% match
+                              {semanticScoreIsPercent
+                                ? `${result.matchScore}% match`
+                                : `Relevance ${(result.matchScoreRaw ?? (result.matchScore / 100)).toFixed(4)}`}
                             </Badge>
                           </div>
 
@@ -490,6 +517,11 @@ export default function CandidatesPage() {
                               <Badge variant="secondary" className="text-xs">
                                 {result.source}
                               </Badge>
+                            )}
+                            {semanticScoreType === "rrf_fused" && result.rankingScoreRaw !== undefined && (
+                              <span className="text-xs">
+                                Hybrid rank score {result.rankingScoreRaw.toFixed(4)}
+                              </span>
                             )}
                             {result.currentJobTitle && (
                               <span className="flex items-center gap-1">
@@ -504,19 +536,6 @@ export default function CandidatesPage() {
                             )}
                           </div>
 
-                          {/* Highlights */}
-                          {result.highlights.length > 0 && (
-                            <div className="space-y-1 mt-2">
-                              {result.highlights.map((highlight, idx) => (
-                                <p
-                                  key={idx}
-                                  className="text-xs text-muted-foreground bg-muted/50 rounded px-2 py-1 line-clamp-2"
-                                >
-                                  {highlight}
-                                </p>
-                              ))}
-                            </div>
-                          )}
                         </div>
 
                         {/* Actions */}
