@@ -188,14 +188,17 @@ export default function RecruiterAuth() {
         body: JSON.stringify({ email: verificationEmail, inviteToken }),
       });
       const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to send verification email.");
+      }
       toast({
         title: "Verification email sent",
         description: data.message || "Please check your inbox.",
       });
-    } catch {
+    } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to send verification email. Please try again.",
+        description: error?.message || "Failed to send verification email. Please try again.",
         variant: "destructive",
       });
     } finally {

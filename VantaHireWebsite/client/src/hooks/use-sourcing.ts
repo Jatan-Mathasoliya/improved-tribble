@@ -24,6 +24,13 @@ export interface SourcedCandidateForUI {
   enrichmentStatus: string | null;
   confidenceScore: number | null;
   searchSnippet: string | null;
+  searchProvider: string | null;
+  searchSignals: {
+    serpDate: string | null;
+    serpDateDaysAgo: number | null;
+    linkedinHost: string | null;
+    linkedinLocale: string | null;
+  };
 
   matchTier?: MatchTier | null;
   locationMatchType?: LocationMatchType | null;
@@ -96,6 +103,10 @@ export interface SourcedCandidatesResponse {
     expansionReason?: string | null;
     requestedLocation?: string | null;
     strictDemotedCount?: number;
+    strictRescuedCount?: number;
+    strictRescueApplied?: boolean;
+    strictRescueMinFitScoreUsed?: number | null;
+    countryGuardFilteredCount?: number;
     locationMatchCounts?: Record<string, number> | null;
     demotedStrictWithCityMatch?: number;
     strictBeforeDemotion?: number;
@@ -113,6 +124,15 @@ export interface SourcedCandidatesResponse {
     stoppedReason?: string | null;
     providerUsage?: Record<string, number> | null;
     groqUsed?: boolean;
+  } | null;
+  qualityDebug?: {
+    totalCandidates: number;
+    locationMatchedCount: number;
+    locationMatchedPct: number;
+    validLocationHintCount: number;
+    validLocationHintPct: number;
+    nonZeroSkillScoreCount: number;
+    nonZeroSkillScorePct: number;
   } | null;
 }
 

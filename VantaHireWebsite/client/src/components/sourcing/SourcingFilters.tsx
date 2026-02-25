@@ -39,6 +39,8 @@ interface SourcingFiltersProps {
   bestMatchesOnly: boolean;
   onBestMatchesOnlyChange: (checked: boolean) => void;
   hasTierData?: boolean;
+  /** True when tierModel is explicit but all candidates are broader_pool (0 best matches). */
+  allBroader?: boolean;
 }
 
 export function SourcingFilters({
@@ -51,6 +53,7 @@ export function SourcingFilters({
   bestMatchesOnly,
   onBestMatchesOnlyChange,
   hasTierData = true,
+  allBroader = false,
 }: SourcingFiltersProps) {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -61,7 +64,7 @@ export function SourcingFilters({
     <Card className="shadow-sm">
       <CardContent className="p-4 space-y-3">
         <div className="flex flex-wrap items-center gap-3">
-          {hasTierData && (
+          {hasTierData && !allBroader && (
             <div className="flex items-center gap-2 rounded-md border px-2 h-8">
               <Switch
                 id="best-matches-only"

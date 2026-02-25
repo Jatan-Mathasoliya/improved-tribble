@@ -35,21 +35,26 @@ const SOURCE_PRIORITY: Record<string, number> = {
 
 function sortCandidates(candidates: SourcedCandidateForUI[], sortBy: SortKey): SourcedCandidateForUI[] {
   const sorted = [...candidates];
+  const recencyDays = (candidate: SourcedCandidateForUI): number =>
+    candidate.freshness.enrichedDaysAgo
+    ?? candidate.searchSignals.serpDateDaysAgo
+    ?? 999;
+  const recencyTieBreak = (a: SourcedCandidateForUI, b: SourcedCandidateForUI): number =>
+    recencyDays(a) - recencyDays(b) || a.id - b.id;
   switch (sortBy) {
     case "fitScore":
-      return sorted.sort((a, b) => (b.fitScore ?? -1) - (a.fitScore ?? -1) || a.id - b.id);
+      return sorted.sort((a, b) => (b.fitScore ?? -1) - (a.fitScore ?? -1) || recencyTieBreak(a, b));
     case "source":
       return sorted.sort(
         (a, b) =>
           (SOURCE_PRIORITY[a.sourceType] ?? 9) - (SOURCE_PRIORITY[b.sourceType] ?? 9) ||
           (b.fitScore ?? -1) - (a.fitScore ?? -1) ||
-          a.id - b.id,
+          recencyTieBreak(a, b),
       );
     case "freshness":
       return sorted.sort(
         (a, b) =>
-          (a.freshness.enrichedDaysAgo ?? 999) - (b.freshness.enrichedDaysAgo ?? 999) ||
-          a.id - b.id,
+          recencyTieBreak(a, b),
       );
     default:
       return sorted;
@@ -167,6 +172,10 @@ export default function JobSourcingPage() {
   const requestedLocation = candidatesData?.requestedLocation || filters.location || null;
   const expansionReason = candidatesData?.expansionReason;
   const expansionReasonText = getExpansionReasonText(expansionReason, requestedLocation);
+  const strictRescueApplied = candidatesData?.groupCounts?.strictRescueApplied === true;
+  const strictRescuedCount = candidatesData?.groupCounts?.strictRescuedCount ?? 0;
+  const rescueFloor = candidatesData?.groupCounts?.strictRescueMinFitScoreUsed;
+  const qualityDebug = candidatesData?.qualityDebug;
 
   const liveSelected = selectedCandidate
     ? allCandidates.find((c) => c.id === selectedCandidate.id) ?? selectedCandidate
@@ -353,6 +362,31 @@ export default function JobSourcingPage() {
               )}
             </div>
 
+            {qualityDebug && (
+              <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/40 p-3 mb-4">
+                <p className="text-xs font-medium text-slate-800 dark:text-slate-200">
+                  Quality Diagnostics
+                </p>
+                <div className="text-xs text-slate-700 dark:text-slate-300 mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                  <span>City/Country match: {qualityDebug.locationMatchedPct}%</span>
+                  <span>Valid location hints: {qualityDebug.validLocationHintPct}%</span>
+                  <span>Non-zero skill score: {qualityDebug.nonZeroSkillScorePct}%</span>
+                </div>
+              </div>
+            )}
+
+            {strictRescueApplied && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 mb-4">
+                <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                  Strict matches were weak; showing best available candidates in the requested country.
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                  Rescued {strictRescuedCount} strict candidates
+                  {typeof rescueFloor === "number" ? ` using a temporary fit floor of ${rescueFloor.toFixed(2)}.` : "."}
+                </p>
+              </div>
+            )}
+
             {allBroader && (
               <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 p-3 mb-4">
                 <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
@@ -363,6 +397,11 @@ export default function JobSourcingPage() {
                 {expansionReasonText && (
                   <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
                     Why this happened: {expansionReasonText}
+                  </p>
+                )}
+                {strictRescueApplied && (
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+                    Strict rescue was used before expansion to keep the best in-country options.
                   </p>
                 )}
               </div>

@@ -91,6 +91,10 @@ export interface SignalResultsGroupCounts {
   expansionReason?: string | null;
   requestedLocation?: string | null;
   strictDemotedCount?: number;
+  strictRescuedCount?: number;
+  strictRescueApplied?: boolean;
+  strictRescueMinFitScoreUsed?: number | null;
+  countryGuardFilteredCount?: number;
   locationMatchCounts?: Record<string, number> | null;
   demotedStrictWithCityMatch?: number;
   strictBeforeDemotion?: number;
@@ -138,10 +142,20 @@ export interface SignalCandidateDetail {
   headlineHint: string | null;
   locationHint: string | null;
   companyHint: string | null;
+  searchSnippet?: string | null;
+  searchMeta?: Record<string, unknown> | null;
+  searchProvider?: string | null;
+  searchSignals?: SignalSearchSignals | null;
   enrichmentStatus: string;
   confidenceScore: number | null;
   lastEnrichedAt: string | null;            // ISO 8601
   intelligenceSnapshots: SignalIntelligenceSnapshot[];
+}
+
+export interface SignalSearchSignals {
+  serpDate?: string | null;
+  linkedinHost?: string | null;
+  linkedinLocale?: string | null;
 }
 
 export interface SignalIntelligenceSnapshot {
@@ -248,6 +262,13 @@ export interface SourcedCandidateForUI {
   enrichmentStatus: string | null;
   confidenceScore: number | null;
   searchSnippet: string | null;
+  searchProvider: string | null;
+  searchSignals: {
+    serpDate: string | null;
+    serpDateDaysAgo: number | null;
+    linkedinHost: string | null;
+    linkedinLocale: string | null;
+  };
 
   // Tiering/quality metadata (additive, null-safe)
   matchTier: CandidateMatchTier | null;
@@ -298,6 +319,10 @@ function safeNumber(val: unknown): number | null {
   return typeof val === 'number' && Number.isFinite(val) ? val : null;
 }
 
+function safeRecord(val: unknown): Record<string, unknown> | null {
+  return val && typeof val === 'object' ? val as Record<string, unknown> : null;
+}
+
 function extractIdentitySummary(cs: Record<string, unknown>): SignalIdentitySummary | null {
   const is = cs.identitySummary;
   if (!is || typeof is !== 'object') return null;
@@ -333,6 +358,26 @@ function extractLocationMatchType(cs: Record<string, unknown>): CandidateLocatio
     : null;
 }
 
+function extractSearchSignals(cs: Record<string, unknown>): SourcedCandidateForUI['searchSignals'] {
+  const explicitSignals = safeRecord(cs.searchSignals);
+  const explicitSerpDate = safeString(explicitSignals?.serpDate);
+  const explicitLinkedinHost = safeString(explicitSignals?.linkedinHost);
+  const explicitLinkedinLocale = safeString(explicitSignals?.linkedinLocale);
+
+  const searchMeta = safeRecord(cs.searchMeta);
+  const serperMeta = safeRecord(searchMeta?.serper);
+  const serpDate = explicitSerpDate ?? safeString(serperMeta?.resultDate);
+  const linkedinHost = explicitLinkedinHost ?? safeString(serperMeta?.linkedinHost);
+  const linkedinLocale = explicitLinkedinLocale ?? safeString(serperMeta?.linkedinLocale);
+
+  return {
+    serpDate,
+    serpDateDaysAgo: daysAgo(serpDate),
+    linkedinHost,
+    linkedinLocale,
+  };
+}
+
 /** Map a DB row to the flat UI shape. Null-safe throughout. */
 export function flattenCandidateForUI(row: {
   id: number;
@@ -353,6 +398,7 @@ export function flattenCandidateForUI(row: {
 
   const identitySummary = extractIdentitySummary(cs);
   const snapshot = extractSnapshot(cs);
+  const searchSignals = extractSearchSignals(cs);
 
   const lastEnrichedAt = safeString((cs as any)?.lastEnrichedAt) ?? safeString(snapshot?.computedAt);
   const lastIdentityCheckAt = identitySummary?.lastIdentityCheckAt ?? null;
@@ -379,6 +425,8 @@ export function flattenCandidateForUI(row: {
     enrichmentStatus: safeString(cs.enrichmentStatus),
     confidenceScore: typeof cs.confidenceScore === 'number' ? cs.confidenceScore : null,
     searchSnippet: safeString(cs.searchSnippet),
+    searchProvider: safeString(cs.searchProvider),
+    searchSignals,
     matchTier: extractMatchTier(cs),
     locationMatchType: extractLocationMatchType(cs),
     roleScore: safeNumber(cs.roleScore),

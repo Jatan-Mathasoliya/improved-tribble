@@ -149,6 +149,9 @@ export async function upsertSignalCandidates(
   for (const c of candidates) {
     const fitScore = normalizeFitScoreForStorage(c.fitScore);
     const searchSnippet = (c.candidate as unknown as { searchSnippet?: unknown }).searchSnippet ?? null;
+    const searchMeta = (c.candidate as unknown as { searchMeta?: unknown }).searchMeta ?? null;
+    const searchProvider = (c.candidate as unknown as { searchProvider?: unknown }).searchProvider ?? null;
+    const searchSignals = (c.candidate as unknown as { searchSignals?: unknown }).searchSignals ?? null;
     const summary = {
       nameHint: c.candidate.nameHint,
       headlineHint: c.candidate.headlineHint,
@@ -159,6 +162,9 @@ export async function upsertSignalCandidates(
       confidenceScore: c.candidate.confidenceScore,
       lastEnrichedAt: c.candidate.lastEnrichedAt ?? c.freshness?.lastEnrichedAt ?? null,
       searchSnippet,
+      searchMeta,
+      searchProvider,
+      searchSignals,
       identitySummary: c.identitySummary ?? null,
       snapshot: c.snapshot,
       rank: c.rank,

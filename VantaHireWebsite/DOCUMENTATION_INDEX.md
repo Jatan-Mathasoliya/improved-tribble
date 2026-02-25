@@ -23,6 +23,7 @@ New to VantaHire? Start here:
 
 ### 🛠️ Technical Documentation
 - **[API Documentation](API_DOCUMENTATION.md)** - Complete REST API reference with examples
+- **[ActiveKG Integration](docs/activekg/)** - ActiveKG resume sync: architecture, auth, payloads, testing scripts ([start here](docs/activekg/README.md))
 - **[Technical Roadmap](TECHNICAL_ROADMAP.md)** - Strategic development plan for next 18 months
 - **[Testing Documentation](VANTAHIRE_TESTING_DOCUMENTATION.md)** - Comprehensive testing strategy and implementation
 
@@ -64,6 +65,7 @@ New to VantaHire? Start here:
 
 ### For DevOps Engineers
 - [Project Documentation](PROJECT_DOCUMENTATION.md#deployment--environment) - Deployment guide
+- [ActiveKG Integration](docs/activekg/) - ActiveKG sync setup, env vars, payloads, and troubleshooting
 - [Technical Roadmap](TECHNICAL_ROADMAP.md#technology-stack-evolution) - Infrastructure evolution
 
 ## Document Status
@@ -76,6 +78,7 @@ New to VantaHire? Start here:
 | API Documentation | ✅ Complete | Dec 2024 | Q1 2025 |
 | Technical Roadmap | ✅ Complete | Dec 2024 | Q1 2025 |
 | Testing Documentation | ✅ Complete | Nov 2024 | Q1 2025 |
+| ActiveKG Integration | ✅ Complete | Feb 2026 | Q2 2026 |
 | Design System | ✅ Complete | Nov 2024 | Q2 2025 |
 | Phase Documentation | ✅ Complete | Nov 2024 | Q2 2025 |
 

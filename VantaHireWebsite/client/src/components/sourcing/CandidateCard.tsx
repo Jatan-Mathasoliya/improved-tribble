@@ -113,7 +113,12 @@ export function CandidateCard({ candidate, onClick, onShortlist, isUpdating }: C
 
   const enrichedText = freshnessText(candidate.freshness.enrichedDaysAgo, "Enriched");
   const identityText = freshnessText(candidate.freshness.identityCheckDaysAgo, "Identity checked");
-  const freshnessLine = [enrichedText, identityText].filter(Boolean).join(" · ");
+  const serpText = freshnessText(candidate.searchSignals.serpDateDaysAgo, "SERP seen");
+  const freshnessLine = [
+    enrichedText,
+    identityText,
+    !enrichedText ? serpText : null,
+  ].filter(Boolean).join(" · ");
 
   return (
     <div

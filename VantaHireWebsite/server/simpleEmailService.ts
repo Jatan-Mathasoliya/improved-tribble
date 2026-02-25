@@ -177,6 +177,7 @@ export async function getEmailService(): Promise<EmailService | null> {
   if (emailServiceInstance) return emailServiceInstance;
 
   const provider = (process.env.EMAIL_PROVIDER || '').toLowerCase();
+  const isProduction = process.env.NODE_ENV === 'production';
   const fromEmail = process.env.SEND_FROM_EMAIL;
   const fromName = process.env.SEND_FROM_NAME || 'VantaHire';
   const notificationsTo = process.env.NOTIFICATION_EMAIL || fromEmail;
@@ -189,6 +190,10 @@ export async function getEmailService(): Promise<EmailService | null> {
     const secure = port === 465;
 
     if (!fromEmail || !pass) {
+      if (isProduction) {
+        console.error('Brevo SMTP is not fully configured in production. Email sending is disabled.');
+        return null;
+      }
       console.warn('Brevo SMTP not fully configured. Falling back to Ethereal.');
     } else {
       console.log('Using Brevo SMTP for email sending');
@@ -231,6 +236,11 @@ export async function getEmailService(): Promise<EmailService | null> {
       }
       return emailServiceInstance;
     }
+  }
+
+  if (isProduction) {
+    console.error('No production email provider configured. Set EMAIL_PROVIDER=brevo and SMTP credentials.');
+    return null;
   }
 
   console.log('Using Ethereal test email service (no real delivery)');

@@ -78,6 +78,11 @@ function formatBreakdownValue(value: unknown): string {
   return String(Math.round(value));
 }
 
+function formatDateLabel(input: string): string {
+  const parsed = new Date(input);
+  return Number.isNaN(parsed.getTime()) ? input : parsed.toLocaleDateString();
+}
+
 export function CandidateDrawer({
   candidate,
   open,
@@ -171,6 +176,11 @@ export function CandidateDrawer({
                 {c.enrichmentStatus}
               </Badge>
             )}
+            {c.searchSignals.linkedinLocale && (
+              <Badge variant="outline" className="text-xs uppercase">
+                LinkedIn {c.searchSignals.linkedinLocale}
+              </Badge>
+            )}
           </div>
 
           <Separator />
@@ -248,6 +258,12 @@ export function CandidateDrawer({
                 <p>
                   Enriched: {new Date(c.freshness.lastEnrichedAt).toLocaleDateString()}
                   {c.freshness.enrichedDaysAgo != null && ` (${c.freshness.enrichedDaysAgo}d ago)`}
+                </p>
+              )}
+              {c.searchSignals.serpDate && (
+                <p>
+                  SERP seen: {formatDateLabel(c.searchSignals.serpDate)}
+                  {c.searchSignals.serpDateDaysAgo != null && ` (${c.searchSignals.serpDateDaysAgo}d ago)`}
                 </p>
               )}
               {c.snapshot?.computedAt && (

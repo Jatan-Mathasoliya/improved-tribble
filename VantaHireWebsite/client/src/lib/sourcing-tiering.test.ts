@@ -67,4 +67,18 @@ describe("splitByTier", () => {
     expect(result.bestMatches.map((candidate) => candidate.id)).toEqual([1, 2]);
     expect(result.broaderPool).toHaveLength(0);
   });
+
+  it("handles all-broader explicit mode (zero best matches)", () => {
+    const candidates: TestCandidate[] = [
+      { id: 1, matchTier: "broader_pool", locationMatchType: "none" },
+      { id: 2, matchTier: "broader_pool", locationMatchType: "none" },
+      { id: 3, matchTier: "broader_pool", locationMatchType: "country_only" },
+    ];
+
+    const result = splitByTier(candidates);
+
+    expect(result.tierModel).toBe("explicit");
+    expect(result.bestMatches).toHaveLength(0);
+    expect(result.broaderPool.map((candidate) => candidate.id)).toEqual([1, 2, 3]);
+  });
 });

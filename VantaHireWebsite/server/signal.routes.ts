@@ -78,6 +78,21 @@ function readOptionalStringOrNull(input: Record<string, unknown> | null | undefi
   return typeof value === 'string' ? value : undefined;
 }
 
+function isLikelyValidLocationHint(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length < 2 || trimmed.length > 70) return false;
+  if (/\b(experience|education|skills?|linkedin|connections?)\b/i.test(trimmed)) return false;
+  if (/[|]/.test(trimmed)) return false;
+  if ((trimmed.match(/,/g) || []).length > 2) return false;
+  return true;
+}
+
+function toPercent(numerator: number, denominator: number): number {
+  if (denominator <= 0) return 0;
+  return Number(((numerator / denominator) * 100).toFixed(1));
+}
+
 /**
  * Recursively sort object keys for deterministic JSON serialization.
  * Arrays preserve element order; only object key order is normalized.
@@ -514,6 +529,18 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         ...(readFiniteNumber(runMetaGroupCounts, 'strictDemotedCount') !== undefined
           ? { strictDemotedCount: readFiniteNumber(runMetaGroupCounts, 'strictDemotedCount')! }
           : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'strictRescuedCount') !== undefined
+          ? { strictRescuedCount: readFiniteNumber(runMetaGroupCounts, 'strictRescuedCount')! }
+          : {}),
+        ...(readBoolean(runMetaGroupCounts, 'strictRescueApplied') !== undefined
+          ? { strictRescueApplied: readBoolean(runMetaGroupCounts, 'strictRescueApplied')! }
+          : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'strictRescueMinFitScoreUsed') !== undefined
+          ? { strictRescueMinFitScoreUsed: readFiniteNumber(runMetaGroupCounts, 'strictRescueMinFitScoreUsed')! }
+          : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'countryGuardFilteredCount') !== undefined
+          ? { countryGuardFilteredCount: readFiniteNumber(runMetaGroupCounts, 'countryGuardFilteredCount')! }
+          : {}),
         ...(runMetaGroupCounts && typeof runMetaGroupCounts.locationMatchCounts === 'object' && runMetaGroupCounts.locationMatchCounts !== null
           ? { locationMatchCounts: runMetaGroupCounts.locationMatchCounts as Record<string, number> }
           : {}),
@@ -548,6 +575,29 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
           }
         : null;
 
+      const totalForQuality = enriched.length;
+      const locationMatchedCount = enriched.filter(
+        (c) => c.locationMatchType === 'city_exact' || c.locationMatchType === 'city_alias' || c.locationMatchType === 'country_only',
+      ).length;
+      const validLocationHintCount = enriched.filter(
+        (c) => isLikelyValidLocationHint(c.locationHint ?? c.snapshot?.location ?? null),
+      ).length;
+      const nonZeroSkillScoreCount = enriched.filter((c) => {
+        const skillScore = c.fitBreakdown && typeof c.fitBreakdown === 'object'
+          ? (c.fitBreakdown as Record<string, unknown>).skillScore
+          : null;
+        return typeof skillScore === 'number' && Number.isFinite(skillScore) && skillScore > 0;
+      }).length;
+      const qualityDebug = {
+        totalCandidates: totalForQuality,
+        locationMatchedCount,
+        locationMatchedPct: toPercent(locationMatchedCount, totalForQuality),
+        validLocationHintCount,
+        validLocationHintPct: toPercent(validLocationHintCount, totalForQuality),
+        nonZeroSkillScoreCount,
+        nonZeroSkillScorePct: toPercent(nonZeroSkillScoreCount, totalForQuality),
+      };
+
       res.json({
         candidates: enriched,
         counts,
@@ -555,6 +605,7 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         expansionReason: resolvedExpansionReason,
         requestedLocation: resolvedRequestedLocation,
         discoverySummary,
+        qualityDebug,
       });
     } catch (error) {
       next(error);
