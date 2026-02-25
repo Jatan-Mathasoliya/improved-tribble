@@ -54,6 +54,7 @@ import { randomUUID } from 'crypto';
 import type { CsrfMiddleware } from './types/routes';
 import { normalizeStageName } from './lib/pipelineStageUtils';
 import { resolveActiveKGTenantId } from './lib/activekgTenant';
+import { MIN_RESUME_TEXT_LENGTH } from './lib/applicationGraphSyncProcessor';
 
 // Base URL for email links
 const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
@@ -288,25 +289,34 @@ export function registerApplicationsRoutes(
         console.error('Failed to send recruiter notification:', emailError);
       }
 
-      // Enqueue ActiveKG graph sync job (non-blocking)
+      // Enqueue ActiveKG graph sync job (non-blocking) — only if resume text is valid
       if (process.env.ACTIVEKG_SYNC_ENABLED === 'true' && application.organizationId) {
-        try {
-          const effectiveRecruiterId = job.postedBy;
-          const tenantId = resolveActiveKGTenantId(application.organizationId);
-          await storage.enqueueApplicationGraphSyncJob({
-            applicationId: application.id,
-            organizationId: application.organizationId,
-            jobId: application.jobId,
-            effectiveRecruiterId,
-            activekgTenantId: tenantId,
-          });
-        } catch (syncErr) {
-          console.error('[ACTIVEKG_SYNC] Failed to enqueue graph sync job (non-blocking):', {
-            applicationId: application.id,
-            jobId: application.jobId,
-            organizationId: application.organizationId,
-            error: syncErr instanceof Error ? syncErr.message : String(syncErr),
-          });
+        const hasValidResumeText = extractedResumeText && extractedResumeText.trim().length >= MIN_RESUME_TEXT_LENGTH;
+        if (hasValidResumeText) {
+          try {
+            const effectiveRecruiterId = job.postedBy;
+            const tenantId = resolveActiveKGTenantId(application.organizationId);
+            await storage.enqueueApplicationGraphSyncJob({
+              applicationId: application.id,
+              organizationId: application.organizationId,
+              jobId: application.jobId,
+              effectiveRecruiterId,
+              activekgTenantId: tenantId,
+            });
+          } catch (syncErr) {
+            console.error('[ACTIVEKG_SYNC] Failed to enqueue graph sync job (non-blocking):', {
+              applicationId: application.id,
+              jobId: application.jobId,
+              organizationId: application.organizationId,
+              error: syncErr instanceof Error ? syncErr.message : String(syncErr),
+            });
+          }
+        } else {
+          // Record why sync was skipped so it can be requeued after backfill
+          storage.updateApplicationSyncSkippedReason(
+            application.id,
+            !extractedResumeText ? 'resume_text_missing' : 'resume_text_below_threshold'
+          ).catch(err => console.error('[ACTIVEKG_SYNC] Failed to record skip reason:', err));
         }
       }
 
@@ -502,25 +512,34 @@ export function registerApplicationsRoutes(
           timestamp: new Date().toISOString()
         });
 
-        // Enqueue ActiveKG graph sync job (non-blocking)
+        // Enqueue ActiveKG graph sync job (non-blocking) — only if resume text is valid
         if (process.env.ACTIVEKG_SYNC_ENABLED === 'true' && application.organizationId) {
-          try {
-            const effectiveRecruiterId = req.user!.id;
-            const tenantId = resolveActiveKGTenantId(application.organizationId);
-            await storage.enqueueApplicationGraphSyncJob({
-              applicationId: application.id,
-              organizationId: application.organizationId,
-              jobId: application.jobId,
-              effectiveRecruiterId,
-              activekgTenantId: tenantId,
-            });
-          } catch (syncErr) {
-            console.error('[ACTIVEKG_SYNC] Failed to enqueue graph sync job (non-blocking):', {
-              applicationId: application.id,
-              jobId: application.jobId,
-              organizationId: application.organizationId,
-              error: syncErr instanceof Error ? syncErr.message : String(syncErr),
-            });
+          const hasValidResumeText = extractedResumeText && extractedResumeText.trim().length >= MIN_RESUME_TEXT_LENGTH;
+          if (hasValidResumeText) {
+            try {
+              const effectiveRecruiterId = req.user!.id;
+              const tenantId = resolveActiveKGTenantId(application.organizationId);
+              await storage.enqueueApplicationGraphSyncJob({
+                applicationId: application.id,
+                organizationId: application.organizationId,
+                jobId: application.jobId,
+                effectiveRecruiterId,
+                activekgTenantId: tenantId,
+              });
+            } catch (syncErr) {
+              console.error('[ACTIVEKG_SYNC] Failed to enqueue graph sync job (non-blocking):', {
+                applicationId: application.id,
+                jobId: application.jobId,
+                organizationId: application.organizationId,
+                error: syncErr instanceof Error ? syncErr.message : String(syncErr),
+              });
+            }
+          } else {
+            // Record why sync was skipped so it can be requeued after backfill
+            storage.updateApplicationSyncSkippedReason(
+              application.id,
+              !extractedResumeText ? 'resume_text_missing' : 'resume_text_below_threshold'
+            ).catch(err => console.error('[ACTIVEKG_SYNC] Failed to record skip reason:', err));
           }
         }
 

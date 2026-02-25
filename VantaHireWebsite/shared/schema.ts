@@ -186,6 +186,7 @@ export const applications = pgTable("applications", {
   aiGoodToHaveSkillsMissing: text("ai_good_to_have_skills_missing").array(), // Good-to-have skills NOT found
   resumeId: integer("resume_id").references(() => candidateResumes.id),
   whatsappConsent: boolean("whatsapp_consent").notNull().default(true), // WhatsApp notification consent (opt-out model)
+  syncSkippedReason: text("sync_skipped_reason"), // Why ActiveKG sync was skipped (e.g. 'resume_text_missing', 'resume_text_below_threshold')
 }, (table) => ({
   // Indexes for ATS performance
   orgIdx: index("applications_org_idx").on(table.organizationId),

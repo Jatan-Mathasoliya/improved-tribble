@@ -11,8 +11,9 @@ import { requireRole, requireSeat } from './auth';
 import { getUserOrganization } from './lib/organizationService';
 import { storage } from './storage';
 import { getTenantStrategy, resolveActiveKGTenantId } from './lib/activekgTenant';
+import { MIN_RESUME_TEXT_LENGTH } from './lib/applicationGraphSyncProcessor';
 import { getSearchDefaults } from './lib/activekgSearchConfig';
-import { search as activekgSearch, type ActiveKGSearchResult } from './lib/services/activekg-client';
+import { search as activekgSearch, type ActiveKGSearchResult, type ActiveKGSearchResponse } from './lib/services/activekg-client';
 import { getSignedDownloadUrl, getSignedViewUrl, downloadFromGCS } from './gcs-storage';
 import type { CsrfMiddleware } from './types/routes';
 import { db } from './db';
@@ -44,10 +45,13 @@ const moveToJobSchema = z.object({
 
 interface GroupedResult {
   applicationId: number;
-  bestScore: number;
+  bestScore: number; // ranking score returned by ActiveKG for the selected scoring mode
+  bestVectorScore: number | null; // true cosine similarity when provided by ActiveKG
   matchedChunks: number;
   highlights: string[];
 }
+
+type SemanticScoreType = 'rrf_fused' | 'weighted_fusion' | 'cosine' | 'unknown';
 
 /**
  * Group ActiveKG search results by application_id, keeping the best
@@ -59,6 +63,7 @@ function groupByApplication(results: ActiveKGSearchResult[]): GroupedResult[] {
   for (const r of results) {
     const appId = Number(r.metadata?.application_id ?? r.props?.application_id);
     if (!Number.isFinite(appId) || appId <= 0) continue;
+    const vectorScore = normalizeUnitScore(r.vector_similarity);
 
     const existing = map.get(appId);
     const snippet = String(r.props?.text ?? r.props?.chunk_text ?? '').slice(0, 300);
@@ -66,6 +71,9 @@ function groupByApplication(results: ActiveKGSearchResult[]): GroupedResult[] {
     if (existing) {
       if (r.similarity > existing.bestScore) {
         existing.bestScore = r.similarity;
+      }
+      if (vectorScore != null && (existing.bestVectorScore == null || vectorScore > existing.bestVectorScore)) {
+        existing.bestVectorScore = vectorScore;
       }
       existing.matchedChunks += 1;
       if (snippet && !existing.highlights.includes(snippet) && existing.highlights.length < 3) {
@@ -75,6 +83,7 @@ function groupByApplication(results: ActiveKGSearchResult[]): GroupedResult[] {
       map.set(appId, {
         applicationId: appId,
         bestScore: r.similarity,
+        bestVectorScore: vectorScore,
         matchedChunks: 1,
         highlights: snippet ? [snippet] : [],
       });
@@ -82,6 +91,35 @@ function groupByApplication(results: ActiveKGSearchResult[]): GroupedResult[] {
   }
 
   return Array.from(map.values()).sort((a, b) => b.bestScore - a.bestScore);
+}
+
+function scoreTypeFromSearchMode(value: unknown): SemanticScoreType {
+  if (typeof value !== 'string') return 'unknown';
+  const normalized = value.trim().toLowerCase();
+  if (normalized.includes('rrf')) return 'rrf_fused';
+  if (normalized.includes('weighted')) return 'weighted_fusion';
+  if (normalized.includes('cosine')) return 'cosine';
+  return 'unknown';
+}
+
+function normalizeUnitScore(value: unknown): number | null {
+  if (typeof value !== 'number' || Number.isNaN(value) || !Number.isFinite(value)) return null;
+  if (value < 0) return 0;
+  if (value > 1) return 1;
+  return value;
+}
+
+function inferScoreType(useHybrid: boolean): SemanticScoreType {
+  if (!useHybrid) return 'cosine';
+  const rrfEnabledRaw = (process.env.HYBRID_RRF_ENABLED ?? 'true').toString().trim().toLowerCase();
+  const rrfEnabled = rrfEnabledRaw !== 'false' && rrfEnabledRaw !== '0';
+  return rrfEnabled ? 'rrf_fused' : 'weighted_fusion';
+}
+
+function scoreTypeFromResponse(response: ActiveKGSearchResponse): SemanticScoreType {
+  const fromScoreType = scoreTypeFromSearchMode(response.score_type);
+  if (fromScoreType !== 'unknown') return fromScoreType;
+  return scoreTypeFromSearchMode(response.search_mode);
 }
 
 function asNonEmptyString(value: unknown): string | null {
@@ -273,6 +311,7 @@ export function registerCandidateSemanticRoutes(
         };
 
         let activekgResults: ActiveKGSearchResult[] = [];
+        let scoreType: SemanticScoreType = inferScoreType(searchPayloadBase.use_hybrid);
         const strategy = getTenantStrategy();
         if (isSuperAdminGlobalSearch) {
           if (strategy === 'org_scoped') {
@@ -292,6 +331,9 @@ export function registerCandidateSemanticRoutes(
                   }),
                 ),
               );
+              const scored = responses.map((r) => scoreTypeFromResponse(r));
+              const explicit = scored.find((s) => s !== 'unknown');
+              if (explicit) scoreType = explicit;
               activekgResults = responses.flatMap((r) => r.results);
             }
           } else {
@@ -300,6 +342,8 @@ export function registerCandidateSemanticRoutes(
               tenant_id: tenantId,
               ...(metadata_filters && { metadata_filters }),
             });
+            const explicit = scoreTypeFromResponse(response);
+            if (explicit !== 'unknown') scoreType = explicit;
             activekgResults = response.results;
           }
         } else {
@@ -312,6 +356,8 @@ export function registerCandidateSemanticRoutes(
               org_id: orgId,
             },
           });
+          const explicit = scoreTypeFromResponse(response);
+          if (explicit !== 'unknown') scoreType = explicit;
           activekgResults = response.results;
 
           // Compatibility fallback for mixed deployments:
@@ -327,6 +373,8 @@ export function registerCandidateSemanticRoutes(
                 org_id: orgId,
               },
             });
+            const legacyExplicit = scoreTypeFromResponse(legacyResponse);
+            if (legacyExplicit !== 'unknown') scoreType = legacyExplicit;
             activekgResults = legacyResponse.results;
           }
         }
@@ -337,6 +385,17 @@ export function registerCandidateSemanticRoutes(
           res.json({
             query,
             count: 0,
+            scoreType,
+            displayScoreType: scoreType,
+            scoreDiagnostics: {
+              topRawScore: null,
+              bottomRawScore: null,
+              spreadRawScore: null,
+              rankingTopRawScore: null,
+              rankingBottomRawScore: null,
+              rankingSpreadRawScore: null,
+              resultCount: 0,
+            },
             results: [],
             candidates: [],
             total: 0,
@@ -374,6 +433,7 @@ export function registerCandidateSemanticRoutes(
 
         // ── Build response, generate signed resume URLs ────────
         const results: Array<Record<string, unknown>> = [];
+        let usedVectorDisplayForRrf = false;
         for (const g of grouped) {
           const app = appMap.get(g.applicationId);
           if (!app) continue; // filtered out by org isolation
@@ -396,6 +456,9 @@ export function registerCandidateSemanticRoutes(
           const expiresAt = signedResumeUrl
             ? new Date(Date.now() + defaults.signedUrlMinutes * 60_000).toISOString()
             : null;
+          const useVectorDisplay = scoreType === 'rrf_fused' && g.bestVectorScore != null;
+          if (useVectorDisplay) usedVectorDisplayForRrf = true;
+          const displayScoreRaw = useVectorDisplay ? g.bestVectorScore! : g.bestScore;
 
           results.push({
             applicationId: app.id,
@@ -406,7 +469,9 @@ export function registerCandidateSemanticRoutes(
             currentJobTitle: job?.title ?? null,
             currentStageId: app.currentStage ?? null,
             currentStageName: stage?.name ?? null,
-            matchScore: Math.round(g.bestScore * 100),
+            rankingScoreRaw: Number(g.bestScore.toFixed(6)),
+            matchScoreRaw: Number(displayScoreRaw.toFixed(6)),
+            matchScore: Math.round(displayScoreRaw * 100),
             matchedChunks: g.matchedChunks,
             highlights: g.highlights,
               resume: {
@@ -427,6 +492,7 @@ export function registerCandidateSemanticRoutes(
         if (isSuperAdminGlobalSearch) {
           const externalMap = new Map<string, {
             bestScore: number;
+            bestVectorScore: number | null;
             matchedChunks: number;
             highlights: string[];
             sample: ActiveKGSearchResult;
@@ -440,10 +506,14 @@ export function registerCandidateSemanticRoutes(
 
             const key = Number.isFinite(appId) && appId > 0 ? `app:${appId}` : `node:${r.id}`;
             const snippet = String(r.props?.text ?? r.props?.chunk_text ?? '').slice(0, 300);
+            const vectorScore = normalizeUnitScore(r.vector_similarity);
             const existing = externalMap.get(key);
 
             if (existing) {
               if (r.similarity > existing.bestScore) existing.bestScore = r.similarity;
+              if (vectorScore != null && (existing.bestVectorScore == null || vectorScore > existing.bestVectorScore)) {
+                existing.bestVectorScore = vectorScore;
+              }
               existing.matchedChunks += 1;
               if (snippet && !existing.highlights.includes(snippet) && existing.highlights.length < 3) {
                 existing.highlights.push(snippet);
@@ -451,6 +521,7 @@ export function registerCandidateSemanticRoutes(
             } else {
               externalMap.set(key, {
                 bestScore: r.similarity,
+                bestVectorScore: vectorScore,
                 matchedChunks: 1,
                 highlights: snippet ? [snippet] : [],
                 sample: r,
@@ -545,6 +616,9 @@ export function registerCandidateSemanticRoutes(
                 }
               }
             }
+            const useVectorDisplay = scoreType === 'rrf_fused' && item.bestVectorScore != null;
+            if (useVectorDisplay) usedVectorDisplayForRrf = true;
+            const displayScoreRaw = useVectorDisplay ? item.bestVectorScore! : item.bestScore;
 
             results.push({
               applicationId: syntheticId--,
@@ -555,7 +629,9 @@ export function registerCandidateSemanticRoutes(
               currentJobTitle: null,
               currentStageId: null,
               currentStageName: null,
-              matchScore: Math.round(item.bestScore * 100),
+              rankingScoreRaw: Number(item.bestScore.toFixed(6)),
+              matchScoreRaw: Number(displayScoreRaw.toFixed(6)),
+              matchScore: Math.round(displayScoreRaw * 100),
               matchedChunks: item.matchedChunks,
               highlights: item.highlights,
               resume: {
@@ -573,10 +649,42 @@ export function registerCandidateSemanticRoutes(
           }
         }
 
+        const displayScoreType: SemanticScoreType = (
+          scoreType === 'rrf_fused' && usedVectorDisplayForRrf
+        ) ? 'cosine' : scoreType;
+
+        const rawScores = results
+          .map((r) => Number(r.matchScoreRaw))
+          .filter((value) => Number.isFinite(value));
+        const topRawScore = rawScores.length > 0 ? Math.max(...rawScores) : null;
+        const bottomRawScore = rawScores.length > 0 ? Math.min(...rawScores) : null;
+        const spreadRawScore = (topRawScore != null && bottomRawScore != null)
+          ? Number((topRawScore - bottomRawScore).toFixed(6))
+          : null;
+        const rankingRawScores = results
+          .map((r) => Number(r.rankingScoreRaw))
+          .filter((value) => Number.isFinite(value));
+        const rankingTopRawScore = rankingRawScores.length > 0 ? Math.max(...rankingRawScores) : null;
+        const rankingBottomRawScore = rankingRawScores.length > 0 ? Math.min(...rankingRawScores) : null;
+        const rankingSpreadRawScore = (rankingTopRawScore != null && rankingBottomRawScore != null)
+          ? Number((rankingTopRawScore - rankingBottomRawScore).toFixed(6))
+          : null;
+
         // Keep both shapes for backward compatibility with in-flight clients.
         res.json({
           query,
           count: results.length,
+          scoreType,
+          displayScoreType,
+          scoreDiagnostics: {
+            topRawScore,
+            bottomRawScore,
+            spreadRawScore,
+            rankingTopRawScore,
+            rankingBottomRawScore,
+            rankingSpreadRawScore,
+            resultCount: results.length,
+          },
           results,
           candidates: results,
           total: results.length,
@@ -682,6 +790,7 @@ export function registerCandidateSemanticRoutes(
           whatsappConsent: true,
           resumeFilename: sourceApp.resumeFilename,
           coverLetter: sourceApp.coverLetter ?? undefined,
+          extractedResumeText: sourceApp.extractedResumeText ?? undefined,
           submittedByRecruiter: true,
           createdByUserId: req.user!.id,
           source: 'internal_move',
@@ -716,22 +825,32 @@ export function registerCandidateSemanticRoutes(
           }
         }
 
-        // ── Enqueue ActiveKG sync for the clone (non-blocking) ─
+        // ── Enqueue ActiveKG sync for the clone (non-blocking) — only if resume text is valid ─
         if (process.env.ACTIVEKG_SYNC_ENABLED === 'true') {
-          try {
-            const tenantId = resolveActiveKGTenantId(orgId);
-            await storage.enqueueApplicationGraphSyncJob({
-              applicationId: cloned.id,
-              organizationId: orgId,
-              jobId: targetJobId,
-              effectiveRecruiterId: req.user!.id,
-              activekgTenantId: tenantId,
-            });
-          } catch (syncErr) {
-            console.error('[SEMANTIC_MOVE] Failed to enqueue graph sync:', {
-              clonedApplicationId: cloned.id,
-              error: syncErr,
-            });
+          const clonedResumeText = sourceApp.extractedResumeText;
+          const hasValidResumeText = clonedResumeText && clonedResumeText.trim().length >= MIN_RESUME_TEXT_LENGTH;
+          if (hasValidResumeText) {
+            try {
+              const tenantId = resolveActiveKGTenantId(orgId);
+              await storage.enqueueApplicationGraphSyncJob({
+                applicationId: cloned.id,
+                organizationId: orgId,
+                jobId: targetJobId,
+                effectiveRecruiterId: req.user!.id,
+                activekgTenantId: tenantId,
+              });
+            } catch (syncErr) {
+              console.error('[SEMANTIC_MOVE] Failed to enqueue graph sync:', {
+                clonedApplicationId: cloned.id,
+                error: syncErr,
+              });
+            }
+          } else {
+            // Record why sync was skipped so it can be requeued after backfill
+            storage.updateApplicationSyncSkippedReason(
+              cloned.id,
+              !clonedResumeText ? 'resume_text_missing' : 'resume_text_below_threshold'
+            ).catch(err => console.error('[SEMANTIC_MOVE] Failed to record skip reason:', err));
           }
         }
 

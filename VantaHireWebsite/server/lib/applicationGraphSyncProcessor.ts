@@ -24,6 +24,9 @@ import {
 import { chunkText, buildParentExternalId } from './activekgChunker';
 import type { ApplicationGraphSyncJob } from '@shared/schema';
 
+/** Minimum length of extractedResumeText required for graph sync */
+export const MIN_RESUME_TEXT_LENGTH = 50;
+
 const POLL_INTERVAL_MS = parseInt(process.env.ACTIVEKG_SYNC_INTERVAL_MS || '5000', 10);
 const BATCH_SIZE = parseInt(process.env.ACTIVEKG_SYNC_BATCH_SIZE || '20', 10);
 const MAX_ATTEMPTS = parseInt(process.env.ACTIVEKG_SYNC_MAX_ATTEMPTS || '8', 10);
@@ -106,10 +109,16 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
     return;
   }
 
-  if (!application.extractedResumeText || application.extractedResumeText.trim().length < 50) {
+  if (!application.extractedResumeText || application.extractedResumeText.trim().length < MIN_RESUME_TEXT_LENGTH) {
+    console.warn('[ACTIVEKG_SYNC] Job skipped at processor (defense-in-depth): resume text missing or too short', {
+      jobId: job.id,
+      applicationId: application.id,
+      hasText: !!application.extractedResumeText,
+      textLength: application.extractedResumeText?.trim().length ?? 0,
+    });
     await storage.markApplicationGraphSyncJobDeadLetter(
       job.id,
-      'No extracted resume text or text too short'
+      'No extracted resume text or text too short (should have been gated at enqueue)'
     );
     return;
   }

@@ -160,6 +160,7 @@ export interface IStorage {
     resumeUrl: string;
     resumeFilename?: string | null;
     userId?: number | null;
+    extractedResumeText?: string | undefined;
     submittedByRecruiter?: boolean;
     createdByUserId?: number;
     source?: string;
@@ -330,6 +331,9 @@ export interface IStorage {
   markApplicationGraphSyncJobSucceeded(id: number, parentNodeId: string, chunkCount: number): Promise<void>;
   markApplicationGraphSyncJobRetry(id: number, error: string, nextAttemptAt: Date): Promise<void>;
   markApplicationGraphSyncJobDeadLetter(id: number, error: string): Promise<void>;
+
+  // Sync skip tracking
+  updateApplicationSyncSkippedReason(id: number, reason: string): Promise<void>;
 
   // Semantic search / move helpers
   getApplicationsByIdsForOrg(applicationIds: number[], organizationId: number): Promise<Application[]>;
@@ -1334,6 +1338,7 @@ export class DatabaseStorage implements IStorage {
     resumeFilename?: string | null;
     resumeId?: number | null;
     userId?: number | null;
+    extractedResumeText?: string | undefined;
     submittedByRecruiter?: boolean;
     createdByUserId?: number;
     source?: string;
@@ -3752,6 +3757,18 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date(),
       })
       .where(eq(applicationGraphSyncJobs.id, id));
+  }
+
+  // ── Sync skip tracking ──────────────────────────────────────────
+
+  async updateApplicationSyncSkippedReason(id: number, reason: string): Promise<void> {
+    await db
+      .update(applications)
+      .set({
+        syncSkippedReason: reason,
+        updatedAt: new Date(),
+      })
+      .where(eq(applications.id, id));
   }
 
   // ── Semantic search / move helpers ───────────────────────────────

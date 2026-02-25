@@ -101,7 +101,8 @@ export async function ensureAtsSchema(): Promise<void> {
       submitted_by_recruiter BOOLEAN DEFAULT FALSE,
       created_by_user_id INTEGER REFERENCES users(id),
       source TEXT DEFAULT 'public_apply',
-      source_metadata JSONB
+      source_metadata JSONB,
+      sync_skipped_reason TEXT
     );
   `);
 
@@ -1402,6 +1403,8 @@ export async function ensureAtsSchema(): Promise<void> {
   await db.execute(sql`CREATE INDEX IF NOT EXISTS app_graph_sync_org_idx ON application_graph_sync_jobs(organization_id);`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS app_graph_sync_recruiter_idx ON application_graph_sync_jobs(effective_recruiter_id);`);
 
+  // Migration 005: Add sync_skipped_reason to applications
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS sync_skipped_reason TEXT;`);
 
   console.log('✅ ATS schema ready');
 }
