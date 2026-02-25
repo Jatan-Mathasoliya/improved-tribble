@@ -1,6 +1,6 @@
 import { useLocation } from "wouter";
 import { cn } from "@/lib/utils";
-import { FileText, Users, GitBranch, BarChart3, Settings } from "lucide-react";
+import { FileText, Users, GitBranch, BarChart3, Search } from "lucide-react";
 
 export interface JobSubNavProps {
   jobId: number;
@@ -32,6 +32,12 @@ export function JobSubNav({ jobId, jobTitle, className }: JobSubNavProps) {
       icon: <Users className="h-4 w-4" />,
     },
     {
+      id: "sourcing",
+      label: "Sourcing",
+      path: `/jobs/${jobId}/sourcing`,
+      icon: <Search className="h-4 w-4" />,
+    },
+    {
       id: "pipeline",
       label: "Pipeline",
       path: `/jobs/${jobId}/pipeline`,
@@ -48,6 +54,7 @@ export function JobSubNav({ jobId, jobTitle, className }: JobSubNavProps) {
   // Determine active tab based on current location
   const getActiveId = () => {
     if (location.includes("/applications")) return "applications";
+    if (location.includes("/sourcing")) return "sourcing";
     if (location.includes("/pipeline")) return "pipeline";
     if (location.includes("/analytics")) return "analytics";
     if (location.includes("/edit")) return "details";

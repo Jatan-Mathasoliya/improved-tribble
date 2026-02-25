@@ -75,8 +75,30 @@ export interface SignalResultsResponse {
   requestedAt: string;                      // ISO 8601
   completedAt: string | null;
   resultCount: number | null;
+  diagnostics?: Record<string, unknown> | null;
+  trackDecision?: Record<string, unknown> | null;
+  groupCounts?: SignalResultsGroupCounts | null;
+  snapshotStats?: Record<string, unknown> | null;
   candidates: SignalResultCandidate[];
   error?: string;
+}
+
+export interface SignalResultsGroupCounts {
+  bestMatches: number;
+  broaderPool: number;
+  strictMatchedCount?: number;
+  expandedCount?: number;
+  expansionReason?: string | null;
+  requestedLocation?: string | null;
+  strictDemotedCount?: number;
+  strictRescuedCount?: number;
+  strictRescueApplied?: boolean;
+  strictRescueMinFitScoreUsed?: number | null;
+  countryGuardFilteredCount?: number;
+  locationMatchCounts?: Record<string, number> | null;
+  demotedStrictWithCityMatch?: number;
+  strictBeforeDemotion?: number;
+  selectedSnapshotTrack?: string | null;
 }
 
 export interface SignalResultCandidate {
@@ -86,13 +108,18 @@ export interface SignalResultCandidate {
   sourceType: string;                       // raw Signal value
   enrichmentStatus: string;
   rank: number;
+  matchTier?: CandidateMatchTier | null;    // Signal tiering: best_matches | broader_pool
+  locationMatchType?: CandidateLocationMatchType | null; // city_exact | city_alias | country_only | none
   candidate: SignalCandidateDetail;
   identitySummary?: SignalIdentitySummary | null;
   snapshot: SignalIntelligenceSnapshot | null;
   freshness: {
-    stale: boolean | null;
+    stale?: boolean | null;
+    staleServed?: boolean | null;           // Signal v3 name
+    snapshotAgeDays?: number | null;
     lastEnrichedAt: string | null;          // ISO 8601
   };
+  professionalValidation?: unknown;
 }
 
 export type IdentityDisplayStatus = 'verified' | 'review' | 'weak';
@@ -115,10 +142,20 @@ export interface SignalCandidateDetail {
   headlineHint: string | null;
   locationHint: string | null;
   companyHint: string | null;
+  searchSnippet?: string | null;
+  searchMeta?: Record<string, unknown> | null;
+  searchProvider?: string | null;
+  searchSignals?: SignalSearchSignals | null;
   enrichmentStatus: string;
   confidenceScore: number | null;
   lastEnrichedAt: string | null;            // ISO 8601
   intelligenceSnapshots: SignalIntelligenceSnapshot[];
+}
+
+export interface SignalSearchSignals {
+  serpDate?: string | null;
+  linkedinHost?: string | null;
+  linkedinLocale?: string | null;
 }
 
 export interface SignalIntelligenceSnapshot {
@@ -172,7 +209,7 @@ export interface ContextHashInput {
 }
 
 /** Current context hash version. Bump when hash input fields change. */
-export const CONTEXT_HASH_VERSION = 2;
+export const CONTEXT_HASH_VERSION = 3;
 
 // =====================================================
 // SOURCING RUN STATUS (Vanta-side)
@@ -196,6 +233,220 @@ export function isTerminalStatus(status: SourcingRunStatus): boolean {
  */
 export function mapCallbackStatusToRunStatus(callbackStatus: SignalCallbackPayload['status']): 'completed' | 'failed' {
   return callbackStatus === 'failed' ? 'failed' : 'completed';
+}
+
+// =====================================================
+// UI RESPONSE TYPES
+// =====================================================
+
+export type CandidateMatchTier = 'best_matches' | 'broader_pool';
+export type CandidateLocationMatchType = 'city_exact' | 'city_alias' | 'country_only' | 'none';
+
+/** Flattened candidate shape for UI consumption. */
+export interface SourcedCandidateForUI {
+  id: number;
+  jobId: number;
+  signalCandidateId: string;
+  fitScore: number | null;
+  fitBreakdown: Record<string, unknown> | null;
+  sourceType: SignalSourceType;
+  displayBucket: SourceDisplayBucket;
+  state: 'new' | 'shortlisted' | 'hidden' | 'converted';
+
+  // Flattened from candidateSummary
+  nameHint: string | null;
+  headlineHint: string | null;
+  locationHint: string | null;
+  companyHint: string | null;
+  linkedinUrl: string | null;
+  enrichmentStatus: string | null;
+  confidenceScore: number | null;
+  searchSnippet: string | null;
+  searchProvider: string | null;
+  searchSignals: {
+    serpDate: string | null;
+    serpDateDaysAgo: number | null;
+    linkedinHost: string | null;
+    linkedinLocale: string | null;
+  };
+
+  // Tiering/quality metadata (additive, null-safe)
+  matchTier: CandidateMatchTier | null;
+  locationMatchType: CandidateLocationMatchType | null;
+  roleScore: number | null;
+  experienceScore: number | null;
+
+  // Identity (extracted from candidateSummary.identitySummary)
+  identitySummary: SignalIdentitySummary | null;
+
+  // Snapshot highlights
+  snapshot: {
+    skillsNormalized: unknown;
+    roleType: string | null;
+    seniorityBand: string | null;
+    location: string | null;
+    computedAt: string | null;
+  } | null;
+
+  // Freshness (computed at read time)
+  freshness: {
+    lastEnrichedAt: string | null;
+    lastIdentityCheckAt: string | null;
+    enrichedDaysAgo: number | null;
+    identityCheckDaysAgo: number | null;
+  };
+
+  // Legacy blob — kept for backward compatibility
+  candidateSummary: unknown;
+
+  // Metadata
+  lastSyncedAt: string | null;
+  createdAt: string | null;
+}
+
+function daysAgo(isoDate: string | null | undefined): number | null {
+  if (!isoDate) return null;
+  const d = new Date(isoDate);
+  if (isNaN(d.getTime())) return null;
+  return Math.max(0, Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24)));
+}
+
+function safeString(val: unknown): string | null {
+  return typeof val === 'string' ? val : null;
+}
+
+function safeNumber(val: unknown): number | null {
+  return typeof val === 'number' && Number.isFinite(val) ? val : null;
+}
+
+function safeRecord(val: unknown): Record<string, unknown> | null {
+  return val && typeof val === 'object' ? val as Record<string, unknown> : null;
+}
+
+function extractIdentitySummary(cs: Record<string, unknown>): SignalIdentitySummary | null {
+  const is = cs.identitySummary;
+  if (!is || typeof is !== 'object') return null;
+  const parsed = is as Record<string, unknown>;
+  const displayStatus = parsed.displayStatus;
+  if (displayStatus !== 'verified' && displayStatus !== 'review' && displayStatus !== 'weak') return null;
+  const platforms = parsed.platforms;
+  if (!Array.isArray(platforms) || platforms.some((p) => typeof p !== 'string')) return null;
+  return is as SignalIdentitySummary;
+}
+
+function extractSnapshot(cs: Record<string, unknown>): SourcedCandidateForUI['snapshot'] {
+  const snap = cs.snapshot as Record<string, unknown> | undefined;
+  if (!snap || typeof snap !== 'object') return null;
+  return {
+    skillsNormalized: snap.skillsNormalized ?? null,
+    roleType: safeString(snap.roleType),
+    seniorityBand: safeString(snap.seniorityBand),
+    location: safeString(snap.location),
+    computedAt: safeString(snap.computedAt),
+  };
+}
+
+function extractMatchTier(cs: Record<string, unknown>): CandidateMatchTier | null {
+  const val = cs.matchTier;
+  return val === 'best_matches' || val === 'broader_pool' ? val : null;
+}
+
+function extractLocationMatchType(cs: Record<string, unknown>): CandidateLocationMatchType | null {
+  const val = cs.locationMatchType;
+  return val === 'city_exact' || val === 'city_alias' || val === 'country_only' || val === 'none'
+    ? val
+    : null;
+}
+
+function extractSearchSignals(cs: Record<string, unknown>): SourcedCandidateForUI['searchSignals'] {
+  const explicitSignals = safeRecord(cs.searchSignals);
+  const explicitSerpDate = safeString(explicitSignals?.serpDate);
+  const explicitLinkedinHost = safeString(explicitSignals?.linkedinHost);
+  const explicitLinkedinLocale = safeString(explicitSignals?.linkedinLocale);
+
+  const searchMeta = safeRecord(cs.searchMeta);
+  const serperMeta = safeRecord(searchMeta?.serper);
+  const serpDate = explicitSerpDate ?? safeString(serperMeta?.resultDate);
+  const linkedinHost = explicitLinkedinHost ?? safeString(serperMeta?.linkedinHost);
+  const linkedinLocale = explicitLinkedinLocale ?? safeString(serperMeta?.linkedinLocale);
+
+  return {
+    serpDate,
+    serpDateDaysAgo: daysAgo(serpDate),
+    linkedinHost,
+    linkedinLocale,
+  };
+}
+
+/** Map a DB row to the flat UI shape. Null-safe throughout. */
+export function flattenCandidateForUI(row: {
+  id: number;
+  jobId: number;
+  signalCandidateId: string;
+  fitScore: number | null;
+  fitBreakdown: unknown;
+  sourceType: string;
+  state: string;
+  candidateSummary: unknown;
+  lastSyncedAt: Date | string | null;
+  createdAt: Date | string | null;
+}): SourcedCandidateForUI {
+  const cs: Record<string, unknown> =
+    row.candidateSummary && typeof row.candidateSummary === 'object'
+      ? (row.candidateSummary as Record<string, unknown>)
+      : {};
+
+  const identitySummary = extractIdentitySummary(cs);
+  const snapshot = extractSnapshot(cs);
+  const searchSignals = extractSearchSignals(cs);
+
+  const lastEnrichedAt = safeString((cs as any)?.lastEnrichedAt) ?? safeString(snapshot?.computedAt);
+  const lastIdentityCheckAt = identitySummary?.lastIdentityCheckAt ?? null;
+
+  return {
+    id: row.id,
+    jobId: row.jobId,
+    signalCandidateId: row.signalCandidateId,
+    fitScore: row.fitScore ?? null,
+    fitBreakdown: (row.fitBreakdown && typeof row.fitBreakdown === 'object'
+      ? row.fitBreakdown as Record<string, unknown>
+      : null),
+    sourceType: (row.sourceType as SignalSourceType) || 'discovered',
+    displayBucket: toDisplayBucket((row.sourceType as SignalSourceType) || 'discovered'),
+    state: (['new', 'shortlisted', 'hidden', 'converted'].includes(row.state)
+      ? row.state
+      : 'new') as SourcedCandidateForUI['state'],
+
+    nameHint: safeString(cs.nameHint),
+    headlineHint: safeString(cs.headlineHint),
+    locationHint: safeString(cs.locationHint),
+    companyHint: safeString(cs.companyHint),
+    linkedinUrl: safeString(cs.linkedinUrl),
+    enrichmentStatus: safeString(cs.enrichmentStatus),
+    confidenceScore: typeof cs.confidenceScore === 'number' ? cs.confidenceScore : null,
+    searchSnippet: safeString(cs.searchSnippet),
+    searchProvider: safeString(cs.searchProvider),
+    searchSignals,
+    matchTier: extractMatchTier(cs),
+    locationMatchType: extractLocationMatchType(cs),
+    roleScore: safeNumber(cs.roleScore),
+    experienceScore: safeNumber(cs.experienceScore),
+
+    identitySummary,
+    snapshot,
+
+    freshness: {
+      lastEnrichedAt,
+      lastIdentityCheckAt,
+      enrichedDaysAgo: daysAgo(lastEnrichedAt),
+      identityCheckDaysAgo: daysAgo(lastIdentityCheckAt),
+    },
+
+    candidateSummary: row.candidateSummary,
+
+    lastSyncedAt: row.lastSyncedAt instanceof Date ? row.lastSyncedAt.toISOString() : (row.lastSyncedAt ?? null),
+    createdAt: row.createdAt instanceof Date ? row.createdAt.toISOString() : (row.createdAt ?? null),
+  };
 }
 
 // =====================================================

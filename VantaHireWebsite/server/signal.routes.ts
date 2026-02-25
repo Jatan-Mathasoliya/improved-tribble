@@ -8,7 +8,7 @@
 
 import type { Express, Request, Response, NextFunction } from 'express';
 import { db } from './db';
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, asc } from 'drizzle-orm';
 import { jobs, jobSourcingRuns, jobSourcedCandidates, type JobSourcingRun, type JobSourcedCandidate } from '@shared/schema';
 import { requireRole } from './auth';
 import { requireSeat } from './auth';
@@ -18,12 +18,14 @@ import {
   CONTEXT_HASH_VERSION,
   toDisplayBucket,
   isTerminalStatus,
+  flattenCandidateForUI,
   type ContextHashInput,
   type SignalIdentitySummary,
   type SignalSourceRequest,
   type SourcingRunStatus,
 } from './lib/services/signal-contracts';
 import { createHash, randomUUID } from 'node:crypto';
+import { z } from 'zod';
 
 function normalizeSkillList(skills: unknown): string[] {
   if (!Array.isArray(skills)) {
@@ -57,11 +59,63 @@ function readIdentitySummary(candidateSummary: unknown): SignalIdentitySummary |
   return identitySummary as SignalIdentitySummary;
 }
 
+function readFiniteNumber(input: Record<string, unknown> | null | undefined, key: string): number | undefined {
+  if (!input) return undefined;
+  const value = input[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function readBoolean(input: Record<string, unknown> | null | undefined, key: string): boolean | undefined {
+  if (!input) return undefined;
+  const value = input[key];
+  return typeof value === 'boolean' ? value : undefined;
+}
+
+function readOptionalStringOrNull(input: Record<string, unknown> | null | undefined, key: string): string | null | undefined {
+  if (!input || !(key in input)) return undefined;
+  const value = input[key];
+  if (value == null) return null;
+  return typeof value === 'string' ? value : undefined;
+}
+
+function isLikelyValidLocationHint(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const trimmed = value.trim();
+  if (!trimmed || trimmed.length < 2 || trimmed.length > 70) return false;
+  if (/\b(experience|education|skills?|linkedin|connections?)\b/i.test(trimmed)) return false;
+  if (/[|]/.test(trimmed)) return false;
+  if ((trimmed.match(/,/g) || []).length > 2) return false;
+  return true;
+}
+
+function toPercent(numerator: number, denominator: number): number {
+  if (denominator <= 0) return 0;
+  return Number(((numerator / denominator) * 100).toFixed(1));
+}
+
+/**
+ * Recursively sort object keys for deterministic JSON serialization.
+ * Arrays preserve element order; only object key order is normalized.
+ */
+export function deepSortKeys(value: unknown): unknown {
+  if (value === null || value === undefined || typeof value !== 'object') {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return value.map(deepSortKeys);
+  }
+  const sorted: Record<string, unknown> = {};
+  for (const key of Object.keys(value as Record<string, unknown>).sort()) {
+    sorted[key] = deepSortKeys((value as Record<string, unknown>)[key]);
+  }
+  return sorted;
+}
+
 /**
  * Compute deterministic context hash from job fields.
  * Uses jdDigest when available, falls back to raw fields.
  */
-function computeContextHash(job: {
+export function computeContextHash(job: {
   jdDigest: unknown;
   jdDigestVersion: number | null;
   title: string;
@@ -86,8 +140,8 @@ function computeContextHash(job: {
     contextVersion: CONTEXT_HASH_VERSION,
   };
 
-  // Canonical JSON: sorted keys for determinism
-  const canonical = JSON.stringify(input, Object.keys(input).sort());
+  // Canonical JSON: deep-sort all keys for determinism (handles nested jdDigest)
+  const canonical = JSON.stringify(deepSortKeys(input));
   return createHash('sha256').update(canonical).digest('hex');
 }
 
@@ -208,6 +262,7 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
           callbackUrl,
           expiresAt,
           submittedAt: new Date(),
+          meta: { requestedLocation: job.location },
         });
       } catch (insertError: any) {
         // 23505 = unique_violation — concurrent request already inserted this requestId
@@ -281,6 +336,71 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         return;
       }
 
+      // Lazy expiry: mark stale non-terminal runs as expired on poll
+      const STALE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
+      if (!isTerminalStatus(latestRun.status as SourcingRunStatus)) {
+        const submittedMs = latestRun.submittedAt
+          ? new Date(latestRun.submittedAt).getTime()
+          : new Date(latestRun.createdAt).getTime();
+        const isStale = Date.now() - submittedMs > STALE_THRESHOLD_MS;
+        const isPastExpiry = latestRun.expiresAt &&
+          new Date(latestRun.expiresAt).getTime() < Date.now();
+
+        if (isStale || isPastExpiry) {
+          const expiredMsg = isPastExpiry
+            ? 'Run expired'
+            : 'Run timed out (no callback received)';
+          await db.update(jobSourcingRuns)
+            .set({
+              status: 'expired',
+              errorMessage: expiredMsg,
+              updatedAt: new Date(),
+            })
+            .where(eq(jobSourcingRuns.id, latestRun.id));
+
+          // Mutate local object so the response below reflects the new status
+          (latestRun as any).status = 'expired';
+          (latestRun as any).errorMessage = expiredMsg;
+        }
+      }
+
+      const runMeta = latestRun.meta && typeof latestRun.meta === 'object'
+        ? latestRun.meta as Record<string, unknown>
+        : null;
+      const enrichmentProgressRaw = runMeta?.enrichmentProgress && typeof runMeta.enrichmentProgress === 'object'
+        ? runMeta.enrichmentProgress as Record<string, unknown>
+        : null;
+      const enrichmentRefreshRaw = runMeta?.enrichmentRefresh && typeof runMeta.enrichmentRefresh === 'object'
+        ? runMeta.enrichmentRefresh as Record<string, unknown>
+        : null;
+      const pendingCount = readFiniteNumber(enrichmentProgressRaw, 'pendingCount') ?? 0;
+      const refreshStatus = readOptionalStringOrNull(enrichmentRefreshRaw, 'status') ?? null;
+      const refreshTerminal = refreshStatus === 'completed'
+        || refreshStatus === 'stopped_max_age'
+        || refreshStatus === 'stopped_no_queue'
+        || refreshStatus === 'stopped_enqueue_error';
+      const inProgress = refreshTerminal
+        ? false
+        : (readBoolean(enrichmentProgressRaw, 'inProgress')
+          ?? (pendingCount > 0 && latestRun.status === 'completed'));
+      const queueJobId = readOptionalStringOrNull(enrichmentRefreshRaw, 'queueJobId') ?? null;
+      const lastSyncedAt = readOptionalStringOrNull(enrichmentProgressRaw, 'lastSyncedAt')
+        ?? readOptionalStringOrNull(runMeta, 'lastResultsSyncAt')
+        ?? null;
+      const enrichment = enrichmentProgressRaw
+        ? {
+            totalCandidates: readFiniteNumber(enrichmentProgressRaw, 'totalCandidates') ?? 0,
+            enrichedCount: readFiniteNumber(enrichmentProgressRaw, 'enrichedCount') ?? 0,
+            pendingCount,
+            failedCount: readFiniteNumber(enrichmentProgressRaw, 'failedCount') ?? 0,
+            percent: readFiniteNumber(enrichmentProgressRaw, 'percent') ?? 0,
+            inProgress,
+            lastSyncedAt,
+            refreshStatus,
+            queueJobId,
+          }
+        : undefined;
+
       res.json({
         hasRun: true,
         requestId: latestRun.requestId,
@@ -288,7 +408,9 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         candidateCount: latestRun.candidateCount,
         submittedAt: latestRun.submittedAt,
         completedAt: latestRun.completedAt,
-        errorMessage: latestRun.status === 'failed' ? latestRun.errorMessage : undefined,
+        errorMessage: latestRun.status === 'failed' || latestRun.status === 'expired'
+          ? latestRun.errorMessage : undefined,
+        enrichment,
       });
     } catch (error) {
       next(error);
@@ -320,24 +442,253 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
           eq(jobSourcedCandidates.organizationId, orgResult.organization.id),
           eq(jobSourcedCandidates.jobId, jobId),
         ),
-        orderBy: desc(jobSourcedCandidates.fitScore),
+        orderBy: [desc(jobSourcedCandidates.fitScore), asc(jobSourcedCandidates.id)],
       });
 
-      // Derive UI buckets at read time
-      const enriched = candidates.map((c: JobSourcedCandidate) => ({
-        ...c,
-        identitySummary: readIdentitySummary(c.candidateSummary),
-        displayBucket: toDisplayBucket(c.sourceType as any),
-      }));
+      // Flatten to UI shape with deterministic sort (fitScore desc, id asc)
+      const enriched = candidates.map((c: JobSourcedCandidate) => flattenCandidateForUI(c));
+
+      const counts = {
+        total: enriched.length,
+        talentPool: enriched.filter((c) => c.displayBucket === 'talent_pool').length,
+        newlyDiscovered: enriched.filter((c) => c.displayBucket === 'newly_discovered').length,
+      };
+
+      // Grouping metadata for UI clarity (strict-vs-broader).
+      const hasExplicitTier = enriched.some((c) => c.matchTier === 'best_matches' || c.matchTier === 'broader_pool');
+      const hasLocationMatchType = enriched.some((c) => !!c.locationMatchType);
+
+      let bestMatches = enriched.length;
+      let broaderPool = 0;
+
+      if (hasExplicitTier) {
+        bestMatches = enriched.filter((c) => c.matchTier !== 'broader_pool').length;
+        broaderPool = enriched.filter((c) => c.matchTier === 'broader_pool').length;
+      } else if (hasLocationMatchType) {
+        bestMatches = enriched.filter((c) => c.locationMatchType !== 'none').length;
+        broaderPool = enriched.filter((c) => c.locationMatchType === 'none').length;
+      }
+
+      // Look up latest run meta for diagnostics
+      const latestRunForMeta = await db.query.jobSourcingRuns.findFirst({
+        where: and(
+          eq(jobSourcingRuns.organizationId, orgResult.organization.id),
+          eq(jobSourcingRuns.jobId, jobId),
+        ),
+        orderBy: desc(jobSourcingRuns.createdAt),
+        columns: { meta: true },
+      });
+      const runMeta = (latestRunForMeta?.meta as Record<string, unknown>) ?? {};
+      const runDiagnostics = runMeta.diagnostics && typeof runMeta.diagnostics === 'object'
+        ? runMeta.diagnostics as Record<string, unknown>
+        : null;
+      const runDiscoveryTelemetry = runDiagnostics?.discoveryTelemetry && typeof runDiagnostics.discoveryTelemetry === 'object'
+        ? runDiagnostics.discoveryTelemetry as Record<string, unknown>
+        : null;
+      const runMetaGroupCounts = runMeta.groupCounts && typeof runMeta.groupCounts === 'object'
+        ? runMeta.groupCounts as Record<string, unknown>
+        : null;
+      const resolvedBestMatches =
+        readFiniteNumber(runMetaGroupCounts, 'bestMatches') ??
+        readFiniteNumber(runMetaGroupCounts, 'strictMatchedCount') ??
+        bestMatches;
+      const resolvedBroaderPool =
+        readFiniteNumber(runMetaGroupCounts, 'broaderPool') ??
+        readFiniteNumber(runMetaGroupCounts, 'expandedCount') ??
+        broaderPool;
+      const groupExpansionReason = readOptionalStringOrNull(runMetaGroupCounts, 'expansionReason');
+      const metaExpansionReason = readOptionalStringOrNull(runMeta, 'expansionReason');
+      const resolvedExpansionReason = groupExpansionReason !== undefined
+        ? groupExpansionReason
+        : metaExpansionReason !== undefined
+          ? metaExpansionReason
+          : (resolvedBestMatches === 0 && resolvedBroaderPool > 0
+              ? 'strict_low_quality'
+              : resolvedBroaderPool > 0
+                ? 'expanded_location_results'
+                : null);
+      const groupRequestedLocation = readOptionalStringOrNull(runMetaGroupCounts, 'requestedLocation');
+      const metaRequestedLocation = readOptionalStringOrNull(runMeta, 'requestedLocation');
+      const resolvedRequestedLocation = groupRequestedLocation !== undefined
+        ? groupRequestedLocation
+        : metaRequestedLocation !== undefined
+          ? metaRequestedLocation
+          : null;
+
+      const groupCounts = {
+        bestMatches: resolvedBestMatches,
+        broaderPool: resolvedBroaderPool,
+        ...(readFiniteNumber(runMetaGroupCounts, 'strictMatchedCount') !== undefined
+          ? { strictMatchedCount: readFiniteNumber(runMetaGroupCounts, 'strictMatchedCount')! }
+          : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'expandedCount') !== undefined
+          ? { expandedCount: readFiniteNumber(runMetaGroupCounts, 'expandedCount')! }
+          : {}),
+        ...(groupExpansionReason !== undefined ? { expansionReason: groupExpansionReason } : {}),
+        ...(groupRequestedLocation !== undefined ? { requestedLocation: groupRequestedLocation } : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'strictDemotedCount') !== undefined
+          ? { strictDemotedCount: readFiniteNumber(runMetaGroupCounts, 'strictDemotedCount')! }
+          : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'strictRescuedCount') !== undefined
+          ? { strictRescuedCount: readFiniteNumber(runMetaGroupCounts, 'strictRescuedCount')! }
+          : {}),
+        ...(readBoolean(runMetaGroupCounts, 'strictRescueApplied') !== undefined
+          ? { strictRescueApplied: readBoolean(runMetaGroupCounts, 'strictRescueApplied')! }
+          : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'strictRescueMinFitScoreUsed') !== undefined
+          ? { strictRescueMinFitScoreUsed: readFiniteNumber(runMetaGroupCounts, 'strictRescueMinFitScoreUsed')! }
+          : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'countryGuardFilteredCount') !== undefined
+          ? { countryGuardFilteredCount: readFiniteNumber(runMetaGroupCounts, 'countryGuardFilteredCount')! }
+          : {}),
+        ...(runMetaGroupCounts && typeof runMetaGroupCounts.locationMatchCounts === 'object' && runMetaGroupCounts.locationMatchCounts !== null
+          ? { locationMatchCounts: runMetaGroupCounts.locationMatchCounts as Record<string, number> }
+          : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'demotedStrictWithCityMatch') !== undefined
+          ? { demotedStrictWithCityMatch: readFiniteNumber(runMetaGroupCounts, 'demotedStrictWithCityMatch')! }
+          : {}),
+        ...(readFiniteNumber(runMetaGroupCounts, 'strictBeforeDemotion') !== undefined
+          ? { strictBeforeDemotion: readFiniteNumber(runMetaGroupCounts, 'strictBeforeDemotion')! }
+          : {}),
+        ...(readOptionalStringOrNull(runMetaGroupCounts, 'selectedSnapshotTrack') !== undefined
+          ? { selectedSnapshotTrack: readOptionalStringOrNull(runMetaGroupCounts, 'selectedSnapshotTrack') }
+          : {}),
+      };
+      const strictExecuted = readFiniteNumber(runDiscoveryTelemetry, 'strictQueriesExecuted');
+      const fallbackExecuted = readFiniteNumber(runDiscoveryTelemetry, 'fallbackQueriesExecuted');
+      const providerUsage = runDiscoveryTelemetry?.providerUsage && typeof runDiscoveryTelemetry.providerUsage === 'object'
+        ? runDiscoveryTelemetry.providerUsage as Record<string, number>
+        : null;
+      const discoverySummary = runDiscoveryTelemetry
+        ? {
+            mode: readOptionalStringOrNull(runDiscoveryTelemetry, 'mode') ?? 'deterministic',
+            strictQueriesExecuted: strictExecuted ?? 0,
+            fallbackQueriesExecuted: fallbackExecuted ?? 0,
+            queriesExecuted: (strictExecuted ?? 0) + (fallbackExecuted ?? 0),
+            strictYield: readFiniteNumber(runDiscoveryTelemetry, 'strictYield') ?? 0,
+            fallbackYield: readFiniteNumber(runDiscoveryTelemetry, 'fallbackYield') ?? 0,
+            stoppedReason: readOptionalStringOrNull(runDiscoveryTelemetry, 'stoppedReason'),
+            providerUsage,
+            groqUsed: runDiscoveryTelemetry.groq && typeof runDiscoveryTelemetry.groq === 'object'
+              ? Boolean((runDiscoveryTelemetry.groq as Record<string, unknown>).used)
+              : false,
+          }
+        : null;
+
+      const totalForQuality = enriched.length;
+      const locationMatchedCount = enriched.filter(
+        (c) => c.locationMatchType === 'city_exact' || c.locationMatchType === 'city_alias' || c.locationMatchType === 'country_only',
+      ).length;
+      const validLocationHintCount = enriched.filter(
+        (c) => isLikelyValidLocationHint(c.locationHint ?? c.snapshot?.location ?? null),
+      ).length;
+      const nonZeroSkillScoreCount = enriched.filter((c) => {
+        const skillScore = c.fitBreakdown && typeof c.fitBreakdown === 'object'
+          ? (c.fitBreakdown as Record<string, unknown>).skillScore
+          : null;
+        return typeof skillScore === 'number' && Number.isFinite(skillScore) && skillScore > 0;
+      }).length;
+      const qualityDebug = {
+        totalCandidates: totalForQuality,
+        locationMatchedCount,
+        locationMatchedPct: toPercent(locationMatchedCount, totalForQuality),
+        validLocationHintCount,
+        validLocationHintPct: toPercent(validLocationHintCount, totalForQuality),
+        nonZeroSkillScoreCount,
+        nonZeroSkillScorePct: toPercent(nonZeroSkillScoreCount, totalForQuality),
+      };
 
       res.json({
         candidates: enriched,
-        counts: {
-          total: enriched.length,
-          talentPool: enriched.filter((c: { displayBucket: string }) => c.displayBucket === 'talent_pool').length,
-          newlyDiscovered: enriched.filter((c: { displayBucket: string }) => c.displayBucket === 'newly_discovered').length,
-        },
+        counts,
+        groupCounts,
+        expansionReason: resolvedExpansionReason,
+        requestedLocation: resolvedRequestedLocation,
+        discoverySummary,
+        qualityDebug,
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  /**
+   * PATCH /api/jobs/:id/sourced-candidates/:candidateId
+   *
+   * Update candidate state (shortlist/hide/unhide).
+   * Blocks updates while the candidate's sourcing run is still active.
+   */
+  const patchStateSchema = z.object({
+    state: z.enum(['new', 'shortlisted', 'hidden']),
+  });
+
+  app.patch('/api/jobs/:id/sourced-candidates/:candidateId', csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const jobId = parseInt(req.params.id || '', 10);
+      const candidateId = parseInt(req.params.candidateId || '', 10);
+      if (isNaN(jobId) || isNaN(candidateId)) {
+        res.status(400).json({ error: 'Invalid job ID or candidate ID' });
+        return;
+      }
+
+      const parseResult = patchStateSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        res.status(400).json({ error: 'Invalid body', details: parseResult.error.flatten() });
+        return;
+      }
+      const { state: newState } = parseResult.data;
+
+      const orgResult = await getUserOrganization(req.user!.id);
+      if (!orgResult) {
+        res.status(403).json({ error: 'Organization required', code: 'NO_ORGANIZATION' });
+        return;
+      }
+
+      // Fetch candidate — verify it belongs to org + job
+      const candidate = await db.query.jobSourcedCandidates.findFirst({
+        where: and(
+          eq(jobSourcedCandidates.id, candidateId),
+          eq(jobSourcedCandidates.jobId, jobId),
+          eq(jobSourcedCandidates.organizationId, orgResult.organization.id),
+        ),
+      });
+
+      if (!candidate) {
+        res.status(404).json({ error: 'Candidate not found' });
+        return;
+      }
+
+      // Block updates while the candidate's sourcing run is still active
+      const run = await db.query.jobSourcingRuns.findFirst({
+        where: eq(jobSourcingRuns.requestId, candidate.requestId),
+      });
+      if (run && !isTerminalStatus(run.status as SourcingRunStatus)) {
+        res.status(409).json({
+          error: 'Cannot update candidate while sourcing run is still active',
+          code: 'RUN_NOT_TERMINAL',
+        });
+        return;
+      }
+
+      // Reject transition to 'converted' (separate flow)
+      const currentState = candidate.state;
+      if (currentState === 'converted') {
+        res.status(400).json({ error: 'Cannot update converted candidates' });
+        return;
+      }
+
+      if (currentState === newState) {
+        // No-op — return current state
+        res.json({ success: true, id: candidate.id, state: newState });
+        return;
+      }
+
+      await db
+        .update(jobSourcedCandidates)
+        .set({ state: newState, updatedAt: new Date() })
+        .where(eq(jobSourcedCandidates.id, candidateId));
+
+      res.json({ success: true, id: candidate.id, state: newState });
     } catch (error) {
       next(error);
     }
