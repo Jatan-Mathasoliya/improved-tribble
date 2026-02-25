@@ -1376,9 +1376,7 @@ export async function ensureAtsSchema(): Promise<void> {
   await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourced_candidates_fit_score_idx ON job_sourced_candidates(fit_score);`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourced_candidates_source_type_idx ON job_sourced_candidates(source_type);`);
 
-  });
-
-  // Application Graph Sync Jobs table (ActiveKG integration)
+  // ActiveKG Graph Sync: Application resume sync jobs
   console.log('  Creating application_graph_sync_jobs table...');
   await db.execute(sql`
     CREATE TABLE IF NOT EXISTS application_graph_sync_jobs (
@@ -1398,10 +1396,13 @@ export async function ensureAtsSchema(): Promise<void> {
       updated_at TIMESTAMP DEFAULT NOW() NOT NULL
     );
   `);
+
+  console.log('  Creating application_graph_sync_jobs indexes...');
   await db.execute(sql`CREATE INDEX IF NOT EXISTS app_graph_sync_status_next_attempt_idx ON application_graph_sync_jobs(status, next_attempt_at);`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS app_graph_sync_org_idx ON application_graph_sync_jobs(organization_id);`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS app_graph_sync_recruiter_idx ON application_graph_sync_jobs(effective_recruiter_id);`);
 
+  });
 
   console.log('✅ ATS schema ready');
 }

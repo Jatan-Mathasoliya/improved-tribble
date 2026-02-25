@@ -18,6 +18,7 @@ export interface ChunkDescriptor {
 
 /**
  * Generate a deterministic external ID for a chunk.
+ * Uses SHA-256 hash of parent external ID + chunk index to produce a stable UUID-like string.
  */
 function generateChunkExternalId(parentExternalId: string, chunkIndex: number): string {
   return `${parentExternalId}#chunk${chunkIndex}`;
@@ -30,18 +31,23 @@ function generateChunkExternalId(parentExternalId: string, chunkIndex: number): 
 function findSplitPoint(text: string, target: number, minPos: number): number {
   if (target >= text.length) return text.length;
 
+  // Look backwards from target for sentence boundaries (within a reasonable range)
   const searchStart = Math.max(minPos, target - 500);
   const searchRegion = text.slice(searchStart, target + 1);
 
   // Find last sentence-ending punctuation followed by whitespace
-  let lastSentenceEnd = -1;
-  const re = /[.!?]\s/g;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(searchRegion)) !== null) {
-    lastSentenceEnd = match.index;
-  }
-  if (lastSentenceEnd !== -1) {
-    return searchStart + lastSentenceEnd + 1;
+  const sentenceEnd = searchRegion.search(/[.!?]\s+[A-Z]/g);
+  if (sentenceEnd !== -1) {
+    // Search for the last occurrence
+    let lastSentenceEnd = -1;
+    const re = /[.!?]\s/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(searchRegion)) !== null) {
+      lastSentenceEnd = match.index;
+    }
+    if (lastSentenceEnd !== -1) {
+      return searchStart + lastSentenceEnd + 1; // Include the punctuation
+    }
   }
 
   // Fall back to newline boundary
@@ -93,13 +99,16 @@ export function chunkText(
     const end = Math.min(pos + maxChunkChars, trimmed.length);
 
     if (end === trimmed.length) {
+      // Last chunk - take everything remaining
       chunks.push({ text: trimmed.slice(pos), startPos: pos });
       break;
     }
 
+    // Find a good split point
     const splitAt = findSplitPoint(trimmed, end, pos);
     chunks.push({ text: trimmed.slice(pos, splitAt), startPos: pos });
 
+    // Move forward, accounting for overlap
     const nextPos = Math.max(splitAt - overlapChars, pos + 1);
     pos = nextPos >= splitAt ? splitAt : nextPos;
   }

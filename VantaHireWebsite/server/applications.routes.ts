@@ -46,6 +46,7 @@ import {
 import { notifyRecruitersNewApplication } from './emailTemplateService';
 import { generateInterviewICS, getICSFilename } from './lib/icsGenerator';
 import { extractResumeText, validateResumeText } from './lib/resumeExtractor';
+import { resolveActiveKGTenantId } from './lib/activekgAuth';
 import { isAIEnabled, generateCandidateSummary } from './aiJobAnalyzer';
 import { checkCircuitBreaker } from './lib/aiMatchingEngine';
 import { applicationRateLimit, recruiterAddRateLimit, aiAnalysisRateLimit, type RateLimitInfo } from './rateLimit';
@@ -57,14 +58,6 @@ import { normalizeStageName } from './lib/pipelineStageUtils';
 // Base URL for email links
 const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
 
-// ActiveKG tenant resolution — shared "default" tenant (Phase 1)
-const ACTIVEKG_TENANT_STRATEGY = process.env.ACTIVEKG_TENANT_STRATEGY || 'shared';
-function resolveActiveKGTenantId(organizationId: number): string {
-  if (ACTIVEKG_TENANT_STRATEGY === 'org_scoped') {
-    return `org_${organizationId}`;
-  }
-  return 'default';
-}
 
 // Validation schemas
 const updateStageSchema = z.object({

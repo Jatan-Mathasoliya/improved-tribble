@@ -10,17 +10,16 @@
  * - Exponential backoff with jitter on transient failures
  * - Dead-letter after max attempts
  * - Bounded concurrency per poll cycle
- *
- * Auth: RS256 scoped JWT via signServiceJwt('activekg', ...) — no HS256.
  */
 
 import { storage } from '../storage';
+import { buildAuthContext, validateActiveKGAuthConfig } from './activekgAuth';
 import {
   createNode,
   createEdge,
   getNodeByExternalId,
   ActiveKGClientError,
-} from './services/activekg-client';
+} from './activekgClient';
 import { chunkText, buildParentExternalId } from './activekgChunker';
 import type { ApplicationGraphSyncJob } from '@shared/schema';
 
@@ -44,6 +43,7 @@ const RETRY_DELAYS_MS = [
 function computeNextAttemptAt(attempt: number): Date {
   const index = Math.min(attempt - 1, RETRY_DELAYS_MS.length - 1);
   const baseDelay = RETRY_DELAYS_MS[index]!;
+  // Add jitter: +/- 20%
   const jitter = baseDelay * 0.2 * (Math.random() * 2 - 1);
   return new Date(Date.now() + baseDelay + jitter);
 }
@@ -52,6 +52,7 @@ function isRetryableError(error: unknown): boolean {
   if (error instanceof ActiveKGClientError) {
     return error.retryable;
   }
+  // Network errors, timeouts are retryable
   if (error instanceof Error) {
     const msg = error.message.toLowerCase();
     return (
@@ -67,11 +68,13 @@ function isRetryableError(error: unknown): boolean {
 
 /**
  * Process a single sync job:
- * 1. Load application + validate prerequisites
- * 2. Ensure parent node in ActiveKG (idempotent via external_id)
- * 3. Chunk resume text
- * 4. Ensure chunk nodes + DERIVED_FROM edges
- * 5. Mark success
+ * 1. Load application + job data
+ * 2. Validate prerequisites
+ * 3. Ensure parent node in ActiveKG
+ * 4. Chunk resume text
+ * 5. Ensure chunk nodes
+ * 6. Ensure DERIVED_FROM edges
+ * 7. Mark success
  */
 async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
   // Defensive guard: dead-letter jobs with missing critical fields
@@ -98,6 +101,7 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
     return;
   }
 
+  // Step 2: Validate prerequisites
   if (!application.organizationId) {
     await storage.markApplicationGraphSyncJobDeadLetter(
       job.id,
@@ -114,102 +118,118 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
     return;
   }
 
-  const tenantId = job.activekgTenantId;
+  // Step 3: Build auth context
+  const authCtx = buildAuthContext(job.activekgTenantId, job.effectiveRecruiterId);
 
-  // Step 2: Build parent external ID
+  // Step 4: Build parent external ID
   const parentExternalId = buildParentExternalId(
     application.organizationId,
     application.id
   );
 
-  // Step 3: Ensure parent node (idempotent via external_id lookup)
+  // Step 5: Ensure parent node (idempotent)
   let parentNodeId: string;
-  const existingParent = await getNodeByExternalId(tenantId, parentExternalId);
+  const existingParent = await getNodeByExternalId(parentExternalId, authCtx);
 
   if (existingParent) {
     parentNodeId = existingParent.id;
   } else {
-    const parentResponse = await createNode(tenantId, {
-      classes: ['Document', 'Resume'],
-      props: {
-        title: `Application Resume ${application.id}`,
-        external_id: parentExternalId,
-        is_parent: true,
-        has_chunks: true,
-        resume_text: application.extractedResumeText,
-        application_id: application.id,
-        job_id: application.jobId,
-        org_id: application.organizationId,
-        effective_recruiter_id: job.effectiveRecruiterId,
-        resume_source: 'application',
-      },
-      metadata: {
-        source: 'vantahire',
-        org_id: application.organizationId,
-        job_id: application.jobId,
-        application_id: application.id,
-        resume_source: 'application',
-        effective_recruiter_id: job.effectiveRecruiterId,
-        submitted_by_recruiter: application.submittedByRecruiter || false,
-      },
-      tenant_id: tenantId,
-    });
-    parentNodeId = parentResponse.id;
-  }
-
-  // Step 4: Chunk resume text
-  const chunks = chunkText(application.extractedResumeText, parentExternalId);
-
-  // Step 5: Ensure chunk nodes + edges
-  for (const chunk of chunks) {
-    const existingChunk = await getNodeByExternalId(tenantId, chunk.externalId);
-    let chunkNodeId: string;
-
-    if (existingChunk) {
-      chunkNodeId = existingChunk.id;
-    } else {
-      const chunkResponse = await createNode(tenantId, {
-        classes: ['Chunk', 'Resume'],
+    const parentResponse = await createNode(
+      {
+        classes: ['Document', 'Resume'],
         props: {
-          text: chunk.text,
-          chunk_index: chunk.chunkIndex,
-          total_chunks: chunk.totalChunks,
-          parent_id: parentExternalId,
-          parent_title: `Application Resume ${application.id}`,
-          external_id: chunk.externalId,
+          title: `Application Resume ${application.id}`,
+          external_id: parentExternalId,
+          is_parent: true,
+          has_chunks: true,
           application_id: application.id,
           job_id: application.jobId,
           org_id: application.organizationId,
           effective_recruiter_id: job.effectiveRecruiterId,
+          gcs_path: application.resumeUrl || null,
+          resume_source: 'application',
         },
         metadata: {
           source: 'vantahire',
           org_id: application.organizationId,
           job_id: application.jobId,
           application_id: application.id,
+          resume_id: application.resumeId || null,
+          gcs_path: application.resumeUrl || null,
           resume_source: 'application',
           effective_recruiter_id: job.effectiveRecruiterId,
           submitted_by_recruiter: application.submittedByRecruiter || false,
+          created_by_user_id: application.createdByUserId || null,
         },
-        tenant_id: tenantId,
-      });
+        tenant_id: job.activekgTenantId,
+      },
+      authCtx
+    );
+    parentNodeId = parentResponse.id;
+  }
+
+  // Step 6: Chunk resume text
+  const chunks = chunkText(application.extractedResumeText, parentExternalId);
+
+  // Step 7: Ensure chunk nodes + edges
+  for (const chunk of chunks) {
+    // Check if chunk already exists
+    const existingChunk = await getNodeByExternalId(chunk.externalId, authCtx);
+    let chunkNodeId: string;
+
+    if (existingChunk) {
+      chunkNodeId = existingChunk.id;
+    } else {
+      const chunkResponse = await createNode(
+        {
+          classes: ['Chunk', 'Resume'],
+          props: {
+            text: chunk.text,
+            chunk_index: chunk.chunkIndex,
+            total_chunks: chunk.totalChunks,
+            parent_id: parentExternalId,
+            parent_title: `Application Resume ${application.id}`,
+            external_id: chunk.externalId,
+            application_id: application.id,
+            job_id: application.jobId,
+            org_id: application.organizationId,
+            effective_recruiter_id: job.effectiveRecruiterId,
+          },
+          metadata: {
+            source: 'vantahire',
+            org_id: application.organizationId,
+            job_id: application.jobId,
+            application_id: application.id,
+            gcs_path: application.resumeUrl || null,
+            resume_source: 'application',
+            effective_recruiter_id: job.effectiveRecruiterId,
+            submitted_by_recruiter: application.submittedByRecruiter || false,
+            created_by_user_id: application.createdByUserId || null,
+          },
+          tenant_id: job.activekgTenantId,
+        },
+        authCtx
+      );
       chunkNodeId = chunkResponse.id;
     }
 
     // Ensure DERIVED_FROM edge (chunk -> parent)
     try {
-      await createEdge(tenantId, {
-        src: chunkNodeId,
-        dst: parentNodeId,
-        rel: 'DERIVED_FROM',
-        props: {
-          chunk_index: chunk.chunkIndex,
-          total_chunks: chunk.totalChunks,
+      await createEdge(
+        {
+          src: chunkNodeId,
+          dst: parentNodeId,
+          rel: 'DERIVED_FROM',
+          props: {
+            chunk_index: chunk.chunkIndex,
+            total_chunks: chunk.totalChunks,
+          },
+          tenant_id: job.activekgTenantId,
         },
-        tenant_id: tenantId,
-      });
+        authCtx
+      );
     } catch (edgeError) {
-      // Ignore duplicate edge errors
+      // Ignore duplicate edge errors (conflict/500 with duplicate signature)
       if (
         edgeError instanceof ActiveKGClientError &&
         (edgeError.statusCode === 409 ||
@@ -223,7 +243,7 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
     }
   }
 
-  // Step 6: Mark success
+  // Step 8: Mark success
   await storage.markApplicationGraphSyncJobSucceeded(
     job.id,
     parentNodeId,
@@ -287,17 +307,20 @@ async function pollCycle(): Promise<void> {
     const active: Promise<void>[] = [];
 
     while (queue.length > 0 || active.length > 0) {
+      // Fill up to concurrency limit
       while (queue.length > 0 && active.length < CONCURRENCY) {
         const job = queue.shift()!;
         const task = processJob(job)
           .catch((error) => handleJobFailure(job, error))
           .then(() => {
+            // Remove from active
             const idx = active.indexOf(task);
             if (idx !== -1) active.splice(idx, 1);
           });
         active.push(task);
       }
 
+      // Wait for at least one to complete
       if (active.length > 0) {
         await Promise.race(active);
       }
@@ -313,6 +336,13 @@ async function pollCycle(): Promise<void> {
 export function startApplicationGraphSyncProcessor(): void {
   if (running) {
     console.warn('[ACTIVEKG_SYNC] Processor already running');
+    return;
+  }
+
+  try {
+    validateActiveKGAuthConfig();
+  } catch (err) {
+    console.error('[ACTIVEKG_SYNC] Auth config validation failed, processor will not start:', err);
     return;
   }
 
@@ -332,6 +362,7 @@ export function startApplicationGraphSyncProcessor(): void {
     }
   };
 
+  // Start first poll
   poll();
 }
 
