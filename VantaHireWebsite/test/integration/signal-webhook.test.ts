@@ -30,6 +30,10 @@ const signalClientMock = vi.hoisted(() => ({
   sourceJob: vi.fn(),
 }));
 
+const sourcingRefreshQueueMock = vi.hoisted(() => ({
+  enqueueSourcingRefresh: vi.fn(),
+}));
+
 vi.mock('../../server/lib/services/jwt-signer', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../server/lib/services/jwt-signer')>();
   return { ...original, verifySignalCallbackJwt: jwtMock.verifySignalCallbackJwt };
@@ -39,6 +43,14 @@ vi.mock('../../server/lib/services/signal-client', () => ({
   getResults: signalClientMock.getResults,
   sourceJob: signalClientMock.sourceJob,
 }));
+
+vi.mock('../../server/lib/sourcingRefreshQueue', async (importOriginal) => {
+  const original = await importOriginal<typeof import('../../server/lib/sourcingRefreshQueue')>();
+  return {
+    ...original,
+    enqueueSourcingRefresh: sourcingRefreshQueueMock.enqueueSourcingRefresh,
+  };
+});
 
 const emailMocks = vi.hoisted(() => ({
   sendEmail: vi.fn().mockResolvedValue(true),
@@ -77,6 +89,7 @@ maybeDescribe('Signal webhook callback integration', () => {
 
   beforeAll(async () => {
     process.env.BASE_URL = 'http://localhost:5000';
+    sourcingRefreshQueueMock.enqueueSourcingRefresh.mockResolvedValue('sourcing-refresh:test');
 
     app = express();
     server = await registerRoutes(app);
@@ -155,6 +168,8 @@ maybeDescribe('Signal webhook callback integration', () => {
   afterEach(() => {
     jwtMock.verifySignalCallbackJwt.mockReset();
     signalClientMock.getResults.mockReset();
+    sourcingRefreshQueueMock.enqueueSourcingRefresh.mockReset();
+    sourcingRefreshQueueMock.enqueueSourcingRefresh.mockResolvedValue('sourcing-refresh:test');
   });
 
   /** Helper: create a run record and return its requestId */
@@ -352,6 +367,278 @@ maybeDescribe('Signal webhook callback integration', () => {
       ),
     });
     expect(event?.status).toBe('failed');
+  });
+
+  // ── Test 2b: upsert refresh updates non-new rows without clobbering state ──
+  it('refreshes shortlisted rows and updates request_id to the latest run', async () => {
+    const initialRequestId = await createRun({ status: 'completed' });
+    const latestRequestId = await createRun({ status: 'submitted' });
+    const claims = mockJwtClaims(latestRequestId);
+    const signalCandidateId = `cand-shared-${randomUUID().slice(0, 8)}`;
+
+    await db.insert(jobSourcedCandidates).values({
+      organizationId: org.id,
+      jobId,
+      requestId: initialRequestId,
+      signalCandidateId,
+      fitScore: 41,
+      fitBreakdown: { skill: 0.2 },
+      sourceType: 'pool',
+      state: 'shortlisted',
+      candidateSummary: {
+        nameHint: 'Old Name',
+        enrichmentStatus: 'pending',
+      },
+    });
+
+    signalClientMock.getResults.mockResolvedValue({
+      success: true,
+      requestId: latestRequestId,
+      externalJobId: `vanta:jobs:${jobId}`,
+      status: 'complete',
+      requestedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      resultCount: 1,
+      candidates: [
+        {
+          candidateId: signalCandidateId,
+          fitScore: 0.92,
+          fitBreakdown: { skill: 0.95, experience: 0.85 },
+          sourceType: 'pool_enriched',
+          enrichmentStatus: 'completed',
+          rank: 1,
+          candidate: {
+            id: signalCandidateId,
+            linkedinUrl: null,
+            linkedinId: null,
+            nameHint: 'New Name',
+            headlineHint: 'Senior Engineer',
+            locationHint: 'Mumbai',
+            companyHint: 'NewCo',
+            enrichmentStatus: 'completed',
+            confidenceScore: 0.93,
+            lastEnrichedAt: new Date().toISOString(),
+            intelligenceSnapshots: [],
+          },
+          identitySummary: null,
+          snapshot: null,
+          freshness: { lastEnrichedAt: new Date().toISOString() },
+        },
+      ],
+    });
+
+    const res = await request(app)
+      .post('/api/webhooks/signal/callback')
+      .set('Authorization', 'Bearer fake-token')
+      .send({
+        version: 1,
+        requestId: latestRequestId,
+        externalJobId: `vanta:jobs:${jobId}`,
+        status: 'complete',
+        candidateCount: 1,
+        enrichedCount: 1,
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    const row = await db.query.jobSourcedCandidates.findFirst({
+      where: and(
+        eq(jobSourcedCandidates.jobId, jobId),
+        eq(jobSourcedCandidates.signalCandidateId, signalCandidateId),
+      ),
+    });
+
+    expect(row).toBeTruthy();
+    expect(row?.state).toBe('shortlisted');
+    expect(row?.requestId).toBe(latestRequestId);
+    expect(row?.fitScore).toBe(92);
+    const summary = row?.candidateSummary as Record<string, unknown>;
+    expect(summary?.nameHint).toBe('New Name');
+
+    const event = await db.query.webhookEvents.findFirst({
+      where: and(
+        eq(webhookEvents.provider, 'signal'),
+        eq(webhookEvents.eventId, claims.jti),
+      ),
+    });
+    expect(event?.status).toBe('processed');
+  });
+
+  // ── Test 2c: queue unavailable should not leave perpetual in-progress ──
+  it('marks enrichment refresh stopped_no_queue and status API returns inProgress=false', async () => {
+    const requestId = await createRun();
+    mockJwtClaims(requestId);
+    sourcingRefreshQueueMock.enqueueSourcingRefresh.mockResolvedValue(null);
+
+    signalClientMock.getResults.mockResolvedValue({
+      success: true,
+      requestId,
+      externalJobId: `vanta:jobs:${jobId}`,
+      status: 'complete',
+      requestedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      resultCount: 1,
+      candidates: [
+        {
+          candidateId: `cand-pending-${randomUUID().slice(0, 8)}`,
+          fitScore: 0.8,
+          fitBreakdown: { skill: 0.8 },
+          sourceType: 'discovered',
+          enrichmentStatus: 'pending',
+          rank: 1,
+          candidate: {
+            id: `cand-pending-${randomUUID().slice(0, 8)}`,
+            linkedinUrl: null,
+            linkedinId: null,
+            nameHint: 'Pending Candidate',
+            headlineHint: 'Engineer',
+            locationHint: 'Delhi',
+            companyHint: 'TestCo',
+            enrichmentStatus: 'pending',
+            confidenceScore: 0.8,
+            lastEnrichedAt: null,
+            intelligenceSnapshots: [],
+          },
+          identitySummary: null,
+          snapshot: null,
+          freshness: { lastEnrichedAt: null },
+        },
+      ],
+    });
+
+    const callbackRes = await request(app)
+      .post('/api/webhooks/signal/callback')
+      .set('Authorization', 'Bearer fake-token')
+      .send({
+        version: 1,
+        requestId,
+        externalJobId: `vanta:jobs:${jobId}`,
+        status: 'complete',
+        candidateCount: 1,
+        enrichedCount: 0,
+      });
+
+    expect(callbackRes.status).toBe(200);
+
+    const run = await db.query.jobSourcingRuns.findFirst({
+      where: eq(jobSourcingRuns.requestId, requestId),
+    });
+    const runMeta = (run?.meta ?? {}) as Record<string, unknown>;
+    const enrichmentRefresh = (runMeta.enrichmentRefresh ?? {}) as Record<string, unknown>;
+    const enrichmentProgress = (runMeta.enrichmentProgress ?? {}) as Record<string, unknown>;
+    expect(enrichmentRefresh.status).toBe('stopped_no_queue');
+    expect(enrichmentProgress.inProgress).toBe(false);
+
+    const agent = await loginRecruiterAgent();
+    const statusRes = await agent.get(`/api/jobs/${jobId}/sourcing-status`);
+    expect(statusRes.status).toBe(200);
+    expect(statusRes.body.status).toBe('completed');
+    expect(statusRes.body.enrichment.refreshStatus).toBe('stopped_no_queue');
+    expect(statusRes.body.enrichment.inProgress).toBe(false);
+  });
+
+  // ── Test 2d: enqueue throw should not leave perpetual in-progress ──
+  it('marks enrichment refresh stopped_enqueue_error and status API returns inProgress=false', async () => {
+    const requestId = await createRun();
+    mockJwtClaims(requestId);
+    sourcingRefreshQueueMock.enqueueSourcingRefresh.mockRejectedValue(new Error('redis down'));
+
+    signalClientMock.getResults.mockResolvedValue({
+      success: true,
+      requestId,
+      externalJobId: `vanta:jobs:${jobId}`,
+      status: 'complete',
+      requestedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      resultCount: 1,
+      candidates: [
+        {
+          candidateId: `cand-pending-${randomUUID().slice(0, 8)}`,
+          fitScore: 0.8,
+          fitBreakdown: { skill: 0.8 },
+          sourceType: 'discovered',
+          enrichmentStatus: 'pending',
+          rank: 1,
+          candidate: {
+            id: `cand-pending-${randomUUID().slice(0, 8)}`,
+            linkedinUrl: null,
+            linkedinId: null,
+            nameHint: 'Pending Candidate',
+            headlineHint: 'Engineer',
+            locationHint: 'Delhi',
+            companyHint: 'TestCo',
+            enrichmentStatus: 'pending',
+            confidenceScore: 0.8,
+            lastEnrichedAt: null,
+            intelligenceSnapshots: [],
+          },
+          identitySummary: null,
+          snapshot: null,
+          freshness: { lastEnrichedAt: null },
+        },
+      ],
+    });
+
+    const callbackRes = await request(app)
+      .post('/api/webhooks/signal/callback')
+      .set('Authorization', 'Bearer fake-token')
+      .send({
+        version: 1,
+        requestId,
+        externalJobId: `vanta:jobs:${jobId}`,
+        status: 'complete',
+        candidateCount: 1,
+        enrichedCount: 0,
+      });
+
+    expect(callbackRes.status).toBe(200);
+
+    const run = await db.query.jobSourcingRuns.findFirst({
+      where: eq(jobSourcingRuns.requestId, requestId),
+    });
+    const runMeta = (run?.meta ?? {}) as Record<string, unknown>;
+    const enrichmentRefresh = (runMeta.enrichmentRefresh ?? {}) as Record<string, unknown>;
+    const enrichmentProgress = (runMeta.enrichmentProgress ?? {}) as Record<string, unknown>;
+    expect(enrichmentRefresh.status).toBe('stopped_enqueue_error');
+    expect(enrichmentRefresh.lastEnqueueError).toContain('redis down');
+    expect(enrichmentProgress.inProgress).toBe(false);
+
+    const agent = await loginRecruiterAgent();
+    const statusRes = await agent.get(`/api/jobs/${jobId}/sourcing-status`);
+    expect(statusRes.status).toBe(200);
+    expect(statusRes.body.status).toBe('completed');
+    expect(statusRes.body.enrichment.refreshStatus).toBe('stopped_enqueue_error');
+    expect(statusRes.body.enrichment.inProgress).toBe(false);
+  });
+
+  // ── Test 2e: stopped_max_age should force status API inProgress=false ──
+  it('forces enrichment.inProgress=false when refresh status is stopped_max_age', async () => {
+    await createRun({
+      status: 'completed',
+      meta: {
+        enrichmentProgress: {
+          totalCandidates: 100,
+          enrichedCount: 40,
+          pendingCount: 60,
+          failedCount: 0,
+          percent: 40,
+          inProgress: true,
+          lastSyncedAt: new Date().toISOString(),
+        },
+        enrichmentRefresh: {
+          status: 'stopped_max_age',
+          lastAttemptAt: new Date().toISOString(),
+        },
+      },
+    });
+
+    const agent = await loginRecruiterAgent();
+    const statusRes = await agent.get(`/api/jobs/${jobId}/sourcing-status`);
+    expect(statusRes.status).toBe(200);
+    expect(statusRes.body.status).toBe('completed');
+    expect(statusRes.body.enrichment.refreshStatus).toBe('stopped_max_age');
+    expect(statusRes.body.enrichment.inProgress).toBe(false);
   });
 
   // ── Test 3: Replay protection — second callback is no-op ────────────

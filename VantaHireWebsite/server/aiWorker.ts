@@ -27,6 +27,8 @@ import { db } from './db';
 import { candidateResumes, applications, jobs, userAiUsage, users } from '../shared/schema';
 import { eq, and } from 'drizzle-orm';
 import type { BatchFitResult, BatchFitResultItem } from '../shared/schema';
+import { createSourcingRefreshWorker } from './lib/sourcingRefreshWorker';
+import { isSourcingRefreshQueueAvailable } from './lib/sourcingRefreshQueue';
 
 // Summary batch result types
 interface SummaryBatchResultItem {
@@ -731,6 +733,19 @@ async function main(): Promise<void> {
     const jobType = job?.name === 'batch-summary' ? 'summary' : 'fit';
     console.error(`[AI Worker] Batch ${jobType} job ${job?.id} failed:`, error.message);
   });
+
+  if (isSourcingRefreshQueueAvailable()) {
+    const sourcingRefreshWorker = createSourcingRefreshWorker(connection);
+    sourcingRefreshWorker.on('completed', (job: Job) => {
+      console.log(`[AI Worker] Sourcing refresh job ${job.id} completed`);
+    });
+    sourcingRefreshWorker.on('failed', (job: Job | undefined, error: Error) => {
+      console.error(`[AI Worker] Sourcing refresh job ${job?.id} failed:`, error.message);
+    });
+    console.log('[AI Worker] Sourcing refresh worker enabled');
+  } else {
+    console.log('[AI Worker] Sourcing refresh worker disabled');
+  }
 
   console.log('[AI Worker] Workers started, waiting for jobs...');
 }

@@ -84,6 +84,26 @@ function filterCandidates(candidates: SourcedCandidateForUI[], filters: Sourcing
   });
 }
 
+function getExpansionReasonText(reason?: string | null, requestedLocation?: string | null): string | null {
+  if (!reason) return null;
+  switch (reason) {
+    case "strict_low_quality":
+      return requestedLocation
+        ? `Matches in ${requestedLocation} were low confidence, so we expanded the search.`
+        : "Top strict matches were low confidence, so we expanded the search.";
+    case "insufficient_strict_location_matches":
+      return requestedLocation
+        ? `Not enough strong matches were found in ${requestedLocation}, so we expanded the search.`
+        : "Not enough strong strict matches were found, so we expanded the search.";
+    case "expanded_location_results":
+      return requestedLocation
+        ? `To increase results, we looked beyond ${requestedLocation}.`
+        : "To increase results, we broadened the search criteria.";
+    default:
+      return "We expanded the search to return more relevant candidates.";
+  }
+}
+
 export default function JobSourcingPage() {
   const params = useParams<{ id: string }>();
   const jobId = params.id ? parseInt(params.id, 10) : undefined;
@@ -146,6 +166,7 @@ export default function JobSourcingPage() {
 
   const requestedLocation = candidatesData?.requestedLocation || filters.location || null;
   const expansionReason = candidatesData?.expansionReason;
+  const expansionReasonText = getExpansionReasonText(expansionReason, requestedLocation);
 
   const liveSelected = selectedCandidate
     ? allCandidates.find((c) => c.id === selectedCandidate.id) ?? selectedCandidate
@@ -153,7 +174,10 @@ export default function JobSourcingPage() {
 
   const hasRun = status?.hasRun ?? false;
   const runStatus = status?.status;
-  const isRunning = hasRun && !["completed", "failed", "expired"].includes(runStatus ?? "");
+  const enrichment = status?.enrichment;
+  const enrichmentInProgress = enrichment?.inProgress === true;
+  const isSourcingActive = hasRun && !["completed", "failed", "expired"].includes(runStatus ?? "");
+  const isRunning = isSourcingActive || enrichmentInProgress;
   const isFailed = runStatus === "failed";
   const isExpired = runStatus === "expired";
   const isCompleted = runStatus === "completed";
@@ -206,8 +230,15 @@ export default function JobSourcingPage() {
               <div className="flex items-center gap-2 mt-1">
                 <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
                 <span className="text-sm text-muted-foreground">
-                  Searching for candidates...
-                  {status?.candidateCount != null && status.candidateCount > 0 && <> ({status.candidateCount} found so far)</>}
+                  {isSourcingActive
+                    ? "Searching for candidates..."
+                    : "Enrichment in progress..."}
+                  {isSourcingActive && status?.candidateCount != null && status.candidateCount > 0 && (
+                    <> ({status.candidateCount} found so far)</>
+                  )}
+                  {!isSourcingActive && enrichmentInProgress && (
+                    <> ({enrichment?.enrichedCount ?? 0}/{enrichment?.totalCandidates ?? 0} enriched)</>
+                  )}
                 </span>
               </div>
             )}
@@ -222,7 +253,23 @@ export default function JobSourcingPage() {
           </Button>
         </div>
 
-        {isRunning && <Progress value={undefined} className="h-1.5 mb-4" />}
+        {isRunning && (
+          <Progress
+            value={isSourcingActive ? undefined : enrichment?.percent}
+            className="h-1.5 mb-4"
+          />
+        )}
+
+        {!isFailed && !isExpired && enrichmentInProgress && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 p-3 mb-4">
+            <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
+              We are still enriching candidate profiles in the background.
+            </p>
+            <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
+              {enrichment?.enrichedCount ?? 0} of {enrichment?.totalCandidates ?? 0} profiles enriched so far. This list updates automatically.
+            </p>
+          </div>
+        )}
 
         {isFailed && (
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 mb-4 flex items-center gap-3">
@@ -310,12 +357,12 @@ export default function JobSourcingPage() {
               <div className="rounded-lg border border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950/30 p-3 mb-4">
                 <p className="text-sm font-medium text-blue-900 dark:text-blue-100">
                   {requestedLocation
-                    ? `No strict location+quality matches found for ${requestedLocation}. Showing broader matches.`
-                    : "No strict matches found. Showing broader matches."}
+                    ? `We couldn't find enough strong matches in ${requestedLocation}. Showing broader matches.`
+                    : "We couldn't find enough strong direct matches. Showing broader matches."}
                 </p>
-                {expansionReason && (
+                {expansionReasonText && (
                   <p className="text-xs text-blue-700 dark:text-blue-300 mt-1">
-                    Reason: {expansionReason}
+                    Why this happened: {expansionReasonText}
                   </p>
                 )}
               </div>
@@ -325,12 +372,12 @@ export default function JobSourcingPage() {
               <div className="rounded-lg border border-warning/30 bg-warning/10 p-3 mb-4">
                 <p className="text-sm text-warning-foreground font-medium">
                   {requestedLocation
-                    ? `${bestMatches.length} profiles matched ${requestedLocation}. Showing ${broaderPool.length} broader matches as well.`
+                    ? `Found ${bestMatches.length} strong matches in ${requestedLocation}. Also showing ${broaderPool.length} broader matches.`
                     : `Showing ${broaderPool.length} broader matches in addition to best matches.`}
                 </p>
-                {(expansionReason || grouped.tierModel !== "fallback") && (
+                {(expansionReasonText || grouped.tierModel !== "fallback") && (
                   <p className="text-xs text-warning-foreground/80 mt-1">
-                    Reason: {expansionReason || "expanded results due to limited strict matches"}
+                    Why this happened: {expansionReasonText || "We expanded the search to include additional relevant profiles."}
                   </p>
                 )}
               </div>

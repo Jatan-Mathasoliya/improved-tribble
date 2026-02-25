@@ -68,6 +68,17 @@ export interface SourcingStatus {
   submittedAt?: string;
   completedAt?: string;
   errorMessage?: string;
+  enrichment?: {
+    totalCandidates: number;
+    enrichedCount: number;
+    pendingCount: number;
+    failedCount: number;
+    percent: number;
+    inProgress: boolean;
+    lastSyncedAt?: string | null;
+    refreshStatus?: string | null;
+    queueJobId?: string | null;
+  };
 }
 
 export interface SourcedCandidatesResponse {
@@ -110,9 +121,14 @@ function isTerminal(status: string | undefined): boolean {
   return !!status && TERMINAL_STATUSES.has(status);
 }
 
+function hasEnrichmentInProgress(status: SourcingStatus | undefined): boolean {
+  return status?.enrichment?.inProgress === true;
+}
+
 export function useSourcingStatus(jobId: number | undefined) {
   const queryClient = useQueryClient();
   const prevStatusRef = useRef<string | undefined>(undefined);
+  const prevEnrichmentRef = useRef<boolean>(false);
 
   const query = useQuery<SourcingStatus>({
     queryKey: ["/api/jobs", jobId, "sourcing-status"],
@@ -124,26 +140,41 @@ export function useSourcingStatus(jobId: number | undefined) {
     refetchInterval: (q) => {
       const data = q.state.data;
       if (!data?.hasRun) return false;
-      return isTerminal(data.status) ? false : 7000;
+      if (!isTerminal(data.status)) return 7000;
+      return hasEnrichmentInProgress(data) ? 7000 : false;
     },
   });
 
   useEffect(() => {
     const currentStatus = query.data?.status;
     const prevStatus = prevStatusRef.current;
-    prevStatusRef.current = currentStatus;
+    const currentEnrichment = hasEnrichmentInProgress(query.data);
+    const prevEnrichment = prevEnrichmentRef.current;
 
-    if (currentStatus && prevStatus && !isTerminal(prevStatus) && isTerminal(currentStatus)) {
+    prevStatusRef.current = currentStatus;
+    prevEnrichmentRef.current = currentEnrichment;
+
+    const runJustCompleted = currentStatus && prevStatus && !isTerminal(prevStatus) && isTerminal(currentStatus);
+    const enrichmentChanged = currentEnrichment !== prevEnrichment;
+
+    if (runJustCompleted || currentEnrichment || enrichmentChanged) {
       queryClient.invalidateQueries({
         queryKey: ["/api/jobs", jobId, "sourced-candidates"],
       });
     }
-  }, [query.data?.status, jobId, queryClient]);
+  }, [
+    query.data?.status,
+    query.data?.enrichment?.inProgress,
+    query.data?.enrichment?.enrichedCount,
+    query.data?.enrichment?.pendingCount,
+    jobId,
+    queryClient,
+  ]);
 
   return {
     data: query.data,
     isLoading: query.isLoading,
-    isPolling: !!query.data?.hasRun && !isTerminal(query.data?.status),
+    isPolling: !!query.data?.hasRun && (!isTerminal(query.data?.status) || hasEnrichmentInProgress(query.data)),
   };
 }
 

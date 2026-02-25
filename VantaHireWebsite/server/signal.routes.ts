@@ -65,6 +65,12 @@ function readFiniteNumber(input: Record<string, unknown> | null | undefined, key
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
+function readBoolean(input: Record<string, unknown> | null | undefined, key: string): boolean | undefined {
+  if (!input) return undefined;
+  const value = input[key];
+  return typeof value === 'boolean' ? value : undefined;
+}
+
 function readOptionalStringOrNull(input: Record<string, unknown> | null | undefined, key: string): string | null | undefined {
   if (!input || !(key in input)) return undefined;
   const value = input[key];
@@ -343,6 +349,43 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         }
       }
 
+      const runMeta = latestRun.meta && typeof latestRun.meta === 'object'
+        ? latestRun.meta as Record<string, unknown>
+        : null;
+      const enrichmentProgressRaw = runMeta?.enrichmentProgress && typeof runMeta.enrichmentProgress === 'object'
+        ? runMeta.enrichmentProgress as Record<string, unknown>
+        : null;
+      const enrichmentRefreshRaw = runMeta?.enrichmentRefresh && typeof runMeta.enrichmentRefresh === 'object'
+        ? runMeta.enrichmentRefresh as Record<string, unknown>
+        : null;
+      const pendingCount = readFiniteNumber(enrichmentProgressRaw, 'pendingCount') ?? 0;
+      const refreshStatus = readOptionalStringOrNull(enrichmentRefreshRaw, 'status') ?? null;
+      const refreshTerminal = refreshStatus === 'completed'
+        || refreshStatus === 'stopped_max_age'
+        || refreshStatus === 'stopped_no_queue'
+        || refreshStatus === 'stopped_enqueue_error';
+      const inProgress = refreshTerminal
+        ? false
+        : (readBoolean(enrichmentProgressRaw, 'inProgress')
+          ?? (pendingCount > 0 && latestRun.status === 'completed'));
+      const queueJobId = readOptionalStringOrNull(enrichmentRefreshRaw, 'queueJobId') ?? null;
+      const lastSyncedAt = readOptionalStringOrNull(enrichmentProgressRaw, 'lastSyncedAt')
+        ?? readOptionalStringOrNull(runMeta, 'lastResultsSyncAt')
+        ?? null;
+      const enrichment = enrichmentProgressRaw
+        ? {
+            totalCandidates: readFiniteNumber(enrichmentProgressRaw, 'totalCandidates') ?? 0,
+            enrichedCount: readFiniteNumber(enrichmentProgressRaw, 'enrichedCount') ?? 0,
+            pendingCount,
+            failedCount: readFiniteNumber(enrichmentProgressRaw, 'failedCount') ?? 0,
+            percent: readFiniteNumber(enrichmentProgressRaw, 'percent') ?? 0,
+            inProgress,
+            lastSyncedAt,
+            refreshStatus,
+            queueJobId,
+          }
+        : undefined;
+
       res.json({
         hasRun: true,
         requestId: latestRun.requestId,
@@ -352,6 +395,7 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         completedAt: latestRun.completedAt,
         errorMessage: latestRun.status === 'failed' || latestRun.status === 'expired'
           ? latestRun.errorMessage : undefined,
+        enrichment,
       });
     } catch (error) {
       next(error);

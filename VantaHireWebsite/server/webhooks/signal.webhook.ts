@@ -14,47 +14,22 @@
 
 import type { Express, Request, Response } from 'express';
 import { db } from '../db';
-import { eq, and, sql } from 'drizzle-orm';
+import { eq, and } from 'drizzle-orm';
 import {
   webhookEvents,
   jobSourcingRuns,
-  jobSourcedCandidates,
   organizations,
   type WebhookStatus,
 } from '@shared/schema';
 import { verifySignalCallbackJwt } from '../lib/services/jwt-signer';
-import { getResults } from '../lib/services/signal-client';
 import {
   mapCallbackStatusToRunStatus,
   type SignalCallbackPayload,
-  type SignalResultsResponse,
-  type SignalResultCandidate,
 } from '../lib/services/signal-contracts';
+import { syncSignalResultsIntoVanta } from '../lib/services/sourcing-sync';
+import { enqueueSourcingRefresh } from '../lib/sourcingRefreshQueue';
 
 const WEBHOOK_PROVIDER = 'signal';
-
-function readOptionalStringOrNull(
-  input: Record<string, unknown> | null | undefined,
-  key: string,
-): string | null | undefined {
-  if (!input || !(key in input)) return undefined;
-  const value = input[key];
-  if (value == null) return null;
-  return typeof value === 'string' ? value : undefined;
-}
-
-/**
- * Normalize Signal fit score for job_sourced_candidates.fit_score (INTEGER 0-100).
- * Signal may return either a ratio (0..1) or a percent-like number (0..100).
- */
-function normalizeFitScoreForStorage(fitScore: number | null): number | null {
-  if (typeof fitScore !== 'number' || Number.isNaN(fitScore)) {
-    return null;
-  }
-
-  const scaled = fitScore <= 1 ? fitScore * 100 : fitScore;
-  return Math.max(0, Math.min(100, Math.round(scaled)));
-}
 
 /**
  * Atomically claim a webhook event for processing.
@@ -92,65 +67,6 @@ async function finalizeWebhookEvent(
       eq(webhookEvents.provider, WEBHOOK_PROVIDER),
       eq(webhookEvents.eventId, eventId),
     ));
-}
-
-/**
- * Upsert sourced candidates from Signal results.
- *
- * State-safe: only updates scores/summary when recruiter state is still 'new'.
- * Recruiter actions (shortlisted/hidden/converted) are never overwritten.
- */
-async function upsertCandidates(
-  organizationId: number,
-  jobId: number,
-  requestId: string,
-  candidates: SignalResultCandidate[],
-): Promise<number> {
-  let upserted = 0;
-
-  for (const c of candidates) {
-    const fitScore = normalizeFitScoreForStorage(c.fitScore);
-
-    // Build summary from Signal's candidate + snapshot data
-    const summary = {
-      nameHint: c.candidate.nameHint,
-      headlineHint: c.candidate.headlineHint,
-      locationHint: c.candidate.locationHint,
-      companyHint: c.candidate.companyHint,
-      linkedinUrl: c.candidate.linkedinUrl,
-      enrichmentStatus: c.candidate.enrichmentStatus,
-      confidenceScore: c.candidate.confidenceScore,
-      lastEnrichedAt: c.candidate.lastEnrichedAt ?? c.freshness?.lastEnrichedAt ?? null,
-      searchSnippet: (c.candidate as any).searchSnippet ?? null,
-      identitySummary: c.identitySummary ?? null,
-      snapshot: c.snapshot,
-      rank: c.rank,
-      matchTier: c.matchTier ?? null,
-      locationMatchType: c.locationMatchType ?? null,
-    };
-
-    await db.execute(sql`
-      INSERT INTO job_sourced_candidates (
-        organization_id, job_id, request_id, signal_candidate_id,
-        fit_score, fit_breakdown, source_type, state,
-        candidate_summary, last_synced_at, created_at, updated_at
-      ) VALUES (
-        ${organizationId}, ${jobId}, ${requestId}, ${c.candidateId},
-        ${fitScore}, ${JSON.stringify(c.fitBreakdown)}::jsonb, ${c.sourceType}, 'new',
-        ${JSON.stringify(summary)}::jsonb, NOW(), NOW(), NOW()
-      )
-      ON CONFLICT (job_id, signal_candidate_id) DO UPDATE SET
-        fit_score = EXCLUDED.fit_score,
-        fit_breakdown = EXCLUDED.fit_breakdown,
-        candidate_summary = EXCLUDED.candidate_summary,
-        last_synced_at = NOW(),
-        updated_at = NOW()
-      WHERE job_sourced_candidates.state = 'new'
-    `);
-    upserted++;
-  }
-
-  return upserted;
 }
 
 export function registerSignalWebhook(app: Express) {
@@ -227,29 +143,33 @@ export function registerSignalWebhook(app: Express) {
       const runStatus = mapCallbackStatusToRunStatus(payload.status);
       let processError: string | undefined;
       let candidateCount = payload.candidateCount || 0;
-      let fetchedResults: SignalResultsResponse | null = null;
+      let metaPatch: Record<string, unknown> | null = null;
+      let refreshJobId: string | null = null;
+      let refreshQueueError: string | undefined;
+      let enrichmentInProgress = false;
 
       // 8. If completed/partial, fetch results and upsert candidates
       if (runStatus === 'completed') {
         try {
-          fetchedResults = await getResults(
-            org.signalTenantId,
-            run.externalJobId,
-            payload.requestId,
-          );
-          const results = fetchedResults;
+          const sync = await syncSignalResultsIntoVanta({
+            organizationId: run.organizationId,
+            jobId: run.jobId,
+            requestId: payload.requestId,
+            externalJobId: run.externalJobId,
+            signalTenantId: org.signalTenantId,
+          });
 
-          candidateCount = Array.isArray(results.candidates)
-            ? results.candidates.length
-            : (results.resultCount ?? 0);
-          if (results.candidates?.length) {
-            await upsertCandidates(
-              run.organizationId,
-              run.jobId,
-              payload.requestId,
-              results.candidates,
-            );
-            candidateCount = results.candidates.length;
+          candidateCount = sync.candidateCount;
+          metaPatch = sync.metaPatch;
+          enrichmentInProgress = sync.enrichmentProgress.inProgress;
+
+          if (enrichmentInProgress) {
+            try {
+              refreshJobId = await enqueueSourcingRefresh({ requestId: payload.requestId });
+            } catch (enqueueError: any) {
+              refreshQueueError = enqueueError?.message || 'Failed to enqueue refresh job';
+              console.error(`Failed to enqueue sourcing refresh for ${payload.requestId}:`, refreshQueueError);
+            }
           }
         } catch (fetchError: any) {
           console.error(`Failed to fetch Signal results for ${payload.requestId}:`, fetchError.message);
@@ -261,22 +181,33 @@ export function registerSignalWebhook(app: Express) {
       const finalStatus = processError ? 'failed' : runStatus;
       const finalCandidateCount = finalStatus === 'failed' ? 0 : candidateCount;
       const runMeta = (run.meta as Record<string, unknown>) || {};
-      const resultGroupCounts = fetchedResults?.groupCounts && typeof fetchedResults.groupCounts === 'object'
-        ? fetchedResults.groupCounts as unknown as Record<string, unknown>
-        : null;
-      const resultDiagnostics = fetchedResults?.diagnostics && typeof fetchedResults.diagnostics === 'object'
-        ? fetchedResults.diagnostics as Record<string, unknown>
-        : null;
-      const groupRequestedLocation = readOptionalStringOrNull(resultGroupCounts, 'requestedLocation');
-      const diagnosticsRequestedLocation = readOptionalStringOrNull(resultDiagnostics, 'requestedLocation');
-      const requestedLocation = groupRequestedLocation !== undefined
-        ? groupRequestedLocation
-        : diagnosticsRequestedLocation;
-      const groupExpansionReason = readOptionalStringOrNull(resultGroupCounts, 'expansionReason');
-      const diagnosticsExpansionReason = readOptionalStringOrNull(resultDiagnostics, 'expansionReason');
-      const expansionReason = groupExpansionReason !== undefined
-        ? groupExpansionReason
-        : diagnosticsExpansionReason;
+      const priorRefreshMeta = runMeta.enrichmentRefresh && typeof runMeta.enrichmentRefresh === 'object'
+        ? runMeta.enrichmentRefresh as Record<string, unknown>
+        : {};
+      const refreshStatus = !enrichmentInProgress
+        ? 'completed'
+        : refreshJobId
+          ? 'scheduled'
+          : refreshQueueError
+            ? 'stopped_enqueue_error'
+            : 'stopped_no_queue';
+      const forcedNotInProgressMetaPatch = (refreshStatus === 'stopped_no_queue' || refreshStatus === 'stopped_enqueue_error')
+        ? {
+            enrichmentProgress: {
+              ...(metaPatch?.enrichmentProgress as Record<string, unknown> ?? {}),
+              inProgress: false,
+            },
+          }
+        : {};
+      const enrichmentRefreshMeta = finalStatus === 'completed'
+        ? {
+            ...priorRefreshMeta,
+            status: refreshStatus,
+            lastEnqueueAt: new Date().toISOString(),
+            queueJobId: refreshJobId,
+            ...(refreshQueueError ? { lastEnqueueError: refreshQueueError } : {}),
+          }
+        : priorRefreshMeta;
 
       await db.update(jobSourcingRuns)
         .set({
@@ -288,16 +219,9 @@ export function registerSignalWebhook(app: Express) {
             ...runMeta,
             callbackStatus: payload.status,
             enrichedCount: payload.enrichedCount,
-            ...(fetchedResults ? {
-              signalStatus: fetchedResults.status,
-              resultCount: fetchedResults.resultCount,
-              ...(fetchedResults.trackDecision ? { trackDecision: fetchedResults.trackDecision } : {}),
-              ...(fetchedResults.groupCounts ? { groupCounts: fetchedResults.groupCounts } : {}),
-              ...(fetchedResults.snapshotStats ? { snapshotStats: fetchedResults.snapshotStats } : {}),
-              ...(fetchedResults.diagnostics ? { diagnostics: fetchedResults.diagnostics } : {}),
-            } : {}),
-            ...(requestedLocation !== undefined ? { requestedLocation } : {}),
-            ...(expansionReason !== undefined ? { expansionReason } : {}),
+            ...(metaPatch ?? {}),
+            ...forcedNotInProgressMetaPatch,
+            ...(finalStatus === 'completed' ? { enrichmentRefresh: enrichmentRefreshMeta } : {}),
             ...(processError ? { errorCode: 'RESULTS_FETCH_FAILED' } : {}),
           },
           updatedAt: new Date(),
