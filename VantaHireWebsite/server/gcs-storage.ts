@@ -7,12 +7,40 @@ import fileTypeMod from 'file-type';
 let storage: Storage | null = null;
 let bucketName: string | null = null;
 
+function parseServiceAccountKey(raw: string): Record<string, unknown> {
+  // 1) direct JSON object string
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+    // 2) some loaders decode to a JSON string literal first
+    if (typeof parsed === 'string') {
+      const nested = JSON.parse(parsed);
+      if (nested && typeof nested === 'object' && !Array.isArray(nested)) {
+        return nested as Record<string, unknown>;
+      }
+    }
+  } catch {
+    // continue to normalized parsing
+  }
+
+  // 3) handle over-escaped env formats like {\"type\":\"service_account\",...}
+  const normalized = raw.replace(/\\"/g, '"').replace(/\\n/g, '\n');
+  const reparsed = JSON.parse(normalized);
+  if (reparsed && typeof reparsed === 'object' && !Array.isArray(reparsed)) {
+    return reparsed as Record<string, unknown>;
+  }
+  throw new Error('Unable to parse GCS service account key');
+}
+
 try {
-  if (!process.env.GCS_PROJECT_ID || !process.env.GCS_BUCKET_NAME || !process.env.GCS_SERVICE_ACCOUNT_KEY) {
+  const inlineKey = process.env.GCS_SERVICE_ACCOUNT_KEY;
+  if (!process.env.GCS_PROJECT_ID || !process.env.GCS_BUCKET_NAME || !inlineKey) {
     console.warn('Google Cloud Storage environment variables not set. File uploads will be disabled.');
   } else {
-    // Parse service account key from environment variable (JSON string)
-    const serviceAccountKey = JSON.parse(process.env.GCS_SERVICE_ACCOUNT_KEY);
+    // Always load service account key from inline JSON env.
+    const serviceAccountKey = parseServiceAccountKey(inlineKey);
 
     storage = new Storage({
       projectId: process.env.GCS_PROJECT_ID,
@@ -181,6 +209,40 @@ export async function getSignedDownloadUrl(
     responseDisposition: filename
       ? `attachment; filename="${filename}"`
       : 'attachment',
+  });
+
+  return signedUrl;
+}
+
+/**
+ * Generate signed URL for inline viewing from GCS
+ * @param gcsPath - Full GCS path (gs://bucket/path)
+ * @param expiresInMinutes - URL expiration time (default: 60 minutes)
+ * @returns Signed URL for inline read (preview)
+ */
+export async function getSignedViewUrl(
+  gcsPath: string,
+  expiresInMinutes: number = 60
+): Promise<string> {
+  if (!storage) {
+    throw new Error('Google Cloud Storage not configured');
+  }
+
+  const match = gcsPath.match(/^gs:\/\/([^/]+)\/(.+)$/);
+  if (!match) {
+    throw new Error('Invalid GCS path format');
+  }
+
+  const [, bucket, filepath] = match;
+  if (!bucket || !filepath) {
+    throw new Error('Invalid GCS path components');
+  }
+  const file = storage.bucket(bucket).file(filepath);
+
+  const [signedUrl] = await file.getSignedUrl({
+    version: 'v4',
+    action: 'read',
+    expires: Date.now() + expiresInMinutes * 60 * 1000,
   });
 
   return signedUrl;

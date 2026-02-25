@@ -46,7 +46,6 @@ import {
 import { notifyRecruitersNewApplication } from './emailTemplateService';
 import { generateInterviewICS, getICSFilename } from './lib/icsGenerator';
 import { extractResumeText, validateResumeText } from './lib/resumeExtractor';
-import { resolveActiveKGTenantId } from './lib/activekgAuth';
 import { isAIEnabled, generateCandidateSummary } from './aiJobAnalyzer';
 import { checkCircuitBreaker } from './lib/aiMatchingEngine';
 import { applicationRateLimit, recruiterAddRateLimit, aiAnalysisRateLimit, type RateLimitInfo } from './rateLimit';
@@ -54,10 +53,11 @@ import { isQueueAvailable, enqueueSummaryBatch, removeJob, QUEUES } from './lib/
 import { randomUUID } from 'crypto';
 import type { CsrfMiddleware } from './types/routes';
 import { normalizeStageName } from './lib/pipelineStageUtils';
+import { resolveActiveKGTenantId } from './lib/activekgTenant';
+import { MIN_RESUME_TEXT_LENGTH } from './lib/applicationGraphSyncProcessor';
 
 // Base URL for email links
 const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
-
 
 // Validation schemas
 const updateStageSchema = z.object({
@@ -147,8 +147,8 @@ export function registerApplicationsRoutes(
       // Increment apply click count for analytics (after duplicate check)
       await storage.incrementApplyClicks(jobId);
 
-      // Upload resume to Google Cloud Storage or use placeholder if not configured
-      let resumeUrl = 'placeholder-resume.pdf';
+      // Upload resume to Google Cloud Storage
+      let resumeUrl = '';
       let resumeRecordId: number | null = null;
       let resumeCountForCompletion: number | null = null;
       let extractedResumeText: string | null = null;
@@ -156,8 +156,18 @@ export function registerApplicationsRoutes(
         try {
           resumeUrl = await uploadToGCS(req.file.buffer, req.file.originalname);
         } catch (error) {
-          console.log('Google Cloud Storage not configured, using placeholder resume URL');
-          resumeUrl = `resume-${Date.now()}-${req.file.originalname}`;
+          const message = error instanceof Error ? error.message : String(error);
+          console.error('[APPLICATION_SUBMIT] Resume upload failed:', {
+            filename: req.file.originalname,
+            mimetype: req.file.mimetype,
+            size: req.file.size,
+            error: message,
+          });
+          const isValidationError = message.toLowerCase().includes('invalid file format');
+          res.status(isValidationError ? 400 : 503).json({
+            error: isValidationError ? message : 'Resume upload failed. Please try again.',
+          });
+          return;
         }
         try {
           const extraction = await extractResumeText(req.file.buffer);
@@ -279,25 +289,34 @@ export function registerApplicationsRoutes(
         console.error('Failed to send recruiter notification:', emailError);
       }
 
-      // Enqueue ActiveKG graph sync job (non-blocking)
+      // Enqueue ActiveKG graph sync job (non-blocking) — only if resume text is valid
       if (process.env.ACTIVEKG_SYNC_ENABLED === 'true' && application.organizationId) {
-        try {
-          const effectiveRecruiterId = job.postedBy;
-          const tenantId = resolveActiveKGTenantId(application.organizationId);
-          await storage.enqueueApplicationGraphSyncJob({
-            applicationId: application.id,
-            organizationId: application.organizationId,
-            jobId: application.jobId,
-            effectiveRecruiterId,
-            activekgTenantId: tenantId,
-          });
-        } catch (syncErr) {
-          console.error('[ACTIVEKG_SYNC] Failed to enqueue graph sync job (non-blocking):', {
-            applicationId: application.id,
-            jobId: application.jobId,
-            organizationId: application.organizationId,
-            error: syncErr instanceof Error ? syncErr.message : String(syncErr),
-          });
+        const hasValidResumeText = extractedResumeText && extractedResumeText.trim().length >= MIN_RESUME_TEXT_LENGTH;
+        if (hasValidResumeText) {
+          try {
+            const effectiveRecruiterId = job.postedBy;
+            const tenantId = resolveActiveKGTenantId(application.organizationId);
+            await storage.enqueueApplicationGraphSyncJob({
+              applicationId: application.id,
+              organizationId: application.organizationId,
+              jobId: application.jobId,
+              effectiveRecruiterId,
+              activekgTenantId: tenantId,
+            });
+          } catch (syncErr) {
+            console.error('[ACTIVEKG_SYNC] Failed to enqueue graph sync job (non-blocking):', {
+              applicationId: application.id,
+              jobId: application.jobId,
+              organizationId: application.organizationId,
+              error: syncErr instanceof Error ? syncErr.message : String(syncErr),
+            });
+          }
+        } else {
+          // Record why sync was skipped so it can be requeued after backfill
+          storage.updateApplicationSyncSkippedReason(
+            application.id,
+            !extractedResumeText ? 'resume_text_missing' : 'resume_text_below_threshold'
+          ).catch(err => console.error('[ACTIVEKG_SYNC] Failed to record skip reason:', err));
         }
       }
 
@@ -387,12 +406,22 @@ export function registerApplicationsRoutes(
         }
 
         // Upload resume
-        let resumeUrl = 'placeholder-resume.pdf';
+        let resumeUrl = '';
         try {
           resumeUrl = await uploadToGCS(req.file.buffer, req.file.originalname);
         } catch (error) {
-          console.log('Google Cloud Storage not configured, using placeholder resume URL');
-          resumeUrl = `resume-${Date.now()}-${req.file.originalname}`;
+          const message = error instanceof Error ? error.message : String(error);
+          console.error('[RECRUITER_ADD] Resume upload failed:', {
+            filename: req.file.originalname,
+            mimetype: req.file.mimetype,
+            size: req.file.size,
+            error: message,
+          });
+          const isValidationError = message.toLowerCase().includes('invalid file format');
+          res.status(isValidationError ? 400 : 503).json({
+            error: isValidationError ? message : 'Resume upload failed. Please try again.',
+          });
+          return;
         }
 
         // Extract resume text for AI summary (recruiter-add has no candidateResumes record)
@@ -483,25 +512,34 @@ export function registerApplicationsRoutes(
           timestamp: new Date().toISOString()
         });
 
-        // Enqueue ActiveKG graph sync job (non-blocking)
+        // Enqueue ActiveKG graph sync job (non-blocking) — only if resume text is valid
         if (process.env.ACTIVEKG_SYNC_ENABLED === 'true' && application.organizationId) {
-          try {
-            const effectiveRecruiterId = req.user!.id;
-            const tenantId = resolveActiveKGTenantId(application.organizationId);
-            await storage.enqueueApplicationGraphSyncJob({
-              applicationId: application.id,
-              organizationId: application.organizationId,
-              jobId: application.jobId,
-              effectiveRecruiterId,
-              activekgTenantId: tenantId,
-            });
-          } catch (syncErr) {
-            console.error('[ACTIVEKG_SYNC] Failed to enqueue graph sync job (non-blocking):', {
-              applicationId: application.id,
-              jobId: application.jobId,
-              organizationId: application.organizationId,
-              error: syncErr instanceof Error ? syncErr.message : String(syncErr),
-            });
+          const hasValidResumeText = extractedResumeText && extractedResumeText.trim().length >= MIN_RESUME_TEXT_LENGTH;
+          if (hasValidResumeText) {
+            try {
+              const effectiveRecruiterId = req.user!.id;
+              const tenantId = resolveActiveKGTenantId(application.organizationId);
+              await storage.enqueueApplicationGraphSyncJob({
+                applicationId: application.id,
+                organizationId: application.organizationId,
+                jobId: application.jobId,
+                effectiveRecruiterId,
+                activekgTenantId: tenantId,
+              });
+            } catch (syncErr) {
+              console.error('[ACTIVEKG_SYNC] Failed to enqueue graph sync job (non-blocking):', {
+                applicationId: application.id,
+                jobId: application.jobId,
+                organizationId: application.organizationId,
+                error: syncErr instanceof Error ? syncErr.message : String(syncErr),
+              });
+            }
+          } else {
+            // Record why sync was skipped so it can be requeued after backfill
+            storage.updateApplicationSyncSkippedReason(
+              application.id,
+              !extractedResumeText ? 'resume_text_missing' : 'resume_text_below_threshold'
+            ).catch(err => console.error('[ACTIVEKG_SYNC] Failed to record skip reason:', err));
           }
         }
 

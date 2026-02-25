@@ -42,6 +42,7 @@ export interface ActiveKGSearchResult {
   classes: string[];
   props: Record<string, unknown>;
   similarity: number;
+  vector_similarity?: number;
   metadata?: Record<string, unknown>;
 }
 
@@ -50,6 +51,8 @@ export interface ActiveKGSearchResponse {
   count: number;
   query: string;
   search_mode?: string;
+  score_type?: string;
+  mode?: string;
 }
 
 export interface ActiveKGAskRequest {

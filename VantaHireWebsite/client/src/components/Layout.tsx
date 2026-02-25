@@ -63,6 +63,7 @@ const Layout = ({ children }: LayoutProps) => {
     const atsRoutes = [
       '/recruiter-dashboard',
       '/applications',
+      '/candidates',
       '/my-jobs',
       '/jobs/post',
       '/admin',
@@ -162,6 +163,17 @@ const Layout = ({ children }: LayoutProps) => {
                     )}
                   >
                     Applications
+                  </Link>
+                  <Link
+                    href="/candidates"
+                    className={cn(
+                      "px-3 py-2 text-sm font-medium rounded-md transition-colors",
+                      location === '/candidates'
+                        ? "text-warning bg-white/10"
+                        : "text-white/70 hover:text-white hover:bg-white/10"
+                    )}
+                  >
+                    Candidates
                   </Link>
                   <Link
                     href="/my-jobs"
@@ -596,6 +608,20 @@ const Layout = ({ children }: LayoutProps) => {
                         onClick={(e) => { e.preventDefault(); setLocation("/recruiter-dashboard"); setIsMenuOpen(false); }}
                       >
                         Dashboard
+                      </a>
+                      <a
+                        href="/applications"
+                        className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
+                        onClick={(e) => { e.preventDefault(); setLocation("/applications"); setIsMenuOpen(false); }}
+                      >
+                        Applications
+                      </a>
+                      <a
+                        href="/candidates"
+                        className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
+                        onClick={(e) => { e.preventDefault(); setLocation("/candidates"); setIsMenuOpen(false); }}
+                      >
+                        Candidates
                       </a>
                       <a
                         href="/my-jobs"
