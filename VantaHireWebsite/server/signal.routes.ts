@@ -31,7 +31,10 @@ function normalizeSkillList(skills: unknown): string[] {
   if (!Array.isArray(skills)) {
     return [];
   }
-  return skills.filter((skill): skill is string => typeof skill === 'string');
+  const normalized = skills
+    .filter((skill): skill is string => typeof skill === 'string')
+    .map((s) => s.trim().toLowerCase());
+  return [...new Set(normalized)].sort();
 }
 
 function isIdentityDisplayStatus(value: unknown): value is SignalIdentitySummary['displayStatus'] {
@@ -103,8 +106,8 @@ function sortSourcedCandidatesForDisplay(
     if (rankA !== null) return -1;
     if (rankB !== null) return 1;
 
-    const fitA = typeof a.fitScore === 'number' ? a.fitScore : -1;
-    const fitB = typeof b.fitScore === 'number' ? b.fitScore : -1;
+    const fitA = typeof a.fitScoreRaw === 'number' ? a.fitScoreRaw : (typeof a.fitScore === 'number' ? a.fitScore : -1);
+    const fitB = typeof b.fitScoreRaw === 'number' ? b.fitScoreRaw : (typeof b.fitScore === 'number' ? b.fitScore : -1);
     if (fitA !== fitB) return fitB - fitA;
     return a.id - b.id;
   });
@@ -354,7 +357,8 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
       }
 
       // Lazy expiry: mark stale non-terminal runs as expired on poll
-      const STALE_THRESHOLD_MS = 15 * 60 * 1000; // 15 minutes
+      const rawStaleMs = parseInt(process.env.SIGNAL_STALE_THRESHOLD_MS ?? '', 10);
+      const STALE_THRESHOLD_MS = Number.isFinite(rawStaleMs) && rawStaleMs > 0 ? rawStaleMs : 15 * 60 * 1000;
       if (!isTerminalStatus(latestRun.status as SourcingRunStatus)) {
         const submittedMs = latestRun.submittedAt
           ? new Date(latestRun.submittedAt).getTime()
@@ -404,6 +408,7 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
       const lastSyncedAt = readOptionalStringOrNull(enrichmentProgressRaw, 'lastSyncedAt')
         ?? readOptionalStringOrNull(runMeta, 'lastResultsSyncAt')
         ?? null;
+      const lastRerankedAt = readOptionalStringOrNull(runMeta, 'lastRerankedAt') ?? null;
       const enrichment = enrichmentProgressRaw
         ? {
             totalCandidates: readFiniteNumber(enrichmentProgressRaw, 'totalCandidates') ?? 0,
@@ -415,6 +420,7 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
             lastSyncedAt,
             refreshStatus,
             queueJobId,
+            lastRerankedAt,
           }
         : undefined;
 
@@ -695,7 +701,10 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         return;
       }
 
-      // Block updates while the candidate's sourcing run is still active
+      // Block updates while the candidate's sourcing run is still active.
+      // NOTE: We intentionally allow actions once the run is terminal, even if enrichment
+      // is still in progress (up to ~6h). Blocking during enrichment is worse UX than
+      // allowing recruiter actions on partially-enriched data.
       const run = await db.query.jobSourcingRuns.findFirst({
         where: eq(jobSourcingRuns.requestId, candidate.requestId),
       });

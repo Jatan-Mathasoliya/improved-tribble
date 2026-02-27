@@ -130,6 +130,7 @@ function buildSignalRunMetaPatch(
     ...(expansionReason !== undefined ? { expansionReason } : {}),
     enrichmentProgress,
     lastResultsSyncAt: enrichmentProgress.lastSyncedAt,
+    ...(fetchedResults.lastRerankedAt !== undefined ? { lastRerankedAt: fetchedResults.lastRerankedAt } : {}),
   };
 }
 
@@ -168,8 +169,10 @@ export async function upsertSignalCandidates(
       identitySummary: c.identitySummary ?? null,
       snapshot: c.snapshot,
       rank: c.rank,
+      fitScoreRaw: c.fitScore,
       matchTier: c.matchTier ?? null,
       locationMatchType: c.locationMatchType ?? null,
+      dataConfidence: c.dataConfidence ?? null,
     };
 
     await db.execute(sql`

@@ -74,6 +74,7 @@ export interface SignalResultsResponse {
   status: string;                           // SourcingRequestStatus passthrough
   requestedAt: string;                      // ISO 8601
   completedAt: string | null;
+  lastRerankedAt?: string | null;
   resultCount: number | null;
   diagnostics?: Record<string, unknown> | null;
   trackDecision?: Record<string, unknown> | null;
@@ -116,6 +117,7 @@ export interface SignalResultCandidate {
   rank: number;
   matchTier?: CandidateMatchTier | null;    // Signal tiering: best_matches | broader_pool
   locationMatchType?: CandidateLocationMatchType | null; // city_exact | city_alias | country_only | none
+  dataConfidence?: 'high' | 'medium' | 'low' | null;
   candidate: SignalCandidateDetail;
   identitySummary?: SignalIdentitySummary | null;
   snapshot: SignalIntelligenceSnapshot | null;
@@ -215,7 +217,7 @@ export interface ContextHashInput {
 }
 
 /** Current context hash version. Bump when hash input fields change. */
-export const CONTEXT_HASH_VERSION = 3;
+export const CONTEXT_HASH_VERSION = 4;
 
 // =====================================================
 // SOURCING RUN STATUS (Vanta-side)
@@ -255,6 +257,7 @@ export interface SourcedCandidateForUI {
   signalCandidateId: string;
   signalRank: number | null;
   fitScore: number | null;
+  fitScoreRaw: number | null;
   fitBreakdown: Record<string, unknown> | null;
   sourceType: SignalSourceType;
   displayBucket: SourceDisplayBucket;
@@ -280,6 +283,7 @@ export interface SourcedCandidateForUI {
   // Tiering/quality metadata (additive, null-safe)
   matchTier: CandidateMatchTier | null;
   locationMatchType: CandidateLocationMatchType | null;
+  dataConfidence: 'high' | 'medium' | 'low' | null;
   roleScore: number | null;
   experienceScore: number | null;
 
@@ -416,6 +420,7 @@ export function flattenCandidateForUI(row: {
     signalCandidateId: row.signalCandidateId,
     signalRank: safeNumber(cs.rank),
     fitScore: row.fitScore ?? null,
+    fitScoreRaw: safeNumber(cs.fitScoreRaw),
     fitBreakdown: (row.fitBreakdown && typeof row.fitBreakdown === 'object'
       ? row.fitBreakdown as Record<string, unknown>
       : null),
@@ -437,6 +442,7 @@ export function flattenCandidateForUI(row: {
     searchSignals,
     matchTier: extractMatchTier(cs),
     locationMatchType: extractLocationMatchType(cs),
+    dataConfidence: cs.dataConfidence === 'high' || cs.dataConfidence === 'medium' || cs.dataConfidence === 'low' ? cs.dataConfidence : null,
     roleScore: safeNumber(cs.roleScore),
     experienceScore: safeNumber(cs.experienceScore),
 

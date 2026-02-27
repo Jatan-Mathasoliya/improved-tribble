@@ -95,7 +95,19 @@ describe('computeContextHash', () => {
     expect(hash).toMatch(/^[a-f0-9]{64}$/);
   });
 
-  it('current CONTEXT_HASH_VERSION is 3', () => {
-    expect(CONTEXT_HASH_VERSION).toBe(3);
+  it('current CONTEXT_HASH_VERSION is 4', () => {
+    expect(CONTEXT_HASH_VERSION).toBe(4);
+  });
+
+  it('skill order does not change the hash (normalized + sorted)', () => {
+    const jobA = { ...baseJob, skills: ['Python', 'TypeScript'] };
+    const jobB = { ...baseJob, skills: ['TypeScript', 'Python'] };
+    expect(computeContextHash(jobA)).toBe(computeContextHash(jobB));
+  });
+
+  it('skill casing does not change the hash (normalized to lowercase)', () => {
+    const jobA = { ...baseJob, skills: ['Python', 'TypeScript'] };
+    const jobB = { ...baseJob, skills: ['python', 'typescript'] };
+    expect(computeContextHash(jobA)).toBe(computeContextHash(jobB));
   });
 });

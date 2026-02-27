@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { trackEvent } from "@/lib/analytics";
 import { useParams } from "wouter";
 import Layout from "@/components/Layout";
@@ -23,7 +23,7 @@ import {
   type SourcingFilterState,
 } from "@/components/sourcing/SourcingFilters";
 import { SourcingListSkeleton } from "@/components/skeletons";
-import { splitByTier } from "@/lib/sourcing-tiering";
+import { splitByTier, type TierModel } from "@/lib/sourcing-tiering";
 
 type SortKey = "rank" | "fitScore" | "source" | "freshness";
 
@@ -132,6 +132,18 @@ export default function JobSourcingPage() {
   const { trigger: findCandidates, isPending: findPending } = useFindCandidates(jobId);
   const { update: updateState, isPending: updatePending } = useUpdateCandidateState(jobId);
 
+  // Lock tier model per sourcing run to prevent UI instability during enrichment refreshes
+  const [lockedTierModel, setLockedTierModel] = useState<TierModel | null>(null);
+  const prevRequestIdRef = useRef<string | null>(null);
+  const currentRequestId = status?.requestId ?? null;
+
+  useEffect(() => {
+    if (currentRequestId !== prevRequestIdRef.current) {
+      prevRequestIdRef.current = currentRequestId;
+      setLockedTierModel(null);
+    }
+  }, [currentRequestId]);
+
   const allCandidates = candidatesData?.candidates ?? [];
   const counts = candidatesData?.counts ?? { total: 0, talentPool: 0, newlyDiscovered: 0 };
 
@@ -140,7 +152,17 @@ export default function JobSourcingPage() {
     [allCandidates, filters, sortBy],
   );
 
-  const grouped = useMemo(() => splitByTier(filteredSorted), [filteredSorted]);
+  const grouped = useMemo(
+    () => splitByTier(filteredSorted, lockedTierModel ?? undefined),
+    [filteredSorted, lockedTierModel],
+  );
+
+  // Lock on first non-empty load
+  useEffect(() => {
+    if (lockedTierModel === null && filteredSorted.length > 0) {
+      setLockedTierModel(grouped.tierModel);
+    }
+  }, [filteredSorted.length, grouped.tierModel, lockedTierModel]);
 
   const bestMatches = grouped.bestMatches;
   const broaderPool = grouped.broaderPool;

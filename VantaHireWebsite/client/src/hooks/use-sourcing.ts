@@ -12,6 +12,7 @@ export interface SourcedCandidateForUI {
   signalCandidateId: string;
   signalRank: number | null;
   fitScore: number | null;
+  fitScoreRaw: number | null;
   fitBreakdown: Record<string, unknown> | null;
   sourceType: string;
   displayBucket: "talent_pool" | "newly_discovered";
@@ -35,6 +36,7 @@ export interface SourcedCandidateForUI {
 
   matchTier?: MatchTier | null;
   locationMatchType?: LocationMatchType | null;
+  dataConfidence?: "high" | "medium" | "low" | null;
   roleScore?: number | null;
   experienceScore?: number | null;
 
@@ -86,6 +88,7 @@ export interface SourcingStatus {
     lastSyncedAt?: string | null;
     refreshStatus?: string | null;
     queueJobId?: string | null;
+    lastRerankedAt?: string | null;
   };
 }
 

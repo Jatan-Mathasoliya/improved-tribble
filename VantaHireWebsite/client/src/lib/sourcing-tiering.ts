@@ -16,12 +16,11 @@ export interface TierSplit<TCandidate> {
 
 export function splitByTier<TCandidate extends TierCandidate>(
   candidates: TCandidate[],
+  forcedModel?: TierModel,
 ): TierSplit<TCandidate> {
-  const hasExplicitTier = candidates.some(
-    (candidate) => candidate.matchTier === "best_matches" || candidate.matchTier === "broader_pool",
-  );
+  const model = forcedModel ?? detectTierModel(candidates);
 
-  if (hasExplicitTier) {
+  if (model === "explicit") {
     return {
       bestMatches: candidates.filter((candidate) => candidate.matchTier !== "broader_pool"),
       broaderPool: candidates.filter((candidate) => candidate.matchTier === "broader_pool"),
@@ -29,8 +28,7 @@ export function splitByTier<TCandidate extends TierCandidate>(
     };
   }
 
-  const hasLocationMatchType = candidates.some((candidate) => !!candidate.locationMatchType);
-  if (hasLocationMatchType) {
+  if (model === "location_derived") {
     return {
       bestMatches: candidates.filter((candidate) => candidate.locationMatchType !== "none"),
       broaderPool: candidates.filter((candidate) => candidate.locationMatchType === "none"),
@@ -43,4 +41,16 @@ export function splitByTier<TCandidate extends TierCandidate>(
     broaderPool: [],
     tierModel: "fallback",
   };
+}
+
+export function detectTierModel<TCandidate extends TierCandidate>(
+  candidates: TCandidate[],
+): TierModel {
+  if (candidates.some((c) => c.matchTier === "best_matches" || c.matchTier === "broader_pool")) {
+    return "explicit";
+  }
+  if (candidates.some((c) => !!c.locationMatchType)) {
+    return "location_derived";
+  }
+  return "fallback";
 }
