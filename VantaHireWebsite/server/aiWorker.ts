@@ -19,7 +19,7 @@ import { QUEUES, getIoRedisConnection, FitJobData, BatchFitJobData, SummaryBatch
 import { computeFitScore, isFitStale, checkCircuitBreaker, trackBudgetSpending, calculateAiCost } from './lib/aiMatchingEngine';
 import { getUserLimits, canUseFitComputation } from './lib/aiLimits';
 import { hasEnoughCredits, useCredits, getCreditCostForOperation } from './lib/creditService';
-import { generateJDDigest, JDDigest } from './lib/jdDigest';
+import { generateJDDigest, JDDigest, CURRENT_DIGEST_VERSION } from './lib/jdDigest';
 import { extractResumeText, validateResumeText } from './lib/resumeExtractor';
 import { downloadFromGCS } from './gcs-storage';
 import { generateCandidateSummary } from './aiJobAnalyzer';
@@ -170,7 +170,7 @@ async function processOneApplication(
 
   // Get or generate JD digest
   let jdDigest: JDDigest = app.job.jdDigest as JDDigest;
-  if (!jdDigest || !app.job.jdDigestVersion || app.job.jdDigestVersion < 1) {
+  if (!jdDigest || !app.job.jdDigestVersion || app.job.jdDigestVersion < CURRENT_DIGEST_VERSION) {
     jdDigest = await generateJDDigest(app.job.title, app.job.description);
     await db.update(jobs).set({
       jdDigest,

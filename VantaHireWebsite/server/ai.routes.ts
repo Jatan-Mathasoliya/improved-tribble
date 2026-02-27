@@ -18,7 +18,7 @@ import { candidateResumes, applications, jobs, users, BatchFitResult } from '../
 import { eq, and, inArray, sql, desc, count } from 'drizzle-orm';
 import { upload, uploadToGCS, downloadFromGCS } from './gcs-storage';
 import { extractResumeText, validateResumeText } from './lib/resumeExtractor';
-import { generateJDDigest, JDDigest } from './lib/jdDigest';
+import { generateJDDigest, JDDigest, CURRENT_DIGEST_VERSION } from './lib/jdDigest';
 import { computeFitScore, isFitStale, getStalenessReason } from './lib/aiMatchingEngine';
 import { getUserLimits, canUseFitComputation } from './lib/aiLimits';
 import { getRedisHealth } from './lib/redis';
@@ -617,7 +617,7 @@ export function registerAIRoutes(app: Express): void {
         // Get or generate JD digest
         let jdDigest: JDDigest = application.job.jdDigest as JDDigest;
 
-        if (!jdDigest || !application.job.jdDigestVersion || application.job.jdDigestVersion < 1) {
+        if (!jdDigest || !application.job.jdDigestVersion || application.job.jdDigestVersion < CURRENT_DIGEST_VERSION) {
           jdDigest = await generateJDDigest(application.job.title, application.job.description);
 
           // Cache digest
@@ -836,7 +836,7 @@ export function registerAIRoutes(app: Express): void {
             // Get or generate JD digest
             let jdDigest: JDDigest = app.job.jdDigest as JDDigest;
 
-            if (!jdDigest || !app.job.jdDigestVersion || app.job.jdDigestVersion < 1) {
+            if (!jdDigest || !app.job.jdDigestVersion || app.job.jdDigestVersion < CURRENT_DIGEST_VERSION) {
               jdDigest = await generateJDDigest(app.job.title, app.job.description);
 
               await db

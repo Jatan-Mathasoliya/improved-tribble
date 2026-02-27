@@ -16,7 +16,7 @@ import { getGroqClient } from './groqClient';
 import { JDDigestResponseSchema, safeParseAiResponse } from './aiResponseSchemas';
 
 const DIGEST_MODEL = 'llama-3.3-70b-versatile';
-const CURRENT_DIGEST_VERSION = 1;
+export const CURRENT_DIGEST_VERSION = 1;
 
 export interface JDDigest {
   topSkills: string[]; // Max 15 skills

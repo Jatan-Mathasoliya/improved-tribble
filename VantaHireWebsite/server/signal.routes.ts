@@ -26,6 +26,7 @@ import {
 } from './lib/services/signal-contracts';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
+import { generateJDDigest, CURRENT_DIGEST_VERSION } from './lib/jdDigest';
 
 function normalizeSkillList(skills: unknown): string[] {
   if (!Array.isArray(skills)) {
@@ -204,6 +205,26 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
       }
 
       const externalJobId = `vanta:jobs:${job.id}`;
+
+      // Ensure JD digest exists before sourcing (same pattern as aiWorker.ts:172-178).
+      // Retry once on failure (empty topSkills indicates LLM call failed).
+      // Must happen BEFORE contextHash so the hash includes the digest.
+      let jdDigest = job.jdDigest as Record<string, unknown> | null;
+      if (!jdDigest || !job.jdDigestVersion || job.jdDigestVersion < CURRENT_DIGEST_VERSION) {
+        let generated = await generateJDDigest(job.title, job.description);
+        if (generated.topSkills.length === 0) {
+          generated = await generateJDDigest(job.title, job.description);
+        }
+        await db.update(jobs).set({
+          jdDigest: generated,
+          jdDigestVersion: generated.version,
+        }).where(eq(jobs.id, job.id));
+        jdDigest = generated as unknown as Record<string, unknown>;
+        // Update in-memory job for contextHash computation
+        (job as any).jdDigest = jdDigest;
+        (job as any).jdDigestVersion = generated.version;
+      }
+
       const contextHash = computeContextHash(job);
 
       // Check for existing active (non-terminal) run with same context
@@ -234,7 +255,7 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
       // Build Signal request
       const sourceRequest: SignalSourceRequest = {
         jobContext: {
-          jdDigest: job.jdDigest ? JSON.stringify(job.jdDigest) : '',
+          jdDigest: JSON.stringify(jdDigest),
           title: job.title,
           skills: normalizeSkillList(job.skills),
           goodToHaveSkills: normalizeSkillList(job.goodToHaveSkills),
