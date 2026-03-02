@@ -55,6 +55,60 @@ export async function setupVite(app: Express, server: Server) {
     index: false, // Don't serve index.html for directories
   }));
 
+  // SSR meta injection for marketing pages (dev mode)
+  const MARKETING_PAGES_DEV: Record<string, { title: string; description: string; canonical: string }> = {
+    '/': {
+      title: 'VantaHire - Recruiting Velocity, by Design | Recruiter-First ATS',
+      description: 'The recruiter-first ATS designed to remove friction and double your team\'s efficiency. Human decisions, AI acceleration. Built for consulting firms, agencies, and startups.',
+      canonical: 'https://www.vantahire.com/',
+    },
+    '/product': {
+      title: 'Product | VantaHire - The Recruiter-First ATS',
+      description: 'Explore VantaHire\'s recruiter-first ATS platform. AI-powered candidate matching, Kanban pipeline management, team collaboration, and analytics—all designed for speed.',
+      canonical: 'https://www.vantahire.com/product',
+    },
+    '/features': {
+      title: 'Features | VantaHire - Everything You Need to Hire Faster',
+      description: 'AI candidate matching, Kanban pipelines, email templates, interview scheduling, analytics dashboard, and team collaboration. All the features recruiters need.',
+      canonical: 'https://www.vantahire.com/features',
+    },
+    '/pricing': {
+      title: 'Pricing | VantaHire - Simple, Transparent Pricing',
+      description: 'Start free, scale as you grow. VantaHire offers transparent pricing for recruiting teams of all sizes. No hidden fees, no long-term contracts.',
+      canonical: 'https://www.vantahire.com/pricing',
+    },
+    '/compare': {
+      title: 'Compare | VantaHire vs Complex ATS Platforms',
+      description: 'See how VantaHire compares to legacy ATS platforms. Faster setup, recruiter-first design, and AI acceleration without the complexity.',
+      canonical: 'https://www.vantahire.com/compare',
+    },
+    '/use-cases': {
+      title: 'Use Cases | VantaHire - Built for Teams Like Yours',
+      description: 'Discover how consulting firms, staffing agencies, startups, and enterprise teams use VantaHire to hire faster across India and APAC.',
+      canonical: 'https://www.vantahire.com/use-cases',
+    },
+    '/about': {
+      title: 'About Us | VantaHire - AI + Human Expertise for Better Hiring',
+      description: 'VantaHire combines AI acceleration with human expertise to make recruiting faster and fairer. Learn about our mission, team, and vision.',
+      canonical: 'https://www.vantahire.com/about',
+    },
+    '/jobs': {
+      title: 'Browse Jobs | VantaHire - Find Your Next Role',
+      description: 'Browse open positions across technology, consulting, and more. Apply directly through VantaHire\'s recruiter-first platform.',
+      canonical: 'https://www.vantahire.com/jobs',
+    },
+    '/recruiters': {
+      title: 'Recruiters Directory | VantaHire',
+      description: 'Meet VantaHire\'s specialist recruiters. Industry experts in IT, telecom, automotive, fintech, and healthcare hiring across India and APAC.',
+      canonical: 'https://www.vantahire.com/recruiters',
+    },
+    '/brand': {
+      title: 'Brand Assets | VantaHire',
+      description: 'Download VantaHire logos, brand guidelines, and media assets. Everything you need for press, partnerships, and co-marketing.',
+      canonical: 'https://www.vantahire.com/brand',
+    },
+  };
+
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
 
@@ -72,6 +126,26 @@ export async function setupVite(app: Express, server: Server) {
         `src="/src/main.tsx"`,
         `src="/src/main.tsx?v=${nanoid()}"`,
       );
+
+      // Inject marketing page meta in dev mode
+      const pageMeta = MARKETING_PAGES_DEV[url];
+      if (pageMeta) {
+        const baseUrl = (process.env.BASE_URL || 'https://www.vantahire.com').replace(/\/$/, '');
+        template = upsertTitle(template, pageMeta.title);
+        template = upsertMetaTag(template, 'name', 'title', pageMeta.title);
+        template = upsertMetaTag(template, 'name', 'description', pageMeta.description);
+        template = upsertLinkRel(template, 'canonical', pageMeta.canonical);
+        template = upsertMetaTag(template, 'property', 'og:title', pageMeta.title);
+        template = upsertMetaTag(template, 'property', 'og:description', pageMeta.description);
+        template = upsertMetaTag(template, 'property', 'og:url', pageMeta.canonical);
+        template = upsertMetaTag(template, 'property', 'og:type', 'website');
+        template = upsertMetaTag(template, 'property', 'og:image', `${baseUrl}/og-image.jpg`);
+        template = upsertMetaTag(template, 'name', 'twitter:card', 'summary_large_image');
+        template = upsertMetaTag(template, 'name', 'twitter:title', pageMeta.title);
+        template = upsertMetaTag(template, 'name', 'twitter:description', pageMeta.description);
+        template = upsertMetaTag(template, 'name', 'twitter:image', `${baseUrl}/twitter-image.jpg`);
+      }
+
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {

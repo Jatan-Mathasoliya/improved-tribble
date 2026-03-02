@@ -330,11 +330,12 @@ export function generateJobsSitemapXML(jobs: Array<{
   updatedAt?: Date | string;
   createdAt: Date | string;
 }>, baseUrl: string = 'https://www.vantahire.com'): string {
+  const normalizedBase = baseUrl.replace(/\/$/, '');
   const urlEntries = jobs.map(job => {
     // Prefer pure slug for SEO-friendly URLs
     const url = job.slug
-      ? `${baseUrl}/jobs/${job.slug}`
-      : `${baseUrl}/jobs/${job.id}`;
+      ? `${normalizedBase}/jobs/${job.slug}`
+      : `${normalizedBase}/jobs/${job.id}`;
 
     const lastmod = formatISODate(job.updatedAt || job.createdAt);
 

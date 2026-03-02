@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Sparkles, Zap } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
 
@@ -19,6 +19,8 @@ const HeroVideo = () => (
       }}
     >
       <video
+        poster="/og-image.jpg"
+        preload="none"
         autoPlay
         loop
         muted
@@ -36,14 +38,7 @@ const HeroVideo = () => (
 );
 
 const Hero = () => {
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsVisible(true);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, []);
+  const [isVisible] = useState(true);
 
   // Function to open Cal.com in a new window/tab
   const openCalendar = () => {

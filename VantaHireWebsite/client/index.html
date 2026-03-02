@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <!-- Primary Meta Tags -->
     <title>VantaHire - Recruiting Velocity, by Design | Recruiter-First ATS</title>
@@ -50,10 +50,9 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
 
     <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
-
-    <!-- Cashfree Payment SDK -->
-    <script src="https://sdk.cashfree.com/js/v3/cashfree.js"></script>
 
     <!-- Google Analytics 4 - Loaded via React component for env variable support -->
 
@@ -88,44 +87,6 @@
     }
     </script>
 
-    <!-- Structured Data - LocalBusiness Schema -->
-    <script type="application/ld+json">
-    {
-      "@context": "https://schema.org",
-      "@type": "LocalBusiness",
-      "name": "VantaHire",
-      "image": "https://www.vantahire.com/logo.png",
-      "@id": "https://www.vantahire.com",
-      "url": "https://www.vantahire.com",
-      "telephone": "+91-9742944825",
-      "email": "hello@vantahire.com",
-      "priceRange": "$$",
-      "address": {
-        "@type": "PostalAddress",
-        "addressLocality": "Bangalore",
-        "addressRegion": "Karnataka",
-        "addressCountry": "IN"
-      },
-      "geo": {
-        "@type": "GeoCoordinates",
-        "latitude": 12.9716,
-        "longitude": 77.5946
-      },
-      "openingHoursSpecification": {
-        "@type": "OpeningHoursSpecification",
-        "dayOfWeek": [
-          "Monday",
-          "Tuesday",
-          "Wednesday",
-          "Thursday",
-          "Friday"
-        ],
-        "opens": "09:00",
-        "closes": "18:00"
-      }
-    }
-    </script>
-
     <!-- Structured Data - SoftwareApplication Schema -->
     <script type="application/ld+json">
     {
@@ -150,13 +111,8 @@
         "@type": "Offer",
         "price": "0",
         "priceCurrency": "INR",
-        "priceValidUntil": "2025-12-31",
+        "priceValidUntil": "2027-12-31",
         "availability": "https://schema.org/InStock"
-      },
-      "aggregateRating": {
-        "@type": "AggregateRating",
-        "ratingValue": "4.8",
-        "ratingCount": "50"
       },
       "publisher": {
         "@type": "Organization",
@@ -179,14 +135,14 @@
         "name": "VantaHire"
       },
       "areaServed": [
-        {
-          "@type": "Country",
-          "name": "India"
-        },
-        {
-          "@type": "Place",
-          "name": "Asia-Pacific (APAC)"
-        }
+        { "@type": "Country", "name": "India" },
+        { "@type": "Country", "name": "Singapore" },
+        { "@type": "Country", "name": "Malaysia" },
+        { "@type": "Country", "name": "Indonesia" },
+        { "@type": "Country", "name": "Thailand" },
+        { "@type": "Country", "name": "Philippines" },
+        { "@type": "Country", "name": "Vietnam" },
+        { "@type": "Country", "name": "Australia" }
       ],
       "hasOfferCatalog": {
         "@type": "OfferCatalog",
