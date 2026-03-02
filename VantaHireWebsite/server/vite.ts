@@ -85,7 +85,7 @@ export async function setupVite(app: Express, server: Server) {
  * Inject JSON-LD structured data into HTML for SEO
  */
 function injectJsonLd(html: string, jsonLd: object): string {
-  const script = `<script type="application/ld+json" data-schema="jobposting">${JSON.stringify(jsonLd)}</script>`;
+  const script = `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`;
   // Inject before </head> for early discovery by crawlers
   return html.replace('</head>', `${script}\n</head>`);
 }
@@ -269,6 +269,94 @@ export function serveStatic(app: Express) {
     } catch (error) {
       console.error('[SSR JSON-LD] Error injecting job schema:', error);
       // Fall through to regular SPA serving on error
+      next();
+    }
+  });
+
+  // SSR meta injection for marketing pages
+  // Ensures crawlers see page-specific titles, descriptions, and OG tags
+  const MARKETING_PAGES: Record<string, { title: string; description: string; canonical: string }> = {
+    '/': {
+      title: 'VantaHire - Recruiting Velocity, by Design | Recruiter-First ATS',
+      description: 'The recruiter-first ATS designed to remove friction and double your team\'s efficiency. Human decisions, AI acceleration. Built for consulting firms, agencies, and startups.',
+      canonical: 'https://www.vantahire.com/',
+    },
+    '/product': {
+      title: 'Product | VantaHire - The Recruiter-First ATS',
+      description: 'Explore VantaHire\'s recruiter-first ATS platform. AI-powered candidate matching, Kanban pipeline management, team collaboration, and analytics—all designed for speed.',
+      canonical: 'https://www.vantahire.com/product',
+    },
+    '/features': {
+      title: 'Features | VantaHire - Everything You Need to Hire Faster',
+      description: 'AI candidate matching, Kanban pipelines, email templates, interview scheduling, analytics dashboard, and team collaboration. All the features recruiters need.',
+      canonical: 'https://www.vantahire.com/features',
+    },
+    '/pricing': {
+      title: 'Pricing | VantaHire - Simple, Transparent Pricing',
+      description: 'Start free, scale as you grow. VantaHire offers transparent pricing for recruiting teams of all sizes. No hidden fees, no long-term contracts.',
+      canonical: 'https://www.vantahire.com/pricing',
+    },
+    '/compare': {
+      title: 'Compare | VantaHire vs Complex ATS Platforms',
+      description: 'See how VantaHire compares to legacy ATS platforms. Faster setup, recruiter-first design, and AI acceleration without the complexity.',
+      canonical: 'https://www.vantahire.com/compare',
+    },
+    '/use-cases': {
+      title: 'Use Cases | VantaHire - Built for Teams Like Yours',
+      description: 'Discover how consulting firms, staffing agencies, startups, and enterprise teams use VantaHire to hire faster across India and APAC.',
+      canonical: 'https://www.vantahire.com/use-cases',
+    },
+    '/about': {
+      title: 'About Us | VantaHire - AI + Human Expertise for Better Hiring',
+      description: 'VantaHire combines AI acceleration with human expertise to make recruiting faster and fairer. Learn about our mission, team, and vision.',
+      canonical: 'https://www.vantahire.com/about',
+    },
+    '/jobs': {
+      title: 'Browse Jobs | VantaHire - Find Your Next Role',
+      description: 'Browse open positions across technology, consulting, and more. Apply directly through VantaHire\'s recruiter-first platform.',
+      canonical: 'https://www.vantahire.com/jobs',
+    },
+    '/recruiters': {
+      title: 'Recruiters Directory | VantaHire',
+      description: 'Meet VantaHire\'s specialist recruiters. Industry experts in IT, telecom, automotive, fintech, and healthcare hiring across India and APAC.',
+      canonical: 'https://www.vantahire.com/recruiters',
+    },
+    '/brand': {
+      title: 'Brand Assets | VantaHire',
+      description: 'Download VantaHire logos, brand guidelines, and media assets. Everything you need for press, partnerships, and co-marketing.',
+      canonical: 'https://www.vantahire.com/brand',
+    },
+  };
+
+  app.get(Object.keys(MARKETING_PAGES), async (req, res, next) => {
+    try {
+      const pageMeta = MARKETING_PAGES[req.path];
+      if (!pageMeta) return next();
+
+      const indexPath = path.resolve(distPath, "index.html");
+      let html = await fs.promises.readFile(indexPath, "utf-8");
+
+      const baseUrl = (process.env.BASE_URL || 'https://www.vantahire.com').replace(/\/$/, '');
+
+      html = upsertTitle(html, pageMeta.title);
+      html = upsertMetaTag(html, 'name', 'title', pageMeta.title);
+      html = upsertMetaTag(html, 'name', 'description', pageMeta.description);
+      html = upsertLinkRel(html, 'canonical', pageMeta.canonical);
+      html = upsertMetaTag(html, 'property', 'og:title', pageMeta.title);
+      html = upsertMetaTag(html, 'property', 'og:description', pageMeta.description);
+      html = upsertMetaTag(html, 'property', 'og:url', pageMeta.canonical);
+      html = upsertMetaTag(html, 'property', 'og:type', 'website');
+      html = upsertMetaTag(html, 'property', 'og:image', `${baseUrl}/og-image.jpg`);
+      html = upsertMetaTag(html, 'name', 'twitter:card', 'summary_large_image');
+      html = upsertMetaTag(html, 'name', 'twitter:title', pageMeta.title);
+      html = upsertMetaTag(html, 'name', 'twitter:description', pageMeta.description);
+      html = upsertMetaTag(html, 'name', 'twitter:image', `${baseUrl}/twitter-image.jpg`);
+
+      res.setHeader('Content-Type', 'text/html');
+      res.setHeader('Cache-Control', 'no-store, must-revalidate');
+      res.send(html);
+    } catch (error) {
+      console.error('[SSR Meta] Error injecting marketing page meta:', error);
       next();
     }
   });

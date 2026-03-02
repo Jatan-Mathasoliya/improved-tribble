@@ -171,6 +171,20 @@ export function registerSignalWebhook(app: Express) {
               console.error(`Failed to enqueue sourcing refresh for ${payload.requestId}:`, refreshQueueError);
             }
           }
+
+          // Always enqueue a single delayed refresh to catch post-callback reranks.
+          // Rerank coalescing window is ~90s; 2 min delay gives enough margin.
+          if (!enrichmentInProgress && !refreshJobId) {
+            try {
+              refreshJobId = await enqueueSourcingRefresh(
+                { requestId: payload.requestId },
+                { delayMs: 120_000 },
+              );
+            } catch (delayedRefreshError: any) {
+              refreshQueueError = delayedRefreshError?.message || 'Failed to enqueue delayed refresh job';
+              console.error(`Failed to enqueue delayed sourcing refresh for ${payload.requestId}:`, refreshQueueError);
+            }
+          }
         } catch (fetchError: any) {
           console.error(`Failed to fetch Signal results for ${payload.requestId}:`, fetchError.message);
           processError = `Results fetch failed: ${fetchError.message}`;
@@ -184,7 +198,12 @@ export function registerSignalWebhook(app: Express) {
       const priorRefreshMeta = runMeta.enrichmentRefresh && typeof runMeta.enrichmentRefresh === 'object'
         ? runMeta.enrichmentRefresh as Record<string, unknown>
         : {};
-      const refreshStatus = !enrichmentInProgress
+      const refreshReason = enrichmentInProgress
+        ? 'enrichment_in_progress'
+        : refreshJobId
+          ? 'post_callback_rerank_sync'
+          : null;
+      const refreshStatus = !enrichmentInProgress && !refreshJobId
         ? 'completed'
         : refreshJobId
           ? 'scheduled'
@@ -203,6 +222,7 @@ export function registerSignalWebhook(app: Express) {
         ? {
             ...priorRefreshMeta,
             status: refreshStatus,
+            reason: refreshReason,
             lastEnqueueAt: new Date().toISOString(),
             queueJobId: refreshJobId,
             ...(refreshQueueError ? { lastEnqueueError: refreshQueueError } : {}),

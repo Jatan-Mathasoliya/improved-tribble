@@ -72,6 +72,8 @@ export interface SignalResultsResponse {
   requestId: string;
   externalJobId: string;
   status: string;                           // SourcingRequestStatus passthrough
+  callbackStatus?: string | null;           // CallbackDeliveryStatus: 'pending' | 'delivered' | 'failed'
+  callbackSentAt?: string | null;           // ISO 8601
   requestedAt: string;                      // ISO 8601
   completedAt: string | null;
   lastRerankedAt?: string | null;
