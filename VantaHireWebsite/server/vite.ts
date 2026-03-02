@@ -242,113 +242,9 @@ export function serveStatic(app: Express) {
     );
   }
 
-  // Serve static landing pages from client/public (e.g., /landing/hiring-insights.html)
-  // These bypass the SPA and are served directly as static HTML
-  if (fs.existsSync(clientPublicPath)) {
-    app.use(express.static(clientPublicPath, {
-      extensions: ['html'],
-      index: false,
-      setHeaders: (res) => {
-        res.setHeader('Cache-Control', 'public, max-age=3600');
-      }
-    }));
-  }
-
-  // Cache policy: cache-bust hashed assets aggressively, but keep index.html no-cache
-  app.use(express.static(distPath, {
-    setHeaders: (res, filePath) => {
-      if (filePath.endsWith('index.html')) {
-        res.setHeader('Cache-Control', 'no-store, must-revalidate');
-      } else if (filePath.includes('/assets/')) {
-        // hashed assets
-        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-      } else {
-        res.setHeader('Cache-Control', 'public, max-age=3600');
-      }
-    }
-  }));
-
-  // Server-side JSON-LD injection for job detail pages
-  // This ensures Googlebot sees structured data without executing JavaScript
-  app.get('/jobs/:param', async (req, res, next) => {
-    try {
-      const { param } = req.params;
-      const identifier = parseJobIdentifier(param);
-
-      // Fetch job data
-      let job;
-      if (identifier.type === 'id') {
-        job = await storage.getJobWithRecruiter(identifier.value as number);
-      } else {
-        job = await storage.getJobBySlug(identifier.value as string);
-      }
-
-      // If job not found or inactive/expired, fall through to SPA (which will show 404/410)
-      if (!job || !job.isActive || job.status !== 'approved') {
-        return next();
-      }
-
-      // Read the index.html template
-      const indexPath = path.resolve(distPath, "index.html");
-      let html = await fs.promises.readFile(indexPath, "utf-8");
-
-      // Generate JSON-LD
-      const baseUrl = process.env.BASE_URL || 'https://www.vantahire.com';
-      const jobUrl = job.slug ? `${baseUrl}/jobs/${job.slug}` : `${baseUrl}/jobs/${job.id}`;
-      const pageTitle = `${job.title} | VantaHire`;
-      const metaDescription = truncateText(
-        `Apply for ${job.title} at ${job.location}. ${stripHtml(job.description)}`,
-        155
-      );
-
-      const jsonLd = generateJobPostingSchema({
-        id: job.id,
-        title: job.title,
-        description: job.description,
-        location: job.location,
-        type: job.type,
-        skills: job.skills as string[] | null,
-        clientName: job.client?.name ?? null,
-        clientDomain: job.client?.domain ?? null,
-        createdAt: job.createdAt,
-        deadline: job.deadline,
-        expiresAt: job.expiresAt,
-        slug: job.slug,
-      }, baseUrl);
-
-      // Inject job-specific meta tags for crawlers that don't run JS
-      html = upsertTitle(html, pageTitle);
-      html = upsertMetaTag(html, 'name', 'title', pageTitle);
-      html = upsertMetaTag(html, 'name', 'description', metaDescription);
-      html = upsertLinkRel(html, 'canonical', jobUrl);
-      html = upsertMetaTag(html, 'property', 'og:title', pageTitle);
-      html = upsertMetaTag(html, 'property', 'og:description', metaDescription);
-      html = upsertMetaTag(html, 'property', 'og:url', jobUrl);
-      html = upsertMetaTag(html, 'property', 'og:type', 'website');
-      html = upsertMetaTag(html, 'property', 'og:image', `${baseUrl}/og-image.jpg`);
-      html = upsertMetaTag(html, 'name', 'twitter:card', 'summary_large_image');
-      html = upsertMetaTag(html, 'name', 'twitter:title', pageTitle);
-      html = upsertMetaTag(html, 'name', 'twitter:description', metaDescription);
-      html = upsertMetaTag(html, 'name', 'twitter:image', `${baseUrl}/twitter-image.jpg`);
-
-      // Only inject if JSON-LD generation succeeded
-      if (jsonLd) {
-        html = injectJsonLd(html, jsonLd);
-      }
-
-      // Serve the modified HTML
-      res.setHeader('Content-Type', 'text/html');
-      res.setHeader('Cache-Control', 'no-store, must-revalidate');
-      res.send(html);
-    } catch (error) {
-      console.error('[SSR JSON-LD] Error injecting job schema:', error);
-      // Fall through to regular SPA serving on error
-      next();
-    }
-  });
-
-  // SSR meta injection for marketing pages
-  // Ensures crawlers see page-specific titles, descriptions, and OG tags
+  // SSR meta injection for marketing pages (registered before static middleware
+  // to prevent express.static from intercepting routes that match directories
+  // like /brand which has a physical client/public/brand/ directory)
   const MARKETING_PAGES: Record<string, { title: string; description: string; canonical: string }> = {
     '/': {
       title: 'VantaHire - Recruiting Velocity, by Design | Recruiter-First ATS',
@@ -431,6 +327,126 @@ export function serveStatic(app: Express) {
       res.send(html);
     } catch (error) {
       console.error('[SSR Meta] Error injecting marketing page meta:', error);
+      next();
+    }
+  });
+
+  // Serve static landing pages from client/public (e.g., /landing/hiring-insights.html)
+  // These bypass the SPA and are served directly as static HTML
+  if (fs.existsSync(clientPublicPath)) {
+    app.use(express.static(clientPublicPath, {
+      extensions: ['html'],
+      index: false,
+      setHeaders: (res) => {
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+      }
+    }));
+  }
+
+  // Cache policy: cache-bust hashed assets aggressively, but keep index.html no-cache
+  app.use(express.static(distPath, {
+    setHeaders: (res, filePath) => {
+      if (filePath.endsWith('index.html')) {
+        res.setHeader('Cache-Control', 'no-store, must-revalidate');
+      } else if (filePath.includes('/assets/')) {
+        // hashed assets
+        res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      } else {
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+      }
+    }
+  }));
+
+  // Server-side JSON-LD injection for job detail pages
+  // This ensures Googlebot sees structured data without executing JavaScript
+  app.get('/jobs/:param', async (req, res, next) => {
+    try {
+      const { param } = req.params;
+      const identifier = parseJobIdentifier(param);
+
+      // Fetch job data
+      let job;
+      if (identifier.type === 'id') {
+        job = await storage.getJobWithRecruiter(identifier.value as number);
+      } else {
+        job = await storage.getJobBySlug(identifier.value as string);
+      }
+
+      // Gap 3: Return proper HTTP status codes for crawlers
+      if (!job) {
+        res.status(404).setHeader('Content-Type', 'text/html');
+        res.send('<!DOCTYPE html><html><head><meta name="robots" content="noindex"><title>Job Not Found</title></head><body><h1>404 — Job not found</h1></body></html>');
+        return;
+      }
+      if (!job.isActive || job.status !== 'approved') {
+        const reason = (job as any).deactivationReason === 'filled'
+          ? 'This position has been filled.'
+          : 'This job listing is no longer active.';
+        res.status(410).setHeader('Content-Type', 'text/html');
+        res.send(`<!DOCTYPE html><html><head><meta name="robots" content="noindex"><title>Job No Longer Available</title></head><body><h1>410 — ${reason}</h1></body></html>`);
+        return;
+      }
+
+      // Read the index.html template
+      const indexPath = path.resolve(distPath, "index.html");
+      let html = await fs.promises.readFile(indexPath, "utf-8");
+
+      // Generate JSON-LD
+      const baseUrl = process.env.BASE_URL || 'https://www.vantahire.com';
+      const jobUrl = job.slug ? `${baseUrl}/jobs/${job.slug}` : `${baseUrl}/jobs/${job.id}`;
+      const pageTitle = `${job.title} | VantaHire`;
+      const metaDescription = truncateText(
+        `Apply for ${job.title} at ${job.location}. ${stripHtml(job.description)}`,
+        155
+      );
+
+      const jsonLd = generateJobPostingSchema({
+        id: job.id,
+        title: job.title,
+        description: job.description,
+        location: job.location,
+        type: job.type,
+        skills: job.skills as string[] | null,
+        clientName: job.client?.name ?? null,
+        clientDomain: job.client?.domain ?? null,
+        createdAt: job.createdAt,
+        deadline: job.deadline,
+        expiresAt: job.expiresAt,
+        slug: job.slug,
+        salaryMin: (job as any).salaryMin ?? null,
+        salaryMax: (job as any).salaryMax ?? null,
+        salaryPeriod: (job as any).salaryPeriod ?? null,
+        experienceYears: (job as any).experienceYears ?? null,
+        educationRequirement: (job as any).educationRequirement ?? null,
+      }, baseUrl);
+
+      // Inject job-specific meta tags for crawlers that don't run JS
+      html = upsertTitle(html, pageTitle);
+      html = upsertMetaTag(html, 'name', 'title', pageTitle);
+      html = upsertMetaTag(html, 'name', 'description', metaDescription);
+      html = upsertLinkRel(html, 'canonical', jobUrl);
+      html = upsertMetaTag(html, 'property', 'og:title', pageTitle);
+      html = upsertMetaTag(html, 'property', 'og:description', metaDescription);
+      html = upsertMetaTag(html, 'property', 'og:url', jobUrl);
+      html = upsertMetaTag(html, 'property', 'og:type', 'website');
+      html = upsertMetaTag(html, 'property', 'og:image', `${baseUrl}/og-image.jpg`);
+      html = upsertMetaTag(html, 'name', 'twitter:card', 'summary_large_image');
+      html = upsertMetaTag(html, 'name', 'twitter:title', pageTitle);
+      html = upsertMetaTag(html, 'name', 'twitter:description', metaDescription);
+      html = upsertMetaTag(html, 'name', 'twitter:image', `${baseUrl}/twitter-image.jpg`);
+
+      // Only inject if JSON-LD generation succeeded
+      if (jsonLd) {
+        html = injectJsonLd(html, jsonLd);
+      }
+
+      // Serve the modified HTML
+      res.setHeader('Content-Type', 'text/html');
+      res.setHeader('Cache-Control', 'no-store, must-revalidate');
+      res.send(html);
+    } catch (error) {
+      console.error('[SSR JSON-LD] Error injecting job schema:', error);
+      // Fall through to regular SPA serving on error
       next();
     }
   });
