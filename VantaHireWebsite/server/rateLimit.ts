@@ -173,7 +173,7 @@ export const applicationRateLimit: RateLimitRequestHandler = rateLimit({
  */
 export const jobPostingRateLimit: RateLimitRequestHandler = rateLimit({
   windowMs: 24 * 60 * 60 * 1000, // 24 hours
-  max: 10, // 10 job posts per day per user
+  max: 50, // 50 job posts per day per user
   standardHeaders: true,
   legacyHeaders: false,
   skip: () => isTestEnv,
