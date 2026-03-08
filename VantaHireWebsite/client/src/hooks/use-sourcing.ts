@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { trackEvent } from "@/lib/analytics";
 import { useRef, useEffect } from "react";
 
 export type MatchTier = "best_matches" | "broader_pool";
-export type LocationMatchType = "city_exact" | "city_alias" | "country_only" | "none";
+export type LocationMatchType = "city_exact" | "city_alias" | "country_only" | "unknown_location" | "none";
 
 export interface SourcedCandidateForUI {
   id: number;
@@ -64,6 +65,10 @@ export interface SourcedCandidateForUI {
     enrichedDaysAgo: number | null;
     identityCheckDaysAgo: number | null;
   };
+
+  engagementReady?: boolean;
+  locationLabel?: string | null;
+  locationConfidenceNumeric?: number | null;
 
   candidateSummary: unknown;
   lastSyncedAt: string | null;
@@ -144,6 +149,10 @@ export interface SourcedCandidatesResponse {
     nonZeroSkillScoreCount: number;
     nonZeroSkillScorePct: number;
   } | null;
+  kpis?: {
+    engagementReadyCount: number;
+    firstQualifiedCandidateRank: number | null;
+  };
 }
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "expired"]);
@@ -263,6 +272,7 @@ export function useUpdateCandidateState(jobId: number | undefined) {
     }: {
       candidateId: number;
       state: "new" | "shortlisted" | "hidden";
+      candidateSnapshot?: Partial<SourcedCandidateForUI>;
     }) => {
       const res = await apiRequest(
         "PATCH",
@@ -295,6 +305,23 @@ export function useUpdateCandidateState(jobId: number | undefined) {
       }
 
       return { previous };
+    },
+    onSuccess: (_data, { candidateId, state, candidateSnapshot }) => {
+      const cached = queryClient.getQueryData<SourcedCandidatesResponse>(
+        ["/api/jobs", jobId, "sourced-candidates"],
+      )?.candidates.find((c) => c.id === candidateId);
+      const c = candidateSnapshot ?? cached;
+      const eventName = state === "shortlisted" ? "shortlist_clicked" : state === "hidden" ? "hide_clicked" : "candidate_state_changed";
+      trackEvent(eventName, {
+        job_id: jobId ?? 0,
+        candidate_id: candidateId,
+        signal_rank: c?.signalRank ?? 0,
+        fit_score: c?.fitScore ?? 0,
+        source_type: c?.sourceType ?? "",
+        match_tier: c?.matchTier ?? "",
+        engagement_ready: c?.engagementReady ?? false,
+        location_match_type: c?.locationMatchType ?? "",
+      });
     },
     onError: (error: Error, _vars, context) => {
       if (context?.previous) {

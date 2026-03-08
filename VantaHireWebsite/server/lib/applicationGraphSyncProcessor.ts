@@ -13,7 +13,6 @@
  */
 
 import { storage } from '../storage';
-import { buildAuthContext, validateActiveKGAuthConfig } from './activekgAuth';
 import {
   createNode,
   createEdge,
@@ -127,8 +126,7 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
     return;
   }
 
-  // Step 3: Build auth context
-  const authCtx = buildAuthContext(job.activekgTenantId, job.effectiveRecruiterId);
+  const tenantId = job.activekgTenantId;
 
   // Step 4: Build parent external ID
   const parentExternalId = buildParentExternalId(
@@ -138,7 +136,7 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
 
   // Step 5: Ensure parent node (idempotent)
   let parentNodeId: string;
-  const existingParent = await getNodeByExternalId(parentExternalId, authCtx);
+  const existingParent = await getNodeByExternalId(parentExternalId, tenantId);
 
   if (existingParent) {
     parentNodeId = existingParent.id;
@@ -172,7 +170,7 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
         },
         tenant_id: job.activekgTenantId,
       },
-      authCtx
+      tenantId
     );
     parentNodeId = parentResponse.id;
   }
@@ -183,7 +181,7 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
   // Step 7: Ensure chunk nodes + edges
   for (const chunk of chunks) {
     // Check if chunk already exists
-    const existingChunk = await getNodeByExternalId(chunk.externalId, authCtx);
+    const existingChunk = await getNodeByExternalId(chunk.externalId, tenantId);
     let chunkNodeId: string;
 
     if (existingChunk) {
@@ -217,7 +215,7 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
           },
           tenant_id: job.activekgTenantId,
         },
-        authCtx
+        tenantId
       );
       chunkNodeId = chunkResponse.id;
     }
@@ -235,7 +233,7 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
           },
           tenant_id: job.activekgTenantId,
         },
-        authCtx
+        tenantId
       );
     } catch (edgeError) {
       // Ignore duplicate edge errors (conflict/500 with duplicate signature)
@@ -348,10 +346,8 @@ export function startApplicationGraphSyncProcessor(): void {
     return;
   }
 
-  try {
-    validateActiveKGAuthConfig();
-  } catch (err) {
-    console.error('[ACTIVEKG_SYNC] Auth config validation failed, processor will not start:', err);
+  if (!process.env.VANTAHIRE_JWT_PRIVATE_KEY) {
+    console.error('[ACTIVEKG_SYNC] VANTAHIRE_JWT_PRIVATE_KEY is not set, processor will not start');
     return;
   }
 

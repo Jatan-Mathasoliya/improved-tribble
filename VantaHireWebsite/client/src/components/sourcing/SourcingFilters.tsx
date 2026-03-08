@@ -72,7 +72,7 @@ export function SourcingFilters({
                 onCheckedChange={onBestMatchesOnlyChange}
               />
               <Label htmlFor="best-matches-only" className="text-xs cursor-pointer">
-                Best matches only
+                Top matches only
               </Label>
             </div>
           )}
@@ -106,10 +106,10 @@ export function SourcingFilters({
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="rank">Sort: Pipeline rank</SelectItem>
+              <SelectItem value="rank">Sort: Recommended</SelectItem>
               <SelectItem value="fitScore">Sort: Fit score</SelectItem>
               <SelectItem value="freshness">Sort: Freshness</SelectItem>
-              <SelectItem value="source">Sort: Source</SelectItem>
+              <SelectItem value="source">Sort: Source type</SelectItem>
             </SelectContent>
           </Select>
 
@@ -144,9 +144,9 @@ export function SourcingFilters({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All</SelectItem>
-                  <SelectItem value="verified">Verified</SelectItem>
-                  <SelectItem value="review">Review</SelectItem>
-                  <SelectItem value="weak">Weak</SelectItem>
+                  <SelectItem value="verified">Confirmed</SelectItem>
+                  <SelectItem value="review">Needs Review</SelectItem>
+                  <SelectItem value="weak">Unconfirmed</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -173,7 +173,7 @@ export function SourcingFilters({
 
             <div className="flex items-center justify-between rounded-md border px-2 py-1.5 mt-5 sm:mt-0">
               <Label htmlFor="enriched-only" className="text-xs text-muted-foreground">
-                Enriched only
+                Verified profiles only
               </Label>
               <Switch
                 id="enriched-only"

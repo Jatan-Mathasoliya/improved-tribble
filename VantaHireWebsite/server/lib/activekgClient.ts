@@ -2,10 +2,11 @@
  * ActiveKG HTTP Client
  *
  * Typed client for communicating with the ActiveKG API.
+ * Uses RS256 JWT auth via signServiceJwt('activekg', ...) from jwt-signer.ts.
  * Handles node/edge creation, external_id lookups, timeouts, and transient retries.
  */
 
-import type { ActiveKGAuthContext } from './activekgAuth';
+import { signServiceJwt } from './services/jwt-signer';
 
 const BASE_URL = process.env.ACTIVEKG_BASE_URL || 'http://localhost:8000';
 const TIMEOUT_MS = parseInt(process.env.ACTIVEKG_TIMEOUT_MS || '10000', 10);
@@ -13,6 +14,9 @@ const TIMEOUT_MS = parseInt(process.env.ACTIVEKG_TIMEOUT_MS || '10000', 10);
 // Short client-level retries for transient errors (main retries handled by job processor)
 const CLIENT_MAX_RETRIES = 2;
 const CLIENT_RETRY_DELAY_MS = 500;
+
+// Scopes matching the new activekg-client.ts conventions
+const SCOPE_WRITE = 'kg:write';
 
 export interface ActiveKGNodePayload {
   classes: string[];
@@ -81,19 +85,27 @@ async function fetchWithTimeout(
 async function request<T>(
   method: string,
   path: string,
-  authCtx: ActiveKGAuthContext,
+  tenantId: string,
+  scopes: string,
   body?: unknown
 ): Promise<T> {
   const url = `${BASE_URL}${path}`;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...authCtx.headers,
-  };
 
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= CLIENT_MAX_RETRIES; attempt++) {
     try {
+      // Sign a fresh RS256 JWT for each attempt (short-lived tokens)
+      const token = await signServiceJwt('activekg', {
+        tenantId,
+        scopes,
+      });
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`,
+      };
+
       const response = await fetchWithTimeout(
         url,
         {
@@ -153,9 +165,9 @@ async function request<T>(
  */
 export async function createNode(
   payload: ActiveKGNodePayload,
-  authCtx: ActiveKGAuthContext
+  tenantId: string
 ): Promise<ActiveKGNodeResponse> {
-  return request<ActiveKGNodeResponse>('POST', '/nodes', authCtx, payload);
+  return request<ActiveKGNodeResponse>('POST', '/nodes', tenantId, SCOPE_WRITE, payload);
 }
 
 /**
@@ -163,9 +175,9 @@ export async function createNode(
  */
 export async function createEdge(
   payload: ActiveKGEdgePayload,
-  authCtx: ActiveKGAuthContext
+  tenantId: string
 ): Promise<void> {
-  await request<unknown>('POST', '/edges', authCtx, payload);
+  await request<unknown>('POST', '/edges', tenantId, SCOPE_WRITE, payload);
 }
 
 /**
@@ -174,13 +186,14 @@ export async function createEdge(
  */
 export async function getNodeByExternalId(
   externalId: string,
-  authCtx: ActiveKGAuthContext
+  tenantId: string
 ): Promise<ActiveKGNodeResponse | null> {
   try {
     return await request<ActiveKGNodeResponse>(
       'GET',
       `/nodes/by-external-id?external_id=${encodeURIComponent(externalId)}`,
-      authCtx
+      tenantId,
+      SCOPE_WRITE
     );
   } catch (error) {
     if (error instanceof ActiveKGClientError && error.statusCode === 404) {

@@ -25,6 +25,20 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SourcedCandidateForUI } from "@/hooks/use-sourcing";
+import {
+  fitDescription,
+  tierLabel,
+  tierColor,
+  identityLabel,
+  enrichmentLabel,
+  freshnessLabel,
+  locationConfidence,
+  locationLabelText,
+  confidenceLabel,
+  FIT_LABELS,
+  FIT_INTERNAL_KEYS,
+  toPctFitClient,
+} from "@/lib/sourcing-labels";
 
 interface CandidateDrawerProps {
   candidate: SourcedCandidateForUI | null;
@@ -49,7 +63,7 @@ function FitBadge({ score }: { score: number | null }) {
         : "bg-red-100 text-red-800 border-red-200";
   return (
     <Badge variant="outline" className={cn("text-xs font-semibold", color)}>
-      Fit {score}
+      {fitDescription(score)} &middot; {score}
     </Badge>
   );
 }
@@ -61,21 +75,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
       {children}
     </div>
   );
-}
-
-const FIT_LABELS: Record<string, string> = {
-  skillScore: "Skill match",
-  seniorityScore: "Seniority",
-  locationScore: "Location",
-  activityFreshnessScore: "Freshness",
-  roleScore: "Role",
-  experienceScore: "Experience",
-};
-
-function formatBreakdownValue(value: unknown): string {
-  if (typeof value !== "number") return String(value);
-  if (value <= 1) return `${Math.round(value * 100)}%`;
-  return String(Math.round(value));
 }
 
 function formatDateLabel(input: string): string {
@@ -101,9 +100,19 @@ export function CandidateDrawer({
 
   const fitBreakdownEntries = c.fitBreakdown
     ? Object.entries(c.fitBreakdown)
-        .filter(([, v]) => v != null && v !== "")
+        .filter(([k, v]) => v != null && v !== "" && !FIT_INTERNAL_KEYS.has(k))
         .sort(([, a], [, b]) => (typeof b === "number" ? b : -1) - (typeof a === "number" ? a : -1))
     : [];
+
+  const locConf = locationConfidence(c.locationMatchType, c.locationConfidenceNumeric);
+  const locLabel = locationLabelText(c.locationLabel);
+  const dataConf = confidenceLabel(c.dataConfidence);
+
+  // Check for professionalValidation in candidateSummary
+  const cs = c.candidateSummary && typeof c.candidateSummary === "object"
+    ? c.candidateSummary as Record<string, unknown>
+    : null;
+  const hasProfValidation = cs?.professionalValidation != null;
 
   return (
     <Sheet open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -142,24 +151,23 @@ export function CandidateDrawer({
 
           <div className="flex flex-wrap gap-2">
             <FitBadge score={c.fitScore} />
-            {c.matchTier && (
-              <Badge
-                variant="outline"
-                className={cn(
-                  "text-xs",
-                  c.matchTier === "best_matches"
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : "bg-amber-50 text-amber-700 border-amber-200",
-                )}
-              >
-                {c.matchTier === "best_matches" ? "Best Match" : "Broader Pool"}
+            <Badge
+              variant="outline"
+              className={cn("text-xs", tierColor(c.matchTier, c.displayBucket))}
+            >
+              {tierLabel(c.matchTier, c.displayBucket)}
+            </Badge>
+            {c.engagementReady && (
+              <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                <CheckCircle2 className="h-3 w-3 mr-0.5" />
+                Ready to engage
               </Badge>
             )}
             {c.identitySummary?.displayStatus && (
               <Badge
                 variant="outline"
                 className={cn(
-                  "text-xs capitalize",
+                  "text-xs",
                   c.identitySummary.displayStatus === "verified"
                     ? "bg-green-100 text-green-800 border-green-200"
                     : c.identitySummary.displayStatus === "review"
@@ -167,35 +175,63 @@ export function CandidateDrawer({
                       : "bg-red-100 text-red-800 border-red-200",
                 )}
               >
-                {c.identitySummary.displayStatus}
+                {identityLabel(c.identitySummary.displayStatus)}
               </Badge>
             )}
             {c.enrichmentStatus && (
-              <Badge variant="outline" className="text-xs capitalize">
+              <Badge variant="outline" className="text-xs">
                 <CheckCircle2 className="h-3 w-3 mr-1" />
-                {c.enrichmentStatus}
+                {enrichmentLabel(c.enrichmentStatus)}
               </Badge>
             )}
-            {c.searchSignals.linkedinLocale && (
-              <Badge variant="outline" className="text-xs uppercase">
-                LinkedIn {c.searchSignals.linkedinLocale}
+            {hasProfValidation && (
+              <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                Professional background verified
               </Badge>
             )}
           </div>
+
+          {/* Location confidence section */}
+          {locConf.label && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className={cn("inline-block h-2.5 w-2.5 rounded-full shrink-0", locConf.dotColor)} />
+              <span className={locConf.color}>{locConf.label}</span>
+              {locLabel && <span className="text-xs text-muted-foreground">({locLabel})</span>}
+            </div>
+          )}
 
           <Separator />
 
           {fitBreakdownEntries.length > 0 && (
             <Section title="Why this candidate matched">
-              <div className="space-y-1">
-                {fitBreakdownEntries.map(([key, value]) => (
-                  <div key={key} className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      {FIT_LABELS[key] || key.replace(/([A-Z])/g, " $1").trim()}
-                    </span>
-                    <span className="font-medium">{formatBreakdownValue(value)}</span>
-                  </div>
-                ))}
+              <div className="space-y-2">
+                {fitBreakdownEntries.map(([key, value]) => {
+                  const pct = typeof value === "number" ? toPctFitClient(value) : null;
+                  return (
+                    <div key={key} className="space-y-0.5">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">
+                          {FIT_LABELS[key] || key.replace(/([A-Z])/g, " $1").trim()}
+                        </span>
+                        <span className="font-medium">{pct != null ? `${pct}%` : String(value)}</span>
+                      </div>
+                      {pct != null && (
+                        <div className="h-1.5 w-full bg-muted rounded-full overflow-hidden">
+                          <div
+                            className={cn(
+                              "h-full rounded-full",
+                              pct >= 75 ? "bg-green-500" : pct >= 50 ? "bg-amber-500" : "bg-red-400",
+                            )}
+                            style={{ width: `${Math.min(pct, 100)}%` }}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {dataConf && (
+                  <p className="text-xs text-muted-foreground mt-1">{dataConf}</p>
+                )}
               </div>
             </Section>
           )}
@@ -206,7 +242,7 @@ export function CandidateDrawer({
                 {(c.snapshot.roleType || c.snapshot.seniorityBand) && (
                   <div className="flex items-center gap-2 text-sm">
                     <Briefcase className="h-3.5 w-3.5 text-muted-foreground" />
-                    {[c.snapshot.roleType, c.snapshot.seniorityBand].filter(Boolean).join(" · ")}
+                    {[c.snapshot.roleType, c.snapshot.seniorityBand].filter(Boolean).join(" \u00b7 ")}
                   </div>
                 )}
                 {skills.length > 0 && (
@@ -226,7 +262,7 @@ export function CandidateDrawer({
           )}
 
           {c.identitySummary && (
-            <Section title="Identity confidence">
+            <Section title="Profile verification">
               <div className="space-y-1 text-sm">
                 {c.identitySummary.platforms.length > 0 && (
                   <div className="flex flex-wrap gap-1">
@@ -239,7 +275,7 @@ export function CandidateDrawer({
                 )}
                 {typeof c.identitySummary.maxIdentityConfidence === "number" && (
                   <p className="text-xs text-muted-foreground">
-                    Confidence: {Math.round(c.identitySummary.maxIdentityConfidence * 100)}%
+                    Verification confidence: {Math.round(c.identitySummary.maxIdentityConfidence * 100)}%
                   </p>
                 )}
                 {c.freshness.lastIdentityCheckAt && (
@@ -252,22 +288,22 @@ export function CandidateDrawer({
             </Section>
           )}
 
-          <Section title="Freshness">
+          <Section title="Data freshness">
             <div className="text-sm text-muted-foreground space-y-1">
               {c.freshness.lastEnrichedAt && (
                 <p>
-                  Enriched: {new Date(c.freshness.lastEnrichedAt).toLocaleDateString()}
+                  {freshnessLabel("enriched")}: {new Date(c.freshness.lastEnrichedAt).toLocaleDateString()}
                   {c.freshness.enrichedDaysAgo != null && ` (${c.freshness.enrichedDaysAgo}d ago)`}
                 </p>
               )}
               {c.searchSignals.serpDate && (
                 <p>
-                  SERP seen: {formatDateLabel(c.searchSignals.serpDate)}
+                  {freshnessLabel("serp")}: {formatDateLabel(c.searchSignals.serpDate)}
                   {c.searchSignals.serpDateDaysAgo != null && ` (${c.searchSignals.serpDateDaysAgo}d ago)`}
                 </p>
               )}
               {c.snapshot?.computedAt && (
-                <p>Snapshot: {new Date(c.snapshot.computedAt).toLocaleDateString()}</p>
+                <p>{freshnessLabel("snapshot")}: {new Date(c.snapshot.computedAt).toLocaleDateString()}</p>
               )}
             </div>
           </Section>

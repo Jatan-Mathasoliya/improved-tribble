@@ -173,6 +173,8 @@ export async function upsertSignalCandidates(
       matchTier: c.matchTier ?? null,
       locationMatchType: c.locationMatchType ?? null,
       dataConfidence: c.dataConfidence ?? null,
+      professionalValidation: c.professionalValidation ?? null,
+      locationLabel: (c as any).locationLabel ?? null,
     };
 
     await db.execute(sql`

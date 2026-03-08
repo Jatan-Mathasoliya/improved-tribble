@@ -220,7 +220,30 @@ export default function JobSourcingPage() {
   const isExpired = runStatus === "expired";
   const isCompleted = runStatus === "completed";
 
+  const kpis = candidatesData?.kpis;
+
+  // GA4 supplementary event for first_engagement_ready_seen (server A7 is source of truth)
+  const trackedRef = useRef(false);
+  useEffect(() => {
+    if (!trackedRef.current && isCompleted && kpis?.firstQualifiedCandidateRank != null) {
+      trackedRef.current = true;
+      trackEvent("first_engagement_ready_seen", {
+        job_id: jobId ?? 0,
+        first_qualified_rank: kpis.firstQualifiedCandidateRank,
+        total_candidates: counts.total,
+        engagement_ready_count: kpis.engagementReadyCount,
+      });
+    }
+  }, [isCompleted, kpis?.firstQualifiedCandidateRank]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const handleCardClick = (c: SourcedCandidateForUI) => {
+    trackEvent("candidate_viewed", {
+      job_id: jobId ?? 0,
+      candidate_id: c.id,
+      signal_rank: c.signalRank ?? 0,
+      fit_score: c.fitScore ?? 0,
+      engagement_ready: c.engagementReady ?? false,
+    });
     setSelectedCandidate(c);
     setDrawerOpen(true);
   };
@@ -229,6 +252,7 @@ export default function JobSourcingPage() {
     updateState({
       candidateId: c.id,
       state: c.state === "shortlisted" ? "new" : "shortlisted",
+      candidateSnapshot: c,
     });
   };
 
@@ -368,7 +392,7 @@ export default function JobSourcingPage() {
               <Card>
                 <CardContent className="p-4">
                   <p className="text-xs text-muted-foreground">
-                    {allBroader ? "Broader Pool Results" : "Total"}
+                    {allBroader ? "Wider Search Results" : "Total"}
                   </p>
                   <p className="text-base font-semibold">{counts.total}</p>
                 </CardContent>
@@ -377,13 +401,13 @@ export default function JobSourcingPage() {
                 <>
                   <Card>
                     <CardContent className="p-4">
-                      <p className="text-xs text-muted-foreground">Best Matches</p>
+                      <p className="text-xs text-muted-foreground">Top Matches</p>
                       <p className="text-base font-semibold">{bestMatches.length}</p>
                     </CardContent>
                   </Card>
                   <Card>
                     <CardContent className="p-4">
-                      <p className="text-xs text-muted-foreground">Broader Pool</p>
+                      <p className="text-xs text-muted-foreground">Wider Search</p>
                       <p className="text-base font-semibold">{broaderPool.length}</p>
                     </CardContent>
                   </Card>
@@ -391,15 +415,21 @@ export default function JobSourcingPage() {
               )}
             </div>
 
-            {qualityDebug && (
+            {(qualityDebug || kpis) && (
               <div className="rounded-lg border border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/40 p-3 mb-4">
                 <p className="text-xs font-medium text-slate-800 dark:text-slate-200">
-                  Quality Diagnostics
+                  Search Quality
                 </p>
                 <div className="text-xs text-slate-700 dark:text-slate-300 mt-1 flex flex-wrap gap-x-4 gap-y-1">
-                  <span>City/Country match: {qualityDebug.locationMatchedPct}%</span>
-                  <span>Valid location hints: {qualityDebug.validLocationHintPct}%</span>
-                  <span>Non-zero skill score: {qualityDebug.nonZeroSkillScorePct}%</span>
+                  {qualityDebug && <span>Location confirmed: {qualityDebug.locationMatchedPct}%</span>}
+                  {qualityDebug && <span>Location data available: {qualityDebug.validLocationHintPct}%</span>}
+                  {qualityDebug && <span>Skills matched: {qualityDebug.nonZeroSkillScorePct}%</span>}
+                  {kpis?.firstQualifiedCandidateRank != null && (
+                    <span>First ready candidate: #{kpis.firstQualifiedCandidateRank}</span>
+                  )}
+                  {kpis?.engagementReadyCount != null && kpis.engagementReadyCount > 0 && (
+                    <span>Ready to engage: {kpis.engagementReadyCount}</span>
+                  )}
                 </div>
               </div>
             )}
@@ -407,10 +437,10 @@ export default function JobSourcingPage() {
             {strictRescueApplied && (
               <div className="rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 mb-4">
                 <p className="text-sm font-medium text-amber-900 dark:text-amber-100">
-                  Strict matches were weak; showing best available candidates in the requested country.
+                  We found limited exact matches, so we're showing the best available candidates in the requested region.
                 </p>
                 <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
-                  Rescued {strictRescuedCount} strict candidates
+                  Kept {strictRescuedCount} candidates that partially match location
                   {typeof rescueFloor === "number" ? ` using a temporary fit floor of ${rescueFloor.toFixed(2)}.` : "."}
                 </p>
               </div>
@@ -471,7 +501,7 @@ export default function JobSourcingPage() {
                 <section>
                   <div className="flex items-center justify-between mb-2">
                     <h2 className="text-sm font-medium text-muted-foreground">
-                      {requestedLocation ? `Broader Matches for ${requestedLocation}` : "Broader Pool Results"}
+                      {requestedLocation ? `Additional Candidates near ${requestedLocation}` : "Wider Search Results"}
                     </h2>
                     <Badge variant="secondary">{broaderPool.length}</Badge>
                   </div>
@@ -484,7 +514,7 @@ export default function JobSourcingPage() {
                       <h2 className="text-sm font-medium text-muted-foreground">
                         {grouped.tierModel === "fallback"
                           ? "Candidates"
-                          : requestedLocation ? `Best Matches in ${requestedLocation}` : "Best Matches"}
+                          : requestedLocation ? `Top Matches in ${requestedLocation}` : "Top Matches"}
                       </h2>
                       <Badge variant="secondary">{bestMatches.length}</Badge>
                     </div>
@@ -499,7 +529,7 @@ export default function JobSourcingPage() {
                         onClick={() => setShowBroader((v) => !v)}
                       >
                         {showBroader ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                        Broader Pool ({broaderPool.length})
+                        Wider Search Results ({broaderPool.length})
                       </button>
                       {showBroader && renderList(broaderPool)}
                     </section>

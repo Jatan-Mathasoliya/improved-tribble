@@ -8,7 +8,7 @@
 
 import type { Express, Request, Response, NextFunction } from 'express';
 import { db } from './db';
-import { eq, and, desc, asc } from 'drizzle-orm';
+import { eq, and, desc, asc, sql } from 'drizzle-orm';
 import { jobs, jobSourcingRuns, jobSourcedCandidates, type JobSourcingRun, type JobSourcedCandidate } from '@shared/schema';
 import { requireRole } from './auth';
 import { requireSeat } from './auth';
@@ -23,6 +23,7 @@ import {
   type SignalIdentitySummary,
   type SignalSourceRequest,
   type SourcingRunStatus,
+  type SourcedCandidateForUI,
 } from './lib/services/signal-contracts';
 import { createHash, randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -522,7 +523,7 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
           eq(jobSourcingRuns.jobId, jobId),
         ),
         orderBy: desc(jobSourcingRuns.createdAt),
-        columns: { meta: true },
+        columns: { id: true, meta: true, submittedAt: true },
       });
       const runMeta = (latestRunForMeta?.meta as Record<string, unknown>) ?? {};
       const runDiagnostics = runMeta.diagnostics && typeof runMeta.diagnostics === 'object'
@@ -662,6 +663,27 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         nonZeroSkillScorePct: toPercent(nonZeroSkillScoreCount, totalForQuality),
       };
 
+      // Compute KPIs server-side
+      const engagementReadyCandidates = enriched.filter((c: SourcedCandidateForUI) => c.engagementReady);
+      const sortedByRank = [...enriched].sort((a: SourcedCandidateForUI, b: SourcedCandidateForUI) => (a.signalRank ?? 999) - (b.signalRank ?? 999));
+      const firstEngagementReadyCandidate = sortedByRank.find((c: SourcedCandidateForUI) => c.engagementReady);
+
+      const kpis = {
+        engagementReadyCount: engagementReadyCandidates.length,
+        firstQualifiedCandidateRank: firstEngagementReadyCandidate?.signalRank ?? null,
+      };
+
+      // Record first_engagement_ready_seen once per run (write-once, concurrent-safe)
+      if (latestRunForMeta && firstEngagementReadyCandidate && !runMeta.firstEngagementReadySeenAt) {
+        db.execute(sql`
+          UPDATE job_sourcing_runs SET meta = jsonb_set(
+            COALESCE(meta, '{}'::jsonb),
+            '{firstEngagementReadySeenAt}',
+            to_jsonb(now()::text)
+          ) WHERE id = ${latestRunForMeta.id} AND NOT (COALESCE(meta, '{}'::jsonb) ? 'firstEngagementReadySeenAt')
+        `).catch(() => { /* non-blocking, best-effort */ });
+      }
+
       res.json({
         candidates: enriched,
         counts,
@@ -670,6 +692,7 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         requestedLocation: resolvedRequestedLocation,
         discoverySummary,
         qualityDebug,
+        kpis,
       });
     } catch (error) {
       next(error);

@@ -1,8 +1,20 @@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Star, MapPin, Building, Briefcase } from "lucide-react";
+import { Star, MapPin, Building, Briefcase, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { SourcedCandidateForUI } from "@/hooks/use-sourcing";
+import {
+  fitDescription,
+  tierLabel,
+  tierColor,
+  identityLabel,
+  enrichmentLabel,
+  freshnessLabel,
+  locationConfidence,
+  FIT_LABELS,
+  FIT_INTERNAL_KEYS,
+  toPctFitClient,
+} from "@/lib/sourcing-labels";
 
 interface CandidateCardProps {
   candidate: SourcedCandidateForUI;
@@ -21,22 +33,15 @@ function FitBadge({ score }: { score: number | null }) {
         : "bg-red-100 text-red-800 border-red-200";
   return (
     <Badge variant="outline" className={cn("text-xs font-semibold", color)}>
-      Fit {score}
+      {fitDescription(score)} &middot; {score}
     </Badge>
   );
 }
 
-const FIT_LABELS: Record<string, string> = {
-  skillScore: "Skill",
-  seniorityScore: "Seniority",
-  locationScore: "Location",
-  activityFreshnessScore: "Freshness",
-};
-
 function FitChips({ breakdown }: { breakdown: Record<string, unknown> | null }) {
   if (!breakdown) return null;
   const chips = Object.entries(breakdown)
-    .filter(([k, v]) => k !== "total" && typeof v === "number" && v > 0.1)
+    .filter(([k, v]) => !FIT_INTERNAL_KEYS.has(k) && typeof v === "number" && v > 0.1)
     .sort(([, a], [, b]) => (b as number) - (a as number))
     .slice(0, 2);
 
@@ -44,34 +49,25 @@ function FitChips({ breakdown }: { breakdown: Record<string, unknown> | null }) 
 
   return (
     <div className="flex items-center gap-1 flex-wrap">
-      {chips.map(([key, value]) => (
-        <Badge key={key} variant="outline" className="text-[10px] font-normal text-muted-foreground">
-          {FIT_LABELS[key] || key}: {Math.round((value as number) * 100)}%
-        </Badge>
-      ))}
+      {chips.map(([key, value]) => {
+        const pct = toPctFitClient(value as number);
+        return (
+          <Badge key={key} variant="outline" className="text-[10px] font-normal text-muted-foreground">
+            {FIT_LABELS[key] || key} {pct != null ? `${pct}%` : ""}
+          </Badge>
+        );
+      })}
     </div>
   );
 }
 
 function TierBadge({ candidate }: { candidate: SourcedCandidateForUI }) {
-  const tier = candidate.matchTier;
-  if (tier === "broader_pool") {
-    return <Badge variant="outline" className="text-xs bg-amber-50 text-amber-700 border-amber-200">Broader Pool</Badge>;
-  }
-  if (tier === "best_matches") {
-    return <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200">Best Match</Badge>;
-  }
   return (
     <Badge
       variant="outline"
-      className={cn(
-        "text-xs",
-        candidate.displayBucket === "talent_pool"
-          ? "bg-blue-50 text-blue-700 border-blue-200"
-          : "bg-purple-50 text-purple-700 border-purple-200",
-      )}
+      className={cn("text-xs", tierColor(candidate.matchTier, candidate.displayBucket))}
     >
-      {candidate.displayBucket === "talent_pool" ? "Talent Pool" : "Discovered"}
+      {tierLabel(candidate.matchTier, candidate.displayBucket)}
     </Badge>
   );
 }
@@ -90,8 +86,8 @@ function IdentityBadge({
     weak: "bg-red-100 text-red-800 border-red-200",
   };
   return (
-    <Badge variant="outline" className={cn("text-xs capitalize", styles[status] || "") }>
-      {status}
+    <Badge variant="outline" className={cn("text-xs", styles[status] || "")}>
+      {identityLabel(status)}
       {typeof confidence === "number" && confidence >= 0.5 && (
         <span className="ml-1 font-mono text-[10px]">{Math.round(confidence * 100)}%</span>
       )}
@@ -99,8 +95,9 @@ function IdentityBadge({
   );
 }
 
-function freshnessText(daysAgo: number | null, label: string): string | null {
+function freshnessText(daysAgo: number | null, key: string): string | null {
   if (daysAgo == null) return null;
+  const label = freshnessLabel(key);
   if (daysAgo === 0) return `${label} today`;
   return `${label} ${daysAgo}d ago`;
 }
@@ -114,14 +111,16 @@ export function CandidateCard({ candidate, onClick, onShortlist, isUpdating }: C
     ? (candidate.snapshot?.skillsNormalized as string[]).slice(0, 3)
     : [];
 
-  const enrichedText = freshnessText(candidate.freshness.enrichedDaysAgo, "Enriched");
-  const identityText = freshnessText(candidate.freshness.identityCheckDaysAgo, "Identity checked");
-  const serpText = freshnessText(candidate.searchSignals.serpDateDaysAgo, "SERP seen");
+  const enrichedText = freshnessText(candidate.freshness.enrichedDaysAgo, "enriched");
+  const identityText = freshnessText(candidate.freshness.identityCheckDaysAgo, "identity");
+  const serpText = freshnessText(candidate.searchSignals.serpDateDaysAgo, "serp");
   const freshnessLine = [
     enrichedText,
     identityText,
     !enrichedText ? serpText : null,
-  ].filter(Boolean).join(" · ");
+  ].filter(Boolean).join(" \u00b7 ");
+
+  const locConf = locationConfidence(candidate.locationMatchType, candidate.locationConfidenceNumeric);
 
   return (
     <div
@@ -138,9 +137,15 @@ export function CandidateCard({ candidate, onClick, onShortlist, isUpdating }: C
             <span className="font-semibold text-sm truncate max-w-[200px]">{candidate.nameHint || "Unknown Candidate"}</span>
             <FitBadge score={candidate.fitScore} />
             <TierBadge candidate={candidate} />
+            {candidate.engagementReady && (
+              <Badge variant="outline" className="text-xs bg-green-50 text-green-700 border-green-200">
+                <CheckCircle2 className="h-3 w-3 mr-0.5" />
+                Ready
+              </Badge>
+            )}
             {isDiscoveredPendingEnrichment && (
               <Badge variant="outline" className="text-xs bg-sky-50 text-sky-700 border-sky-200">
-                New source - Enrichment in progress
+                {enrichmentLabel("pending")}
               </Badge>
             )}
             <IdentityBadge
@@ -159,6 +164,9 @@ export function CandidateCard({ candidate, onClick, onShortlist, isUpdating }: C
             )}
             {(candidate.locationHint || candidate.snapshot?.location) && (
               <span className="flex items-center gap-1">
+                {locConf.dotColor && (
+                  <span className={cn("inline-block h-2 w-2 rounded-full shrink-0", locConf.dotColor)} />
+                )}
                 <MapPin className="h-3 w-3" />
                 {candidate.locationHint || candidate.snapshot?.location}
               </span>

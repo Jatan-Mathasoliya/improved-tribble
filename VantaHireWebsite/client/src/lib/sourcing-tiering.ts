@@ -1,5 +1,5 @@
 export type MatchTier = "best_matches" | "broader_pool";
-export type LocationMatchType = "city_exact" | "city_alias" | "country_only" | "none";
+export type LocationMatchType = "city_exact" | "city_alias" | "country_only" | "unknown_location" | "none";
 
 export interface TierCandidate {
   matchTier?: MatchTier | null;

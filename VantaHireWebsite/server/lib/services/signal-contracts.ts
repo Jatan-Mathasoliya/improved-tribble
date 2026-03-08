@@ -130,6 +130,7 @@ export interface SignalResultCandidate {
     lastEnrichedAt: string | null;          // ISO 8601
   };
   professionalValidation?: unknown;
+  locationLabel?: string | null;
 }
 
 export type IdentityDisplayStatus = 'verified' | 'review' | 'weak';
@@ -250,7 +251,7 @@ export function mapCallbackStatusToRunStatus(callbackStatus: SignalCallbackPaylo
 // =====================================================
 
 export type CandidateMatchTier = 'best_matches' | 'broader_pool';
-export type CandidateLocationMatchType = 'city_exact' | 'city_alias' | 'country_only' | 'none';
+export type CandidateLocationMatchType = 'city_exact' | 'city_alias' | 'country_only' | 'unknown_location' | 'none';
 
 /** Flattened candidate shape for UI consumption. */
 export interface SourcedCandidateForUI {
@@ -309,12 +310,50 @@ export interface SourcedCandidateForUI {
     identityCheckDaysAgo: number | null;
   };
 
+  // Engagement readiness
+  engagementReady: boolean;
+  locationLabel: string | null;
+  locationConfidenceNumeric: number | null;
+
   // Legacy blob — kept for backward compatibility
   candidateSummary: unknown;
 
   // Metadata
   lastSyncedAt: string | null;
   createdAt: string | null;
+}
+
+/** Normalize fit score to 0-100 integer range regardless of input scale. */
+export function toPctFit(fitScore: number | null | undefined): number | null {
+  if (fitScore == null || !Number.isFinite(fitScore)) return null;
+  const scaled = fitScore <= 1 ? fitScore * 100 : fitScore;
+  return Math.max(0, Math.min(100, Math.round(scaled)));
+}
+
+/** Engagement-ready contract — version and change log any threshold changes. */
+export const ENGAGEMENT_READY_THRESHOLDS = {
+  version: 1,
+  minFitScorePct: 55,
+  strongLocationTypes: new Set<CandidateLocationMatchType>(['city_exact', 'city_alias', 'country_only']),
+  minIdentityConfidence: 0.5,
+  blockedEnrichmentStatuses: new Set(['pending']),
+} as const;
+
+export function isEngagementReady(opts: {
+  fitScorePct: number | null;
+  locationMatchType: CandidateLocationMatchType | null;
+  locationConfidenceNumeric?: number | null;
+  identityConfidence: number | null;
+  enrichmentStatus: string | null;
+}): boolean {
+  const t = ENGAGEMENT_READY_THRESHOLDS;
+  const fitOk = (opts.fitScorePct ?? 0) >= t.minFitScorePct;
+  const locationOk = opts.locationConfidenceNumeric != null
+    ? opts.locationConfidenceNumeric >= 0.6
+    : t.strongLocationTypes.has(opts.locationMatchType ?? '' as any);
+  const enrichmentOk = !t.blockedEnrichmentStatuses.has(opts.enrichmentStatus ?? '');
+  const identityOk = opts.identityConfidence == null || opts.identityConfidence >= t.minIdentityConfidence;
+  return fitOk && locationOk && enrichmentOk && identityOk;
 }
 
 function daysAgo(isoDate: string | null | undefined): number | null {
@@ -366,7 +405,7 @@ function extractMatchTier(cs: Record<string, unknown>): CandidateMatchTier | nul
 
 function extractLocationMatchType(cs: Record<string, unknown>): CandidateLocationMatchType | null {
   const val = cs.locationMatchType;
-  return val === 'city_exact' || val === 'city_alias' || val === 'country_only' || val === 'none'
+  return val === 'city_exact' || val === 'city_alias' || val === 'country_only' || val === 'unknown_location' || val === 'none'
     ? val
     : null;
 }
@@ -412,6 +451,7 @@ export function flattenCandidateForUI(row: {
   const identitySummary = extractIdentitySummary(cs);
   const snapshot = extractSnapshot(cs);
   const searchSignals = extractSearchSignals(cs);
+  const normalizedFitScore = toPctFit(row.fitScore);
 
   const lastEnrichedAt = safeString((cs as any)?.lastEnrichedAt) ?? safeString(snapshot?.computedAt);
   const lastIdentityCheckAt = identitySummary?.lastIdentityCheckAt ?? null;
@@ -421,7 +461,7 @@ export function flattenCandidateForUI(row: {
     jobId: row.jobId,
     signalCandidateId: row.signalCandidateId,
     signalRank: safeNumber(cs.rank),
-    fitScore: row.fitScore ?? null,
+    fitScore: normalizedFitScore,
     fitScoreRaw: safeNumber(cs.fitScoreRaw),
     fitBreakdown: (row.fitBreakdown && typeof row.fitBreakdown === 'object'
       ? row.fitBreakdown as Record<string, unknown>
@@ -445,8 +485,8 @@ export function flattenCandidateForUI(row: {
     matchTier: extractMatchTier(cs),
     locationMatchType: extractLocationMatchType(cs),
     dataConfidence: cs.dataConfidence === 'high' || cs.dataConfidence === 'medium' || cs.dataConfidence === 'low' ? cs.dataConfidence : null,
-    roleScore: safeNumber(cs.roleScore),
-    experienceScore: safeNumber(cs.experienceScore),
+    roleScore: safeNumber(cs.roleScore) ?? safeNumber((row.fitBreakdown as any)?.roleScore),
+    experienceScore: safeNumber(cs.experienceScore) ?? safeNumber((row.fitBreakdown as any)?.experienceScore),
 
     identitySummary,
     snapshot,
@@ -457,6 +497,16 @@ export function flattenCandidateForUI(row: {
       enrichedDaysAgo: daysAgo(lastEnrichedAt),
       identityCheckDaysAgo: daysAgo(lastIdentityCheckAt),
     },
+
+    engagementReady: isEngagementReady({
+      fitScorePct: normalizedFitScore,
+      locationMatchType: extractLocationMatchType(cs),
+      locationConfidenceNumeric: safeNumber(cs.locationConfidence),
+      identityConfidence: identitySummary?.maxIdentityConfidence ?? null,
+      enrichmentStatus: safeString(cs.enrichmentStatus),
+    }),
+    locationLabel: safeString(cs.locationLabel),
+    locationConfidenceNumeric: safeNumber(cs.locationConfidence),
 
     candidateSummary: row.candidateSummary,
 
