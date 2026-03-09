@@ -18,6 +18,7 @@ import { eq, and } from 'drizzle-orm';
 import {
   webhookEvents,
   jobSourcingRuns,
+  jobs,
   organizations,
   type WebhookStatus,
 } from '@shared/schema';
@@ -69,6 +70,61 @@ async function finalizeWebhookEvent(
     ));
 }
 
+function parseExternalJobId(externalJobId?: string | null): number | null {
+  if (!externalJobId) return null;
+  const match = /^vanta:jobs:(\d+)$/.exec(externalJobId.trim());
+  if (!match) return null;
+  const capturedJobId = match[1];
+  if (!capturedJobId) return null;
+  const parsed = Number.parseInt(capturedJobId, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+async function recoverMissingRunFromCallback(
+  req: Request,
+  payload: SignalCallbackPayload,
+  tenantId: string,
+) {
+  const jobId = parseExternalJobId(payload.externalJobId);
+  if (!jobId) return null;
+
+  const job = await db.query.jobs.findFirst({
+    where: eq(jobs.id, jobId),
+    columns: { id: true, organizationId: true },
+  });
+  if (!job) return null;
+
+  const org = await db.query.organizations.findFirst({
+    where: eq(organizations.id, job.organizationId),
+    columns: { signalTenantId: true },
+  });
+  if (!org?.signalTenantId || org.signalTenantId !== tenantId) return null;
+
+  const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get('host')}`;
+  const callbackUrl = `${baseUrl.replace(/\/+$/, '')}/api/webhooks/signal/callback`;
+
+  // Insert a recovery run so callback processing can proceed.
+  await db.insert(jobSourcingRuns).values({
+    organizationId: job.organizationId,
+    jobId: job.id,
+    requestId: payload.requestId,
+    externalJobId: payload.externalJobId ?? `vanta:jobs:${job.id}`,
+    status: payload.status === 'failed' ? 'failed' : 'submitted',
+    contextHash: `recovered:${payload.requestId}`,
+    callbackUrl,
+    submittedAt: new Date(),
+    expiresAt: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+    meta: {
+      recoveredFromCallback: true,
+      callbackRecoveredAt: new Date().toISOString(),
+    },
+  }).onConflictDoNothing();
+
+  return db.query.jobSourcingRuns.findFirst({
+    where: eq(jobSourcingRuns.requestId, payload.requestId),
+  });
+}
+
 export function registerSignalWebhook(app: Express) {
   app.post('/api/webhooks/signal/callback', async (req: Request & { rawBody?: string }, res: Response) => {
     let claimedJti: string | null = null;
@@ -116,9 +172,15 @@ export function registerSignalWebhook(app: Express) {
       }
 
       // 5. Find the sourcing run
-      const run = await db.query.jobSourcingRuns.findFirst({
+      let run = await db.query.jobSourcingRuns.findFirst({
         where: eq(jobSourcingRuns.requestId, payload.requestId),
       });
+      if (!run) {
+        run = await recoverMissingRunFromCallback(req, payload, claims.tenantId);
+        if (run) {
+          console.warn(`Signal callback recovered missing run for requestId=${payload.requestId}`);
+        }
+      }
 
       if (!run) {
         await finalizeWebhookEvent(claims.jti, 'skipped', `Unknown requestId: ${payload.requestId}`);
