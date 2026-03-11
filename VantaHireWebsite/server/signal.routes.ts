@@ -9,7 +9,7 @@
 import type { Express, Request, Response, NextFunction } from 'express';
 import { db } from './db';
 import { eq, and, desc, asc, sql } from 'drizzle-orm';
-import { jobs, jobSourcingRuns, jobSourcedCandidates, type JobSourcingRun, type JobSourcedCandidate } from '@shared/schema';
+import { jobs, jobSourcingRuns, jobSourcedCandidates, recruiterFeedbackEvents, type JobSourcingRun, type JobSourcedCandidate } from '@shared/schema';
 import { requireRole } from './auth';
 import { requireSeat } from './auth';
 import { getUserOrganization, requireSignalTenantId } from './lib/organizationService';
@@ -777,6 +777,80 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         .update(jobSourcedCandidates)
         .set({ state: newState, updatedAt: new Date() })
         .where(eq(jobSourcedCandidates.id, candidateId));
+
+      // Feedback capture (non-blocking, best-effort)
+      if (process.env.FEEDBACK_CAPTURE_ENABLED === 'true'
+          && ['shortlisted', 'hidden', 'converted'].includes(newState)) {
+        try {
+          const { randomUUID } = await import('crypto');
+
+          // Get candidate summary fields (already on the row)
+          const cs = candidate.candidateSummary as Record<string, unknown> | null;
+          const snap = cs?.snapshot as Record<string, unknown> | null;
+
+          // Get run-level context for trackDecision
+          let roleFamily: string | null = null;
+          let seniorityBand: string | null = null;
+          let locationCountryCode: string | null = null;
+
+          // roleFamily and seniorityBand from candidate summary
+          roleFamily = (snap?.roleType as string) ?? null;
+          seniorityBand = (snap?.seniorityBand as string) ?? null;
+
+          // countryCode from candidate summary (populated by Signal results API)
+          locationCountryCode = (cs?.countryCode as string) ?? null;
+
+          const eventId = randomUUID();
+
+          await db.insert(recruiterFeedbackEvents).values({
+            organizationId: orgResult.organization.id,
+            jobId: jobId,
+            userId: req.user!.id,
+            signalCandidateId: candidate.signalCandidateId,
+            action: newState,
+            eventId,
+            rankAtTime: (cs?.rank as number) ?? null,
+            fitScoreAtTime: candidate.fitScore ?? null,
+            sourceTypeAtTime: (cs?.sourceType as string) ?? null,
+            matchTierAtTime: (cs?.matchTier as string) ?? null,
+            locationMatchAtTime: (cs?.locationMatchType as string) ?? null,
+            roleFamily,
+            locationCountryCode,
+            seniorityBand,
+          }).onConflictDoNothing();
+
+          // Forward-sync to ActiveKG (fire-and-forget, never blocks response)
+          if (process.env.ACTIVEKG_BASE_URL && process.env.FEEDBACK_FORWARD_SYNC_ENABLED === 'true') {
+            import('./lib/services/activekg-client').then(({ ingestFeedbackEvents }) => {
+              ingestFeedbackEvents(orgResult.organization.signalTenantId!, [{
+                tenant_id: orgResult.organization.signalTenantId!,
+                job_id: String(jobId),
+                recruiter_id: String(req.user!.id),
+                signal_candidate_id: candidate.signalCandidateId,
+                action: newState,
+                rank_at_time: (cs?.rank as number) ?? null,
+                fit_score_at_time: candidate.fitScore ?? null,
+                source_type_at_time: (cs?.sourceType as string) ?? null,
+                match_tier_at_time: (cs?.matchTier as string) ?? null,
+                location_match_at_time: (cs?.locationMatchType as string) ?? null,
+                role_family: roleFamily,
+                location_country_code: locationCountryCode,
+                seniority_band: seniorityBand,
+                event_id: eventId,
+              }]).catch((syncErr: unknown) => {
+                console.error('[FEEDBACK] ActiveKG forward-sync failed (non-blocking):', {
+                  eventId, error: syncErr instanceof Error ? syncErr.message : syncErr
+                });
+              });
+            });
+          }
+        } catch (feedbackErr) {
+          // Non-blocking: feedback capture failure must never break the state update
+          console.error('[FEEDBACK] Failed to capture event (non-blocking):', {
+            candidateId, newState, error: feedbackErr instanceof Error ? feedbackErr.message : feedbackErr
+          });
+        }
+      }
 
       res.json({ success: true, id: candidate.id, state: newState });
     } catch (error) {

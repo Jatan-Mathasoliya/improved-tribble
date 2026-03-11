@@ -131,6 +131,7 @@ export interface SignalResultCandidate {
   };
   professionalValidation?: unknown;
   locationLabel?: string | null;
+  countryCode?: string | null;
 }
 
 export type IdentityDisplayStatus = 'verified' | 'review' | 'weak';

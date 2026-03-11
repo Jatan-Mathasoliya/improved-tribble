@@ -167,6 +167,15 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
           effective_recruiter_id: job.effectiveRecruiterId,
           submitted_by_recruiter: application.submittedByRecruiter || false,
           created_by_user_id: application.createdByUserId || null,
+          // Global memory provenance metadata
+          provenance_type: 'platform_applicant',
+          visibility: (application as any).platformDiscoveryConsent
+            ? 'platform_shared'
+            : 'private',
+          consent_state: (application as any).platformDiscoveryConsent ? 'opted_in' : 'opted_out',
+          consent_captured_at: (application as any).consentCapturedAt?.toISOString?.() || null,
+          applicant_name: application.name || null,
+          applicant_email: application.email || null,
         },
         tenant_id: job.activekgTenantId,
       },

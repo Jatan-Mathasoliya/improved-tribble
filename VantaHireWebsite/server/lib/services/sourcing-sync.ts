@@ -172,6 +172,7 @@ export async function upsertSignalCandidates(
       fitScoreRaw: c.fitScore,
       matchTier: c.matchTier ?? null,
       locationMatchType: c.locationMatchType ?? null,
+      countryCode: (c as any).countryCode ?? null,
       dataConfidence: c.dataConfidence ?? null,
       professionalValidation: c.professionalValidation ?? null,
       locationLabel: (c as any).locationLabel ?? null,

@@ -338,3 +338,62 @@ export async function getNodeByExternalId(
 
   return body as ActiveKGNodeByExternalIdResponse;
 }
+
+// =====================================================
+// Global Memory: feedback event forward-sync
+// =====================================================
+
+export interface FeedbackEventPayload {
+  tenant_id: string;
+  job_id: string;
+  recruiter_id?: string | null;
+  global_candidate_id?: string | null;
+  signal_candidate_id?: string | null;
+  action: string;
+  rank_at_time?: number | null;
+  fit_score_at_time?: number | null;
+  source_type_at_time?: string | null;
+  match_tier_at_time?: string | null;
+  location_match_at_time?: string | null;
+  role_family?: string | null;
+  location_country_code?: string | null;
+  seniority_band?: string | null;
+  event_id: string;
+}
+
+export interface FeedbackIngestResponse {
+  inserted: number;
+  skipped: number;
+}
+
+/**
+ * POST /global-candidates/feedback-events — kg:write
+ *
+ * Forward-syncs recruiter feedback events to ActiveKG's read-optimized replica.
+ * Non-blocking: caller should catch errors and log, never fail the parent operation.
+ */
+export async function ingestFeedbackEvents(
+  tenantId: string,
+  events: FeedbackEventPayload[],
+  requestId?: string,
+): Promise<FeedbackIngestResponse> {
+  const res = await activekgFetch('/feedback-events/ingest', {
+    method: 'POST',
+    tenantId,
+    scopes: ACTIVEKG_SCOPES.WRITE,
+    requestId,
+    body: { events },
+  });
+
+  const body: any = await res.json();
+
+  if (!res.ok) {
+    throw new ActiveKGClientError(
+      body.detail || `ActiveKG /feedback-events/ingest returned ${res.status}`,
+      res.status,
+      body,
+    );
+  }
+
+  return body as FeedbackIngestResponse;
+}

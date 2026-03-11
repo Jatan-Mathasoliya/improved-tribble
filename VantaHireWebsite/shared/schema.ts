@@ -187,6 +187,9 @@ export const applications = pgTable("applications", {
   resumeId: integer("resume_id").references(() => candidateResumes.id),
   whatsappConsent: boolean("whatsapp_consent").notNull().default(true), // WhatsApp notification consent (opt-out model)
   syncSkippedReason: text("sync_skipped_reason"), // Why ActiveKG sync was skipped (e.g. 'resume_text_missing', 'resume_text_below_threshold')
+  // Platform discovery consent (opt-in: default false)
+  platformDiscoveryConsent: boolean("platform_discovery_consent").default(false), // Whether applicant consents to cross-tenant discovery
+  consentCapturedAt: timestamp("consent_captured_at"), // When consent was explicitly captured
 }, (table) => ({
   // Indexes for ATS performance
   orgIdx: index("applications_org_idx").on(table.organizationId),
@@ -2353,4 +2356,43 @@ export type InsertJobSourcedCandidate = z.infer<typeof insertJobSourcedCandidate
 // =====================================================
 // END SIGNAL SOURCING INSERT SCHEMAS & TYPES
 // =====================================================
+
+// =====================================================
+// RECRUITER FEEDBACK EVENTS (Global Memory)
+// =====================================================
+
+export const recruiterFeedbackEvents = pgTable("recruiter_feedback_events", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  jobId: integer("job_id").notNull()
+    .references(() => jobs.id, { onDelete: 'cascade' }),
+  userId: integer("user_id").references(() => users.id),
+  signalCandidateId: text("signal_candidate_id").notNull(),
+  action: text("action").notNull(), // 'shortlisted' | 'hidden' | 'converted'
+  eventId: text("event_id").notNull().unique(), // idempotency key
+
+  // Snapshot of candidate state at action time
+  rankAtTime: integer("rank_at_time"),
+  fitScoreAtTime: integer("fit_score_at_time"),
+  sourceTypeAtTime: text("source_type_at_time"),
+  matchTierAtTime: text("match_tier_at_time"),
+  locationMatchAtTime: text("location_match_at_time"),
+
+  // Job context for aggregation
+  roleFamily: text("role_family"),
+  locationCountryCode: text("location_country_code"),
+  seniorityBand: text("seniority_band"),
+
+  // Forward-sync status
+  syncedToSignalAt: timestamp("synced_to_signal_at"), // null = not yet synced
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  eventIdIdx: uniqueIndex("rfb_event_id_idx").on(table.eventId),
+  orgJobIdx: index("rfb_org_job_idx").on(table.organizationId, table.jobId),
+  candidateIdx: index("rfb_candidate_idx").on(table.signalCandidateId),
+  actionIdx: index("rfb_action_idx").on(table.action),
+  unsyncedIdx: index("rfb_unsynced_idx").on(table.syncedToSignalAt),
+}));
 
