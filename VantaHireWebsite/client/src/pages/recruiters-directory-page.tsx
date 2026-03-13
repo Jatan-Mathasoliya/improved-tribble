@@ -25,10 +25,7 @@ export default function RecruitersDirectoryPage() {
   const [isVisible, setIsVisible] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  useEffect(() => {
-    const timer = setTimeout(() => setIsVisible(true), 200);
-    return () => clearTimeout(timer);
-  }, []);
+  useEffect(() => { setIsVisible(true); }, []);
 
   const { data, isLoading } = useQuery<{ recruiters: PublicRecruiter[] }>({
     queryKey: ["/api/recruiters"],

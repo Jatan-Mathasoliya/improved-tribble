@@ -10,6 +10,7 @@ import {
   ActiveKGClientError,
 } from '../lib/services/activekg-client';
 import { chunkText, buildParentExternalId } from '../lib/activekgChunker';
+import { resolveActiveKGTenantId } from '../lib/activekgTenant';
 import type { ApplicationGraphSyncJob } from '@shared/schema';
 
 async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
@@ -39,7 +40,16 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
     return;
   }
 
-  const tenantId = job.activekgTenantId;
+  const expectedTenantId = resolveActiveKGTenantId(application.organizationId);
+  if (job.activekgTenantId !== expectedTenantId) {
+    await storage.markApplicationGraphSyncJobDeadLetter(
+      job.id,
+      `Tenant mismatch for application ${application.id}: job=${job.activekgTenantId} expected=${expectedTenantId}`
+    );
+    return;
+  }
+
+  const tenantId = expectedTenantId;
   const parentExternalId = buildParentExternalId(application.organizationId, application.id);
 
   console.log('  Creating parent node...');

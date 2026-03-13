@@ -63,7 +63,7 @@ const Footer = ({ minimal = false }: FooterProps) => {
           {/* Brand Column */}
           <div className="lg:col-span-1">
             <Link href="/" className="flex items-center gap-2 mb-4">
-              <img src={vantahireLogo} alt="VantaHire" className="h-9 w-auto" />
+              <img src={vantahireLogo} alt="VantaHire" width={36} height={36} className="h-9 w-auto" />
               <span className="text-xl font-bold gradient-text-mixed">VantaHire</span>
             </Link>
             <p className="text-[var(--text-muted)] text-sm leading-relaxed max-w-xs">

@@ -18,8 +18,9 @@ import {
   createEdge,
   getNodeByExternalId,
   ActiveKGClientError,
-} from './activekgClient';
+} from './services/activekg-client';
 import { chunkText, buildParentExternalId } from './activekgChunker';
+import { resolveActiveKGTenantId } from './activekgTenant';
 import type { ApplicationGraphSyncJob } from '@shared/schema';
 
 /** Minimum length of extractedResumeText required for graph sync */
@@ -126,7 +127,16 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
     return;
   }
 
-  const tenantId = job.activekgTenantId;
+  const expectedTenantId = resolveActiveKGTenantId(application.organizationId);
+  if (job.activekgTenantId !== expectedTenantId) {
+    await storage.markApplicationGraphSyncJobDeadLetter(
+      job.id,
+      `Tenant mismatch for application ${application.id}: job=${job.activekgTenantId} expected=${expectedTenantId}`
+    );
+    return;
+  }
+
+  const tenantId = expectedTenantId;
 
   // Step 4: Build parent external ID
   const parentExternalId = buildParentExternalId(
@@ -136,12 +146,13 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
 
   // Step 5: Ensure parent node (idempotent)
   let parentNodeId: string;
-  const existingParent = await getNodeByExternalId(parentExternalId, tenantId);
+  const existingParent = await getNodeByExternalId(tenantId, parentExternalId);
 
   if (existingParent) {
     parentNodeId = existingParent.id;
   } else {
     const parentResponse = await createNode(
+      tenantId,
       {
         classes: ['Document', 'Resume'],
         props: {
@@ -149,6 +160,7 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
           external_id: parentExternalId,
           is_parent: true,
           has_chunks: true,
+          resume_text: application.extractedResumeText,
           application_id: application.id,
           job_id: application.jobId,
           org_id: application.organizationId,
@@ -179,7 +191,6 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
         },
         tenant_id: job.activekgTenantId,
       },
-      tenantId
     );
     parentNodeId = parentResponse.id;
   }
@@ -190,13 +201,14 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
   // Step 7: Ensure chunk nodes + edges
   for (const chunk of chunks) {
     // Check if chunk already exists
-    const existingChunk = await getNodeByExternalId(chunk.externalId, tenantId);
+    const existingChunk = await getNodeByExternalId(tenantId, chunk.externalId);
     let chunkNodeId: string;
 
     if (existingChunk) {
       chunkNodeId = existingChunk.id;
     } else {
       const chunkResponse = await createNode(
+        tenantId,
         {
           classes: ['Chunk', 'Resume'],
           props: {
@@ -224,7 +236,6 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
           },
           tenant_id: job.activekgTenantId,
         },
-        tenantId
       );
       chunkNodeId = chunkResponse.id;
     }
@@ -232,6 +243,7 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
     // Ensure DERIVED_FROM edge (chunk -> parent)
     try {
       await createEdge(
+        tenantId,
         {
           src: chunkNodeId,
           dst: parentNodeId,
@@ -242,7 +254,6 @@ async function processJob(job: ApplicationGraphSyncJob): Promise<void> {
           },
           tenant_id: job.activekgTenantId,
         },
-        tenantId
       );
     } catch (edgeError) {
       // Ignore duplicate edge errors (conflict/500 with duplicate signature)

@@ -49,10 +49,7 @@ const steps = [
 export default function ProductPage() {
   const [isVisible, setIsVisible] = useState(false);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setIsVisible(true), 200);
-    return () => clearTimeout(timer);
-  }, []);
+  useEffect(() => { setIsVisible(true); }, []);
 
   return (
     <Layout>

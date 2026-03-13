@@ -178,6 +178,10 @@ describe('Verification invite token preservation', () => {
       </Router>
     );
 
+    // Click the verify button to trigger the fetch and transition to success state
+    const verifyBtn = await screen.findByRole('button', { name: /Verify Email/i });
+    fireEvent.click(verifyBtn);
+
     const link = await screen.findByRole('link', { name: /Continue to Login/i });
     expect(link.getAttribute('href')).toBe('/recruiter-auth?invite=invitetoken123');
   });

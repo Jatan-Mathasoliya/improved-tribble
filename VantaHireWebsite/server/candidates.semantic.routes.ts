@@ -53,6 +53,16 @@ interface GroupedResult {
 
 type SemanticScoreType = 'rrf_fused' | 'weighted_fusion' | 'cosine' | 'unknown';
 
+interface SearchDiagnostics {
+  mode: 'org_private' | 'super_admin_global';
+  tenantIds: string[];
+  activekgRawCount: number;
+  groupedApplicationCount: number;
+  hydratedApplicationCount: number;
+  droppedApplicationCount: number;
+  droppedApplicationIds: number[];
+}
+
 /**
  * Group ActiveKG search results by application_id, keeping the best
  * similarity score and collecting highlight snippets per application.
@@ -271,9 +281,8 @@ export function registerCandidateSemanticRoutes(
         // ── Auth & org ─────────────────────────────────────────
         const orgResult = await getUserOrganization(req.user!.id);
         const isSuperAdmin = req.user!.role === 'super_admin';
-        const isSuperAdminGlobalSearch = isSuperAdmin;
 
-        if (!orgResult && !isSuperAdminGlobalSearch) {
+        if (!orgResult && !isSuperAdmin) {
           res.status(403).json({ error: 'You must belong to an organization' });
           return;
         }
@@ -288,8 +297,14 @@ export function registerCandidateSemanticRoutes(
         const { query, top_k, use_reranker, metadata_filters } = parsed.data;
 
         // ── Resolve config ─────────────────────────────────────
-        const tenantId = orgId != null ? resolveActiveKGTenantId(orgId) : 'default';
         const defaults = getSearchDefaults();
+        const tenantId = orgId != null ? resolveActiveKGTenantId(orgId) : 'default';
+        const isSuperAdminGlobalSearch = isSuperAdmin && defaults.allowGlobalSuperAdmin && !orgResult;
+
+        if (!orgId && !isSuperAdminGlobalSearch) {
+          res.status(403).json({ error: 'You must belong to an organization to search candidates' });
+          return;
+        }
 
         // ── Check feature gate ─────────────────────────────────
         if (!process.env.ACTIVEKG_BASE_URL) {
@@ -313,6 +328,7 @@ export function registerCandidateSemanticRoutes(
         let activekgResults: ActiveKGSearchResult[] = [];
         let scoreType: SemanticScoreType = inferScoreType(searchPayloadBase.use_hybrid);
         const strategy = getTenantStrategy();
+        const searchedTenants: string[] = [];
         if (isSuperAdminGlobalSearch) {
           if (strategy === 'org_scoped') {
             const orgRows = await db.select({ id: organizations.id }).from(organizations) as Array<{ id: number }>;
@@ -320,6 +336,7 @@ export function registerCandidateSemanticRoutes(
             // Compatibility: include shared default tenant to surface legacy indexed data.
             tenantIds.push('default');
             const uniqueTenantIds: string[] = Array.from(new Set(tenantIds));
+            searchedTenants.push(...uniqueTenantIds);
 
             if (uniqueTenantIds.length > 0) {
               const responses = await Promise.all(
@@ -337,6 +354,7 @@ export function registerCandidateSemanticRoutes(
               activekgResults = responses.flatMap((r) => r.results);
             }
           } else {
+            searchedTenants.push(tenantId);
             const response = await activekgSearch(tenantId, {
               ...superAdminSearchPayload,
               tenant_id: tenantId,
@@ -347,6 +365,7 @@ export function registerCandidateSemanticRoutes(
             activekgResults = response.results;
           }
         } else {
+          searchedTenants.push(tenantId);
           const response = await activekgSearch(tenantId, {
             ...searchPayloadBase,
             tenant_id: tenantId,
@@ -359,34 +378,26 @@ export function registerCandidateSemanticRoutes(
           const explicit = scoreTypeFromResponse(response);
           if (explicit !== 'unknown') scoreType = explicit;
           activekgResults = response.results;
-
-          // Compatibility fallback for mixed deployments:
-          // if org-scoped is configured but data still exists only in shared tenant,
-          // do a second search against default and merge results.
-          if (strategy === 'org_scoped' && tenantId !== 'default' && activekgResults.length === 0) {
-            const legacyResponse = await activekgSearch('default', {
-              ...searchPayloadBase,
-              tenant_id: 'default',
-              metadata_filters: {
-                ...metadata_filters,
-                source: 'vantahire',
-                org_id: orgId,
-              },
-            });
-            const legacyExplicit = scoreTypeFromResponse(legacyResponse);
-            if (legacyExplicit !== 'unknown') scoreType = legacyExplicit;
-            activekgResults = legacyResponse.results;
-          }
         }
 
         // ── Group by application ───────────────────────────────
         const grouped = groupByApplication(activekgResults);
+        const searchDiagnostics: SearchDiagnostics = {
+          mode: isSuperAdminGlobalSearch ? 'super_admin_global' : 'org_private',
+          tenantIds: searchedTenants,
+          activekgRawCount: activekgResults.length,
+          groupedApplicationCount: grouped.length,
+          hydratedApplicationCount: 0,
+          droppedApplicationCount: 0,
+          droppedApplicationIds: [],
+        };
         if (!isSuperAdminGlobalSearch && grouped.length === 0) {
           res.json({
             query,
             count: 0,
             scoreType,
             displayScoreType: scoreType,
+            searchDiagnostics,
             scoreDiagnostics: {
               topRawScore: null,
               bottomRawScore: null,
@@ -412,6 +423,25 @@ export function registerCandidateSemanticRoutes(
             : await storage.getApplicationsByIdsForOrg(appIds, orgId!);
         }
         const appMap = new Map(apps.map((a) => [a.id, a]));
+        const droppedApplicationIds = grouped
+          .map((g) => g.applicationId)
+          .filter((applicationId) => !appMap.has(applicationId));
+        searchDiagnostics.hydratedApplicationCount = apps.length;
+        searchDiagnostics.droppedApplicationCount = droppedApplicationIds.length;
+        searchDiagnostics.droppedApplicationIds = droppedApplicationIds.slice(0, 50);
+        if (droppedApplicationIds.length > 0) {
+          console.warn('[SEMANTIC_SEARCH] Dropped ActiveKG hits during hydration', {
+            userId: req.user!.id,
+            role: req.user!.role,
+            organizationId: orgId ?? null,
+            mode: searchDiagnostics.mode,
+            tenantIds: searchedTenants,
+            rawResultCount: activekgResults.length,
+            groupedApplicationCount: grouped.length,
+            hydratedApplicationCount: apps.length,
+            droppedApplicationIds: droppedApplicationIds.slice(0, 50),
+          });
+        }
         const jobIds = Array.from(new Set(apps.map((a) => a.jobId)));
         const jobs = await storage.getJobsByIds(jobIds);
         const jobMap = new Map(jobs.map((j) => [j.id, j]));
@@ -676,6 +706,7 @@ export function registerCandidateSemanticRoutes(
           count: results.length,
           scoreType,
           displayScoreType,
+          searchDiagnostics,
           scoreDiagnostics: {
             topRawScore,
             bottomRawScore,

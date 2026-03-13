@@ -152,10 +152,7 @@ export default function PricingPage() {
     },
   });
 
-  useEffect(() => {
-    const timer = setTimeout(() => setIsVisible(true), 200);
-    return () => clearTimeout(timer);
-  }, []);
+  useEffect(() => { setIsVisible(true); }, []);
 
   const handleSelectPro = () => {
     if (!proPlan) return;
@@ -306,6 +303,46 @@ export default function PricingPage() {
         <meta property="og:description" content="Choose the perfect plan for your hiring needs. Start free, upgrade when ready." />
         <meta property="og:url" content="https://www.vantahire.com/pricing" />
         <meta property="og:type" content="website" />
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "What are AI credits?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "AI credits are used for AI-powered features like job description generation, resume analysis, and candidate matching. Each AI operation consumes credits."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can I change my plan anytime?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes! You can upgrade at any time and the change takes effect immediately with prorated billing. Downgrades take effect at the end of your current billing period."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What payment methods do you accept?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "We accept UPI, credit/debit cards, and net banking through our secure payment partner Cashfree."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Do you offer refunds?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "We offer a 7-day money-back guarantee for new Pro subscriptions. Contact support within 7 days of your first payment for a full refund."
+                }
+              }
+            ]
+          })}
+        </script>
       </Helmet>
 
       <div className="public-theme min-h-screen bg-background text-foreground">

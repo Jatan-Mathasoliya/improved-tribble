@@ -8,6 +8,7 @@ describe('activekgSearchConfig', () => {
     delete process.env.ACTIVEKG_SEARCH_TOP_K;
     delete process.env.ACTIVEKG_SEARCH_USE_RERANKER;
     delete process.env.ACTIVEKG_SEARCH_SIGNED_URL_MINUTES;
+    delete process.env.ACTIVEKG_SEARCH_ALLOW_GLOBAL_SUPER_ADMIN;
   });
 
   afterEach(() => {
@@ -125,6 +126,31 @@ describe('activekgSearchConfig', () => {
     });
   });
 
+  describe('getSearchAllowGlobalSuperAdmin', () => {
+    it('defaults to false', async () => {
+      const { getSearchAllowGlobalSuperAdmin } = await load();
+      expect(getSearchAllowGlobalSuperAdmin()).toBe(false);
+    });
+
+    it('returns true when set to true', async () => {
+      process.env.ACTIVEKG_SEARCH_ALLOW_GLOBAL_SUPER_ADMIN = 'true';
+      const { getSearchAllowGlobalSuperAdmin } = await load();
+      expect(getSearchAllowGlobalSuperAdmin()).toBe(true);
+    });
+
+    it('returns true when set to 1', async () => {
+      process.env.ACTIVEKG_SEARCH_ALLOW_GLOBAL_SUPER_ADMIN = '1';
+      const { getSearchAllowGlobalSuperAdmin } = await load();
+      expect(getSearchAllowGlobalSuperAdmin()).toBe(true);
+    });
+
+    it('returns false for any other value', async () => {
+      process.env.ACTIVEKG_SEARCH_ALLOW_GLOBAL_SUPER_ADMIN = 'yes';
+      const { getSearchAllowGlobalSuperAdmin } = await load();
+      expect(getSearchAllowGlobalSuperAdmin()).toBe(false);
+    });
+  });
+
   describe('getSearchDefaults', () => {
     it('returns all defaults as a bundle', async () => {
       const { getSearchDefaults } = await load();
@@ -133,6 +159,7 @@ describe('activekgSearchConfig', () => {
         topK: 20,
         useReranker: true,
         signedUrlMinutes: 15,
+        allowGlobalSuperAdmin: false,
       });
     });
 
@@ -141,12 +168,14 @@ describe('activekgSearchConfig', () => {
       process.env.ACTIVEKG_SEARCH_TOP_K = '10';
       process.env.ACTIVEKG_SEARCH_USE_RERANKER = 'false';
       process.env.ACTIVEKG_SEARCH_SIGNED_URL_MINUTES = '60';
+      process.env.ACTIVEKG_SEARCH_ALLOW_GLOBAL_SUPER_ADMIN = 'true';
       const { getSearchDefaults } = await load();
       expect(getSearchDefaults()).toEqual({
         mode: 'vector',
         topK: 10,
         useReranker: false,
         signedUrlMinutes: 60,
+        allowGlobalSuperAdmin: true,
       });
     });
   });

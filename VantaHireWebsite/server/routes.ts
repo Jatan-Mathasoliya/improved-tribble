@@ -2,7 +2,7 @@ import express, { type Express, type Request, type Response, type NextFunction }
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, or, gt, isNull, sql } from "drizzle-orm";
 import { insertContactSchema, jobs, users, organizationMembers, hiringManagerInvitations } from "@shared/schema";
 import { z } from "zod";
 import { getEmailService } from "./simpleEmailService";
@@ -150,11 +150,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      // Query only approved and active jobs (using typed columns)
+      // Query only approved, active, and non-expired jobs
       const activeJobs = await db.query.jobs.findMany({
         where: and(
           eq(jobs.isActive, true),
-          eq(jobs.status, 'approved')
+          eq(jobs.status, 'approved'),
+          or(isNull(jobs.expiresAt), gt(jobs.expiresAt, new Date()))
         ),
         columns: {
           id: true,

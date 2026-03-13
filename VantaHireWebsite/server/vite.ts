@@ -158,8 +158,9 @@ export async function setupVite(app: Express, server: Server) {
 /**
  * Inject JSON-LD structured data into HTML for SEO
  */
-function injectJsonLd(html: string, jsonLd: object): string {
-  const script = `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`;
+function injectJsonLd(html: string, jsonLd: object, schemaType?: string): string {
+  const dataAttr = schemaType ? ` data-schema="${schemaType}"` : '';
+  const script = `<script type="application/ld+json"${dataAttr}>${JSON.stringify(jsonLd)}</script>`;
   // Inject before </head> for early discovery by crawlers
   return html.replace('</head>', `${script}\n</head>`);
 }
@@ -437,7 +438,7 @@ export function serveStatic(app: Express) {
 
       // Only inject if JSON-LD generation succeeded
       if (jsonLd) {
-        html = injectJsonLd(html, jsonLd);
+        html = injectJsonLd(html, jsonLd, 'jobposting');
       }
 
       // Serve the modified HTML

@@ -9,6 +9,7 @@
  *   ACTIVEKG_SEARCH_TOP_K            — max results to return (default: 20, range 1-100)
  *   ACTIVEKG_SEARCH_USE_RERANKER     — enable reranker pass (default: true)
  *   ACTIVEKG_SEARCH_SIGNED_URL_MINUTES — signed URL expiry for resume links (default: 15, range 1-1440)
+ *   ACTIVEKG_SEARCH_ALLOW_GLOBAL_SUPER_ADMIN — allow super_admin global search (default: false)
  */
 
 export type ActiveKGSearchMode = 'hybrid' | 'vector' | 'keyword';
@@ -46,11 +47,20 @@ export function getSearchSignedUrlMinutes(): number {
   return clamp(parseIntSafe(process.env.ACTIVEKG_SEARCH_SIGNED_URL_MINUTES, 15), 1, 1440);
 }
 
+export function getSearchAllowGlobalSuperAdmin(): boolean {
+  const raw = (process.env.ACTIVEKG_SEARCH_ALLOW_GLOBAL_SUPER_ADMIN ?? 'false')
+    .toString()
+    .trim()
+    .toLowerCase();
+  return raw === 'true' || raw === '1';
+}
+
 export interface ActiveKGSearchDefaults {
   mode: ActiveKGSearchMode;
   topK: number;
   useReranker: boolean;
   signedUrlMinutes: number;
+  allowGlobalSuperAdmin: boolean;
 }
 
 export function getSearchDefaults(): ActiveKGSearchDefaults {
@@ -59,5 +69,6 @@ export function getSearchDefaults(): ActiveKGSearchDefaults {
     topK: getSearchTopK(),
     useReranker: getSearchUseReranker(),
     signedUrlMinutes: getSearchSignedUrlMinutes(),
+    allowGlobalSuperAdmin: getSearchAllowGlobalSuperAdmin(),
   };
 }
