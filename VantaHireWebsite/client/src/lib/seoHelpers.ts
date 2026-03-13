@@ -7,13 +7,23 @@ import { Job } from "@shared/schema";
 export const DEFAULT_SITE_URL = "https://www.vantahire.com";
 
 /**
- * Strip HTML tags and normalize whitespace for meta descriptions
+ * Strip HTML tags and normalize whitespace for meta descriptions.
+ * Uses regex instead of DOM to work in both browser and SSR contexts.
  */
 export function stripHtml(html: string): string {
-  const div = document.createElement('div');
-  div.innerHTML = html;
-  const text = div.textContent || div.innerText || '';
-  return text.replace(/\s+/g, ' ').trim();
+  if (!html) return '';
+  return html
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
