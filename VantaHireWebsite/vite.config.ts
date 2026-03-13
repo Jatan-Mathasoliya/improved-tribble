@@ -41,6 +41,11 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks: (id) => {
+          // Shared utilities used across the app — must stay OUT of lazy vendor chunks
+          // to prevent the main bundle from depending on recharts/d3/tours
+          if (id.includes('node_modules/clsx') || id.includes('node_modules/tailwind-merge') || id.includes('node_modules/class-variance-authority')) {
+            return 'vendor-utils';
+          }
           // Core React runtime
           if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) {
             return 'vendor-react';
@@ -61,11 +66,11 @@ export default defineConfig({
           if (id.includes('@radix-ui')) {
             return 'vendor-ui';
           }
-          // Charts and visualization - keep recharts together with its dependencies
+          // Charts and visualization (lazy-only — NOT needed on public pages)
           if (id.includes('recharts')) {
             return 'vendor-recharts';
           }
-          // D3 utilities used by recharts
+          // D3 utilities used by recharts (lazy-only)
           if (id.includes('d3-')) {
             return 'vendor-d3';
           }
@@ -84,7 +89,7 @@ export default defineConfig({
           if (id.includes('react-markdown') || id.includes('remark') || id.includes('rehype')) {
             return 'vendor-markdown';
           }
-          // React Joyride (tours)
+          // React Joyride (tours) — lazy-only
           if (id.includes('react-joyride') || id.includes('react-floater') || id.includes('popper')) {
             return 'vendor-tours';
           }
