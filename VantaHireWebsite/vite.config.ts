@@ -29,6 +29,10 @@ export default defineConfig({
     },
   },
   root: path.resolve(import.meta.dirname, "client"),
+  ssr: {
+    // Bundle CJS-only packages into the SSR output so Node.js ESM can import them
+    noExternal: ['react-helmet-async'],
+  },
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,

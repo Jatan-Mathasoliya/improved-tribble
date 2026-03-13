@@ -383,6 +383,7 @@ export async function serveStatic(app: Express) {
 
       res.setHeader('Content-Type', 'text/html');
       res.setHeader('Cache-Control', 'no-store, must-revalidate');
+      res.setHeader('X-SSR-Status', ssrRender ? 'enabled' : 'disabled');
       res.send(html);
     } catch (error) {
       console.error('[SSR Meta] Error injecting marketing page meta:', error);
