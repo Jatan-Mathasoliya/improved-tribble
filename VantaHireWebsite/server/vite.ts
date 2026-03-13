@@ -1,7 +1,7 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
-import { fileURLToPath } from "url";
+import { fileURLToPath, pathToFileURL } from "url";
 import { type Server } from "http";
 import { nanoid } from "nanoid";
 import { storage } from "./storage";
@@ -16,6 +16,18 @@ export function log(message: string, source = "express") {
   });
 
   console.log(`${formattedTime} [${source}] ${message}`);
+}
+
+/**
+ * Inject SSR-rendered HTML into the root div.
+ * Adds data-ssr attribute so the client knows to hydrate instead of full render.
+ */
+function injectSSR(html: string, ssrHtml: string): string {
+  if (!ssrHtml) return html;
+  return html.replace(
+    '<div id="root"></div>',
+    `<div id="root" data-ssr="true">${ssrHtml}</div>`,
+  );
 }
 
 export async function setupVite(app: Express, server: Server) {
@@ -109,6 +121,9 @@ export async function setupVite(app: Express, server: Server) {
     },
   };
 
+  // Routes that should receive SSR body rendering in dev mode
+  const SSR_ROUTES = new Set(Object.keys(MARKETING_PAGES_DEV));
+
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
 
@@ -144,6 +159,21 @@ export async function setupVite(app: Express, server: Server) {
         template = upsertMetaTag(template, 'name', 'twitter:title', pageMeta.title);
         template = upsertMetaTag(template, 'name', 'twitter:description', pageMeta.description);
         template = upsertMetaTag(template, 'name', 'twitter:image', `${baseUrl}/twitter-image.jpg`);
+      }
+
+      // SSR body render for public routes (dev mode)
+      const isSSRRoute = SSR_ROUTES.has(url) || url.startsWith('/jobs/') || url.startsWith('/recruiters/');
+      if (isSSRRoute) {
+        try {
+          const ssrModule = await vite.ssrLoadModule('/src/entry-server.tsx');
+          const { html: ssrHtml } = ssrModule.render(url);
+          if (ssrHtml) {
+            template = injectSSR(template, ssrHtml);
+          }
+        } catch (ssrError) {
+          console.error('[SSR Dev] Render error:', ssrError);
+          // Fall through to CSR — page still works, just without SSR content
+        }
       }
 
       const page = await vite.transformIndexHtml(url, template);
@@ -231,7 +261,7 @@ function parseJobIdentifier(param: string): { type: 'id' | 'slug'; value: string
   return { type: 'slug', value: param };
 }
 
-export function serveStatic(app: Express) {
+export async function serveStatic(app: Express) {
   // Compute dirname in ESM
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
   const distPath = path.resolve(__dirname, "public");
@@ -241,6 +271,22 @@ export function serveStatic(app: Express) {
     throw new Error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`,
     );
+  }
+
+  // Load SSR render module (built by `vite build --ssr`)
+  type SSRRender = (url: string, initialData?: Record<string, unknown>) => { html: string; helmetContext: any };
+  let ssrRender: SSRRender | null = null;
+  try {
+    const ssrModulePath = path.resolve(__dirname, 'server', 'entry-server.js');
+    if (fs.existsSync(ssrModulePath)) {
+      const ssrModule = await import(pathToFileURL(ssrModulePath).href);
+      ssrRender = ssrModule.render;
+      log('SSR module loaded successfully', 'ssr');
+    } else {
+      log('SSR module not found at ' + ssrModulePath + ', falling back to CSR', 'ssr');
+    }
+  } catch (err) {
+    console.warn('[SSR] Failed to load SSR module, falling back to CSR:', err);
   }
 
   // SSR meta injection for marketing pages (registered before static middleware
@@ -323,6 +369,18 @@ export function serveStatic(app: Express) {
       html = upsertMetaTag(html, 'name', 'twitter:description', pageMeta.description);
       html = upsertMetaTag(html, 'name', 'twitter:image', `${baseUrl}/twitter-image.jpg`);
 
+      // SSR body render — inject React-rendered HTML for crawlers
+      if (ssrRender) {
+        try {
+          const { html: ssrHtml } = ssrRender(req.path);
+          if (ssrHtml) {
+            html = injectSSR(html, ssrHtml);
+          }
+        } catch (ssrError) {
+          console.error('[SSR] Marketing page render error:', ssrError);
+        }
+      }
+
       res.setHeader('Content-Type', 'text/html');
       res.setHeader('Cache-Control', 'no-store, must-revalidate');
       res.send(html);
@@ -358,8 +416,8 @@ export function serveStatic(app: Express) {
     }
   }));
 
-  // Server-side JSON-LD injection for job detail pages
-  // This ensures Googlebot sees structured data without executing JavaScript
+  // Server-side JSON-LD + SSR body injection for job detail pages
+  // This ensures Googlebot sees structured data AND rendered content without executing JavaScript
   app.get('/jobs/:param', async (req, res, next) => {
     try {
       const { param } = req.params;
@@ -439,6 +497,22 @@ export function serveStatic(app: Express) {
       // Only inject if JSON-LD generation succeeded
       if (jsonLd) {
         html = injectJsonLd(html, jsonLd, 'jobposting');
+      }
+
+      // SSR body render — inject React-rendered job detail page for crawlers
+      if (ssrRender) {
+        try {
+          // Pre-populate query cache with the job data we already fetched
+          const initialData: Record<string, unknown> = {
+            [JSON.stringify(["/api/jobs", param])]: job,
+          };
+          const { html: ssrHtml } = ssrRender(`/jobs/${param}`, initialData);
+          if (ssrHtml) {
+            html = injectSSR(html, ssrHtml);
+          }
+        } catch (ssrError) {
+          console.error('[SSR] Job detail render error:', ssrError);
+        }
       }
 
       // Serve the modified HTML

@@ -24,6 +24,10 @@ export interface ExtractionResult {
   piiStripped?: boolean;
 }
 
+export interface ExtractResumeTextOptions {
+  stripPii?: boolean;
+}
+
 /**
  * Strip PII from resume text while preserving performance metrics
  *
@@ -107,7 +111,10 @@ async function extractDOC(buffer: Buffer): Promise<string> {
  * @param buffer - File buffer
  * @returns Extraction result with text and metadata
  */
-export async function extractResumeText(buffer: Buffer): Promise<ExtractionResult> {
+async function extractResumeTextInternal(
+  buffer: Buffer,
+  options?: ExtractResumeTextOptions,
+): Promise<ExtractionResult> {
   // Check file size
   if (buffer.length > MAX_FILE_SIZE) {
     return {
@@ -152,13 +159,13 @@ export async function extractResumeText(buffer: Buffer): Promise<ExtractionResul
     // Race between extraction and timeout
     const rawText = await Promise.race([extractionPromise, timeoutPromise]);
 
-    // Strip PII if enabled
-    const text = stripPII(rawText);
+    const shouldStripPii = options?.stripPii ?? STRIP_PII;
+    const text = shouldStripPii ? stripPII(rawText) : rawText;
 
     return {
       text,
       success: true,
-      piiStripped: STRIP_PII,
+      piiStripped: shouldStripPii,
     };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
@@ -169,6 +176,17 @@ export async function extractResumeText(buffer: Buffer): Promise<ExtractionResul
       error: `Extraction failed: ${errorMessage}`,
     };
   }
+}
+
+export async function extractResumeText(
+  buffer: Buffer,
+  options?: ExtractResumeTextOptions,
+): Promise<ExtractionResult> {
+  return extractResumeTextInternal(buffer, options);
+}
+
+export async function extractResumeTextRaw(buffer: Buffer): Promise<ExtractionResult> {
+  return extractResumeTextInternal(buffer, { stripPii: false });
 }
 
 /**

@@ -18,6 +18,7 @@ import { registerAdminRoutes } from "./admin.routes";
 import { registerClientsRoutes } from "./clients.routes";
 import { registerJobsRoutes } from "./jobs.routes";
 import { registerApplicationsRoutes } from "./applications.routes";
+import { registerBulkResumeImportRoutes } from "./bulkResumeImport.routes";
 import { registerCommunicationsRoutes } from "./communications.routes";
 import { registerWhatsAppRoutes } from "./whatsapp.routes";
 import { registerResumeRoutes } from "./resume.routes";
@@ -436,6 +437,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Register applications routes (applications, pipeline, candidates, profiles)
   registerApplicationsRoutes(app, doubleCsrfProtection, upload);
+
+  // Register bulk resume import routes (staging/review/finalize flow)
+  registerBulkResumeImportRoutes(app, doubleCsrfProtection, upload);
 
   // Register communications routes (email templates, sending, AI drafts)
   registerCommunicationsRoutes(app, doubleCsrfProtection);

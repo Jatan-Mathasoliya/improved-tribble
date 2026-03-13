@@ -28,6 +28,8 @@ import {
   candidateResumes,
   organizationMembers,
   applicationGraphSyncJobs,
+  resumeImportBatches,
+  resumeImportItems,
   type User,
   type InsertUser,
   type ContactSubmission,
@@ -67,10 +69,15 @@ import {
   type BatchFitResult,
   type ApplicationGraphSyncJob,
   type InsertApplicationGraphSyncJob,
+  type ResumeImportBatch,
+  type InsertResumeImportBatch,
+  type ResumeImportItem,
+  type InsertResumeImportItem,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, inArray, count, gte, lte, isNull } from "drizzle-orm";
 import { normalizeStageName } from "./lib/pipelineStageUtils";
+import { computeResumeImportBatchStatus } from "./lib/resumeImportFieldExtraction";
 
 export type JobHealthStatus = 'green' | 'amber' | 'red';
 
@@ -335,6 +342,41 @@ export interface IStorage {
   // Sync skip tracking
   updateApplicationSyncSkippedReason(id: number, reason: string): Promise<void>;
 
+  // Bulk resume import operations
+  createResumeImportBatch(batch: InsertResumeImportBatch): Promise<ResumeImportBatch>;
+  createResumeImportItems(items: InsertResumeImportItem[]): Promise<ResumeImportItem[]>;
+  getResumeImportBatch(id: number): Promise<ResumeImportBatch | undefined>;
+  getResumeImportItem(id: number): Promise<ResumeImportItem | undefined>;
+  getResumeImportItemsByBatch(batchId: number): Promise<ResumeImportItem[]>;
+  claimPendingResumeImportItems(limit: number, now: Date): Promise<ResumeImportItem[]>;
+  markResumeImportItemProcessed(id: number, updates: {
+    extractedText: string | null;
+    extractionMethod: string;
+    parsedName: string | null;
+    parsedEmail: string | null;
+    parsedPhone: string | null;
+    status: string;
+    errorReason?: string | null;
+  }): Promise<void>;
+  markResumeImportItemRetry(id: number, errorReason: string, nextAttemptAt: Date): Promise<void>;
+  markResumeImportItemFailed(id: number, errorReason: string, extractionMethod?: string): Promise<void>;
+  markResumeImportItemDuplicate(id: number, input: {
+    errorReason: string;
+    parsedEmail?: string | null;
+    applicationId?: number | null;
+  }): Promise<void>;
+  updateResumeImportItem(id: number, updates: Partial<{
+    parsedName: string | null;
+    parsedEmail: string | null;
+    parsedPhone: string | null;
+    status: string;
+    errorReason: string | null;
+    applicationId: number | null;
+  }>): Promise<ResumeImportItem | undefined>;
+  markResumeImportItemFinalized(id: number, applicationId: number): Promise<void>;
+  refreshResumeImportBatchStats(batchId: number): Promise<ResumeImportBatch | undefined>;
+  findDuplicateResumeImportItemByEmail(batchId: number, email: string, excludeItemId: number): Promise<ResumeImportItem | undefined>;
+
   // Semantic search / move helpers
   getApplicationsByIdsForOrg(applicationIds: number[], organizationId: number): Promise<Application[]>;
   findApplicationByJobAndEmail(jobId: number, email: string): Promise<Application | undefined>;
@@ -355,6 +397,50 @@ function mapApplicationGraphSyncJobRow(row: any): ApplicationGraphSyncJob {
     activekgTenantId: row.activekg_tenant_id,
     activekgParentNodeId: row.activekg_parent_node_id,
     chunkCount: row.chunk_count,
+    createdAt: row.created_at ? new Date(row.created_at) : new Date(),
+    updatedAt: row.updated_at ? new Date(row.updated_at) : new Date(),
+  };
+}
+
+function mapResumeImportBatchRow(row: any): ResumeImportBatch {
+  return {
+    id: row.id,
+    organizationId: row.organization_id,
+    jobId: row.job_id,
+    uploadedByUserId: row.uploaded_by_user_id,
+    status: row.status,
+    fileCount: row.file_count,
+    processedCount: row.processed_count,
+    readyCount: row.ready_count,
+    needsReviewCount: row.needs_review_count,
+    failedCount: row.failed_count,
+    createdAt: row.created_at ? new Date(row.created_at) : new Date(),
+    updatedAt: row.updated_at ? new Date(row.updated_at) : new Date(),
+  };
+}
+
+function mapResumeImportItemRow(row: any): ResumeImportItem {
+  return {
+    id: row.id,
+    batchId: row.batch_id,
+    organizationId: row.organization_id,
+    jobId: row.job_id,
+    uploadedByUserId: row.uploaded_by_user_id,
+    originalFilename: row.original_filename,
+    gcsPath: row.gcs_path,
+    contentHash: row.content_hash,
+    extractedText: row.extracted_text,
+    extractionMethod: row.extraction_method,
+    parsedName: row.parsed_name,
+    parsedEmail: row.parsed_email,
+    parsedPhone: row.parsed_phone,
+    status: row.status,
+    errorReason: row.error_reason,
+    applicationId: row.application_id,
+    sourceMetadata: row.source_metadata,
+    attempts: row.attempts,
+    nextAttemptAt: row.next_attempt_at ? new Date(row.next_attempt_at) : new Date(),
+    lastProcessedAt: row.last_processed_at ? new Date(row.last_processed_at) : null,
     createdAt: row.created_at ? new Date(row.created_at) : new Date(),
     updatedAt: row.updated_at ? new Date(row.updated_at) : new Date(),
   };
@@ -3773,6 +3859,294 @@ export class DatabaseStorage implements IStorage {
         updatedAt: new Date(),
       })
       .where(eq(applications.id, id));
+  }
+
+  // ============= Bulk Resume Import Methods =============
+
+  async createResumeImportBatch(batch: InsertResumeImportBatch): Promise<ResumeImportBatch> {
+    const [created] = await db
+      .insert(resumeImportBatches)
+      .values({
+        ...batch,
+        updatedAt: new Date(),
+      })
+      .returning();
+    return created;
+  }
+
+  async createResumeImportItems(items: InsertResumeImportItem[]): Promise<ResumeImportItem[]> {
+    if (items.length === 0) {
+      return [];
+    }
+
+    const created = await db
+      .insert(resumeImportItems)
+      .values(items.map((item) => ({
+        ...item,
+        updatedAt: new Date(),
+      })))
+      .returning() as ResumeImportItem[];
+
+    const batchIds = Array.from(new Set(created.map((item: ResumeImportItem) => item.batchId)));
+    await Promise.all(batchIds.map((batchId) => this.refreshResumeImportBatchStats(batchId)));
+    return created;
+  }
+
+  async getResumeImportBatch(id: number): Promise<ResumeImportBatch | undefined> {
+    const [batch] = await db
+      .select()
+      .from(resumeImportBatches)
+      .where(eq(resumeImportBatches.id, id));
+    return batch || undefined;
+  }
+
+  async getResumeImportItem(id: number): Promise<ResumeImportItem | undefined> {
+    const [item] = await db
+      .select()
+      .from(resumeImportItems)
+      .where(eq(resumeImportItems.id, id));
+    return item || undefined;
+  }
+
+  async getResumeImportItemsByBatch(batchId: number): Promise<ResumeImportItem[]> {
+    return db
+      .select()
+      .from(resumeImportItems)
+      .where(eq(resumeImportItems.batchId, batchId))
+      .orderBy(resumeImportItems.id);
+  }
+
+  async claimPendingResumeImportItems(limit: number, now: Date): Promise<ResumeImportItem[]> {
+    const leaseMs = parseInt(process.env.BULK_RESUME_IMPORT_PROCESSING_LEASE_MS || '300000', 10);
+    const staleBefore = new Date(now.getTime() - leaseMs);
+
+    const result = await db.execute(sql`
+      UPDATE resume_import_items
+      SET status = 'processing',
+          attempts = attempts + 1,
+          updated_at = NOW()
+      WHERE id IN (
+        SELECT id FROM resume_import_items
+        WHERE (status IN ('queued', 'failed') AND next_attempt_at <= ${now})
+           OR (status = 'processing' AND updated_at <= ${staleBefore})
+        ORDER BY next_attempt_at ASC, id ASC
+        LIMIT ${limit}
+        FOR UPDATE SKIP LOCKED
+      )
+      RETURNING *
+    `);
+
+    const rows = (result.rows ?? []) as any[];
+    const mapped = rows.map(mapResumeImportItemRow);
+    const batchIds = Array.from(new Set(mapped.map((item) => item.batchId)));
+    await Promise.all(batchIds.map((batchId) => this.refreshResumeImportBatchStats(batchId)));
+    return mapped;
+  }
+
+  async markResumeImportItemProcessed(id: number, updates: {
+    extractedText: string | null;
+    extractionMethod: string;
+    parsedName: string | null;
+    parsedEmail: string | null;
+    parsedPhone: string | null;
+    status: string;
+    errorReason?: string | null;
+  }): Promise<void> {
+    const [row] = await db
+      .update(resumeImportItems)
+      .set({
+        extractedText: updates.extractedText,
+        extractionMethod: updates.extractionMethod,
+        parsedName: updates.parsedName,
+        parsedEmail: updates.parsedEmail,
+        parsedPhone: updates.parsedPhone,
+        status: updates.status,
+        errorReason: updates.errorReason ?? null,
+        lastProcessedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(resumeImportItems.id, id))
+      .returning({ batchId: resumeImportItems.batchId });
+
+    if (row?.batchId) {
+      await this.refreshResumeImportBatchStats(row.batchId);
+    }
+  }
+
+  async markResumeImportItemRetry(id: number, errorReason: string, nextAttemptAt: Date): Promise<void> {
+    const [row] = await db
+      .update(resumeImportItems)
+      .set({
+        status: 'queued',
+        errorReason,
+        nextAttemptAt,
+        updatedAt: new Date(),
+      })
+      .where(eq(resumeImportItems.id, id))
+      .returning({ batchId: resumeImportItems.batchId });
+
+    if (row?.batchId) {
+      await this.refreshResumeImportBatchStats(row.batchId);
+    }
+  }
+
+  async markResumeImportItemFailed(id: number, errorReason: string, extractionMethod = 'failed'): Promise<void> {
+    const [row] = await db
+      .update(resumeImportItems)
+      .set({
+        status: 'failed',
+        extractionMethod,
+        errorReason,
+        lastProcessedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(resumeImportItems.id, id))
+      .returning({ batchId: resumeImportItems.batchId });
+
+    if (row?.batchId) {
+      await this.refreshResumeImportBatchStats(row.batchId);
+    }
+  }
+
+  async markResumeImportItemDuplicate(id: number, input: {
+    errorReason: string;
+    parsedEmail?: string | null;
+    applicationId?: number | null;
+  }): Promise<void> {
+    const [row] = await db
+      .update(resumeImportItems)
+      .set({
+        status: 'duplicate',
+        errorReason: input.errorReason,
+        parsedEmail: input.parsedEmail ?? undefined,
+        applicationId: input.applicationId ?? null,
+        lastProcessedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(resumeImportItems.id, id))
+      .returning({ batchId: resumeImportItems.batchId });
+
+    if (row?.batchId) {
+      await this.refreshResumeImportBatchStats(row.batchId);
+    }
+  }
+
+  async updateResumeImportItem(id: number, updates: Partial<{
+    parsedName: string | null;
+    parsedEmail: string | null;
+    parsedPhone: string | null;
+    status: string;
+    errorReason: string | null;
+    applicationId: number | null;
+  }>): Promise<ResumeImportItem | undefined> {
+    const [row] = await db
+      .update(resumeImportItems)
+      .set({
+        ...updates,
+        updatedAt: new Date(),
+      })
+      .where(eq(resumeImportItems.id, id))
+      .returning();
+
+    if (!row) {
+      return undefined;
+    }
+
+    await this.refreshResumeImportBatchStats(row.batchId);
+    return row;
+  }
+
+  async markResumeImportItemFinalized(id: number, applicationId: number): Promise<void> {
+    const [row] = await db
+      .update(resumeImportItems)
+      .set({
+        status: 'finalized',
+        applicationId,
+        errorReason: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(resumeImportItems.id, id))
+      .returning({ batchId: resumeImportItems.batchId });
+
+    if (row?.batchId) {
+      await this.refreshResumeImportBatchStats(row.batchId);
+    }
+  }
+
+  async refreshResumeImportBatchStats(batchId: number): Promise<ResumeImportBatch | undefined> {
+    const result = await db.execute(sql`
+      SELECT
+        COUNT(*)::int AS file_count,
+        COUNT(*) FILTER (WHERE status IN ('processed', 'needs_review', 'failed', 'duplicate', 'finalized'))::int AS processed_count,
+        COUNT(*) FILTER (
+          WHERE status = 'finalized'
+             OR (
+               status = 'processed'
+               AND gcs_path IS NOT NULL
+               AND parsed_name IS NOT NULL
+               AND parsed_email IS NOT NULL
+               AND parsed_phone IS NOT NULL
+               AND length(trim(coalesce(extracted_text, ''))) >= 50
+               AND length(regexp_replace(coalesce(extracted_text, ''), '[^A-Za-z]', '', 'g')) >= 20
+             )
+        )::int AS ready_count,
+        COUNT(*) FILTER (WHERE status = 'needs_review')::int AS needs_review_count,
+        COUNT(*) FILTER (WHERE status = 'failed')::int AS failed_count,
+        COUNT(*) FILTER (WHERE status = 'queued')::int AS queued_count,
+        COUNT(*) FILTER (WHERE status = 'processing')::int AS processing_count,
+        COUNT(*) FILTER (WHERE status = 'duplicate')::int AS duplicate_count,
+        COUNT(*) FILTER (WHERE status = 'finalized')::int AS finalized_count
+      FROM resume_import_items
+      WHERE batch_id = ${batchId}
+    `);
+
+    const row = (result.rows?.[0] ?? null) as any;
+    if (!row) {
+      return this.getResumeImportBatch(batchId);
+    }
+
+    const nextStatus = computeResumeImportBatchStatus({
+      fileCount: Number(row.file_count ?? 0),
+      queuedCount: Number(row.queued_count ?? 0),
+      processingCount: Number(row.processing_count ?? 0),
+      processedCount: Number(row.processed_count ?? 0),
+      needsReviewCount: Number(row.needs_review_count ?? 0),
+      failedCount: Number(row.failed_count ?? 0),
+      duplicateCount: Number(row.duplicate_count ?? 0),
+      finalizedCount: Number(row.finalized_count ?? 0),
+    });
+
+    const [updated] = await db
+      .update(resumeImportBatches)
+      .set({
+        status: nextStatus,
+        fileCount: Number(row.file_count ?? 0),
+        processedCount: Number(row.processed_count ?? 0),
+        readyCount: Number(row.ready_count ?? 0),
+        needsReviewCount: Number(row.needs_review_count ?? 0),
+        failedCount: Number(row.failed_count ?? 0),
+        updatedAt: new Date(),
+      })
+      .where(eq(resumeImportBatches.id, batchId))
+      .returning();
+
+    return updated || undefined;
+  }
+
+  async findDuplicateResumeImportItemByEmail(batchId: number, email: string, excludeItemId: number): Promise<ResumeImportItem | undefined> {
+    const result = await db.execute(sql`
+      SELECT *
+      FROM resume_import_items
+      WHERE batch_id = ${batchId}
+        AND id <> ${excludeItemId}
+        AND lower(parsed_email) = lower(${email})
+        AND status IN ('processed', 'needs_review', 'finalized', 'duplicate')
+      ORDER BY id ASC
+      LIMIT 1
+    `);
+
+    const row = (result.rows?.[0] ?? null) as any;
+    return row ? mapResumeImportItemRow(row) : undefined;
   }
 
   // ── Semantic search / move helpers ───────────────────────────────

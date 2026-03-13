@@ -196,6 +196,8 @@ export const applications = pgTable("applications", {
   currentStageIdx: index("applications_current_stage_idx").on(table.currentStage),
   jobIdIdx: index("applications_job_id_idx").on(table.jobId),
   emailIdx: index("applications_email_idx").on(table.email),
+  jobLowerEmailUniqueIdx: uniqueIndex("applications_job_lower_email_unique")
+    .on(table.jobId, sql`lower(${table.email})`),
   userIdIdx: index("applications_user_id_idx").on(table.userId),
   statusIdx: index("applications_status_idx").on(table.status),
   rejectionReasonIdx: index("applications_rejection_reason_idx").on(table.rejectionReason),
@@ -1035,6 +1037,60 @@ export const applicationGraphSyncJobs = pgTable("application_graph_sync_jobs", {
   recruiterIdx: index("app_graph_sync_recruiter_idx").on(table.effectiveRecruiterId),
 }));
 
+export const resumeImportBatches = pgTable("resume_import_batches", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  jobId: integer("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  uploadedByUserId: integer("uploaded_by_user_id").notNull().references(() => users.id),
+  status: text("status").notNull().default("queued"), // queued, processing, ready_for_review, completed, failed
+  fileCount: integer("file_count").notNull().default(0),
+  processedCount: integer("processed_count").notNull().default(0),
+  readyCount: integer("ready_count").notNull().default(0),
+  needsReviewCount: integer("needs_review_count").notNull().default(0),
+  failedCount: integer("failed_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  orgJobIdx: index("resume_import_batches_org_job_idx").on(table.organizationId, table.jobId),
+  uploaderIdx: index("resume_import_batches_uploader_idx").on(table.uploadedByUserId),
+  statusIdx: index("resume_import_batches_status_idx").on(table.status),
+}));
+
+export const resumeImportItems = pgTable("resume_import_items", {
+  id: serial("id").primaryKey(),
+  batchId: integer("batch_id").notNull().references(() => resumeImportBatches.id, { onDelete: 'cascade' }),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  jobId: integer("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  uploadedByUserId: integer("uploaded_by_user_id").notNull().references(() => users.id),
+  originalFilename: text("original_filename").notNull(),
+  gcsPath: text("gcs_path"),
+  contentHash: text("content_hash"),
+  extractedText: text("extracted_text"),
+  extractionMethod: text("extraction_method").notNull().default("failed"), // native_text, mistral_ocr, failed
+  parsedName: text("parsed_name"),
+  parsedEmail: text("parsed_email"),
+  parsedPhone: text("parsed_phone"),
+  status: text("status").notNull().default("queued"), // queued, processing, processed, needs_review, finalized, failed, duplicate
+  errorReason: text("error_reason"),
+  applicationId: integer("application_id").references(() => applications.id, { onDelete: 'set null' }),
+  sourceMetadata: jsonb("source_metadata"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at").defaultNow().notNull(),
+  lastProcessedAt: timestamp("last_processed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  batchIdx: index("resume_import_items_batch_idx").on(table.batchId),
+  statusAttemptIdx: index("resume_import_items_status_attempt_idx").on(table.status, table.nextAttemptAt),
+  batchStatusIdx: index("resume_import_items_batch_status_idx").on(table.batchId, table.status),
+  jobEmailIdx: index("resume_import_items_job_email_idx").on(table.jobId, table.parsedEmail),
+  contentHashIdx: index("resume_import_items_content_hash_idx").on(table.batchId, table.contentHash),
+  applicationIdx: index("resume_import_items_application_idx").on(table.applicationId),
+  uniqueContentHashPerBatch: uniqueIndex("resume_import_items_batch_content_hash_unique")
+    .on(table.batchId, table.contentHash)
+    .where(sql`${table.contentHash} IS NOT NULL`),
+}));
+
 // Relations
 export const usersRelations = relations(users, ({ many, one }) => ({
   jobs: many(jobs),
@@ -1328,6 +1384,45 @@ export const candidateResumesRelations = relations(candidateResumes, ({ one, man
     references: [users.id],
   }),
   applications: many(applications),
+}));
+
+export const resumeImportBatchesRelations = relations(resumeImportBatches, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [resumeImportBatches.organizationId],
+    references: [organizations.id],
+  }),
+  job: one(jobs, {
+    fields: [resumeImportBatches.jobId],
+    references: [jobs.id],
+  }),
+  uploadedByUser: one(users, {
+    fields: [resumeImportBatches.uploadedByUserId],
+    references: [users.id],
+  }),
+  items: many(resumeImportItems),
+}));
+
+export const resumeImportItemsRelations = relations(resumeImportItems, ({ one }) => ({
+  batch: one(resumeImportBatches, {
+    fields: [resumeImportItems.batchId],
+    references: [resumeImportBatches.id],
+  }),
+  organization: one(organizations, {
+    fields: [resumeImportItems.organizationId],
+    references: [organizations.id],
+  }),
+  job: one(jobs, {
+    fields: [resumeImportItems.jobId],
+    references: [jobs.id],
+  }),
+  uploadedByUser: one(users, {
+    fields: [resumeImportItems.uploadedByUserId],
+    references: [users.id],
+  }),
+  application: one(applications, {
+    fields: [resumeImportItems.applicationId],
+    references: [applications.id],
+  }),
 }));
 
 export const userAiUsageRelations = relations(userAiUsage, ({ one }) => ({
@@ -1975,6 +2070,49 @@ export type InsertCandidateResume = z.infer<typeof insertCandidateResumeSchema>;
 export type UserAiUsage = typeof userAiUsage.$inferSelect;
 export type InsertUserAiUsage = z.infer<typeof insertUserAiUsageSchema>;
 
+export const insertResumeImportBatchSchema = createInsertSchema(resumeImportBatches).pick({
+  organizationId: true,
+  jobId: true,
+  uploadedByUserId: true,
+  status: true,
+  fileCount: true,
+  processedCount: true,
+  readyCount: true,
+  needsReviewCount: true,
+  failedCount: true,
+}).extend({
+  status: z.enum(['queued', 'processing', 'ready_for_review', 'completed', 'failed']).optional(),
+});
+
+export const insertResumeImportItemSchema = createInsertSchema(resumeImportItems).pick({
+  batchId: true,
+  organizationId: true,
+  jobId: true,
+  uploadedByUserId: true,
+  originalFilename: true,
+  gcsPath: true,
+  contentHash: true,
+  extractedText: true,
+  extractionMethod: true,
+  parsedName: true,
+  parsedEmail: true,
+  parsedPhone: true,
+  status: true,
+  errorReason: true,
+  applicationId: true,
+  sourceMetadata: true,
+  attempts: true,
+  nextAttemptAt: true,
+  lastProcessedAt: true,
+}).extend({
+  extractionMethod: z.enum(['native_text', 'mistral_ocr', 'failed']).optional(),
+  parsedEmail: z.string().email().optional().nullable(),
+  parsedPhone: z.string().regex(/^\d{10}$/).optional().nullable(),
+  status: z.enum(['queued', 'processing', 'processed', 'needs_review', 'finalized', 'failed', 'duplicate']).optional(),
+  errorReason: z.string().max(1000).optional().nullable(),
+  sourceMetadata: z.record(z.any()).optional().nullable(),
+});
+
 // Rejection reasons enum for analytics
 export const rejectionReasons = [
   'skills_mismatch',
@@ -2077,6 +2215,10 @@ export type InsertAiFitJob = z.infer<typeof insertAiFitJobSchema>;
 // ActiveKG Graph Sync: Types
 export type ApplicationGraphSyncJob = typeof applicationGraphSyncJobs.$inferSelect;
 export type InsertApplicationGraphSyncJob = typeof applicationGraphSyncJobs.$inferInsert;
+export type ResumeImportBatch = typeof resumeImportBatches.$inferSelect;
+export type InsertResumeImportBatch = z.infer<typeof insertResumeImportBatchSchema>;
+export type ResumeImportItem = typeof resumeImportItems.$inferSelect;
+export type InsertResumeImportItem = z.infer<typeof insertResumeImportItemSchema>;
 
 // Batch fit result types (for clarity)
 export interface BatchFitResultItem {
@@ -2395,4 +2537,3 @@ export const recruiterFeedbackEvents = pgTable("recruiter_feedback_events", {
   actionIdx: index("rfb_action_idx").on(table.action),
   unsyncedIdx: index("rfb_unsynced_idx").on(table.syncedToSignalAt),
 }));
-
