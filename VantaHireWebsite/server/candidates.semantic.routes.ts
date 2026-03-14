@@ -683,7 +683,30 @@ export function registerCandidateSemanticRoutes(
           scoreType === 'rrf_fused' && usedVectorDisplayForRrf
         ) ? 'cosine' : scoreType;
 
-        const rawScores = results
+        // Deduplicate by email: keep highest-ranked application per candidate.
+        const byEmail = new Map<string, Record<string, unknown>>();
+        const withoutEmail: Array<Record<string, unknown>> = [];
+        for (const r of results) {
+          const email = typeof r.email === 'string' ? r.email.toLowerCase() : null;
+          if (!email) {
+            withoutEmail.push(r);
+            continue;
+          }
+          const existing = byEmail.get(email);
+          if (!existing) {
+            byEmail.set(email, r);
+            continue;
+          }
+          const currentScore = Number(r.rankingScoreRaw);
+          const existingScore = Number(existing.rankingScoreRaw);
+          if (Number.isFinite(currentScore) && currentScore > existingScore) {
+            byEmail.set(email, r);
+          }
+        }
+        const finalResults = [...byEmail.values(), ...withoutEmail];
+        finalResults.sort((a, b) => Number(b.rankingScoreRaw) - Number(a.rankingScoreRaw));
+
+        const rawScores = finalResults
           .map((r) => Number(r.matchScoreRaw))
           .filter((value) => Number.isFinite(value));
         const topRawScore = rawScores.length > 0 ? Math.max(...rawScores) : null;
@@ -691,7 +714,7 @@ export function registerCandidateSemanticRoutes(
         const spreadRawScore = (topRawScore != null && bottomRawScore != null)
           ? Number((topRawScore - bottomRawScore).toFixed(6))
           : null;
-        const rankingRawScores = results
+        const rankingRawScores = finalResults
           .map((r) => Number(r.rankingScoreRaw))
           .filter((value) => Number.isFinite(value));
         const rankingTopRawScore = rankingRawScores.length > 0 ? Math.max(...rankingRawScores) : null;
@@ -703,10 +726,13 @@ export function registerCandidateSemanticRoutes(
         // Keep both shapes for backward compatibility with in-flight clients.
         res.json({
           query,
-          count: results.length,
+          count: finalResults.length,
           scoreType,
           displayScoreType,
-          searchDiagnostics,
+          searchDiagnostics: {
+            ...searchDiagnostics,
+            dedupedCandidateCount: finalResults.length,
+          },
           scoreDiagnostics: {
             topRawScore,
             bottomRawScore,
@@ -714,11 +740,11 @@ export function registerCandidateSemanticRoutes(
             rankingTopRawScore,
             rankingBottomRawScore,
             rankingSpreadRawScore,
-            resultCount: results.length,
+            resultCount: finalResults.length,
           },
-          results,
-          candidates: results,
-          total: results.length,
+          results: finalResults,
+          candidates: finalResults,
+          total: finalResults.length,
         });
         return;
       } catch (error) {
