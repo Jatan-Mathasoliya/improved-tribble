@@ -28,9 +28,8 @@ export function FinalizeResultCard({ result, jobId, onContinueReview }: Finalize
             <CheckCircle className="h-5 w-5 text-emerald-600 mt-0.5 shrink-0" />
             <div>
               <p className="font-medium text-sm">
-                {result.finalized.length} candidate{result.finalized.length !== 1 ? 's' : ''} finalized
+                {result.finalized.length} candidate{result.finalized.length !== 1 ? 's' : ''} added to job
               </p>
-              <p className="text-xs text-muted-foreground">Applications created and ready for review.</p>
             </div>
           </div>
         )}

@@ -253,7 +253,7 @@ export default function BulkResumeImportPage() {
                 className="mt-2"
                 onClick={() => setLocation(`/jobs/${jobId}/applications`)}
               >
-                View Applications
+                Back to Applications
               </Button>
             </CardContent>
           </Card>
