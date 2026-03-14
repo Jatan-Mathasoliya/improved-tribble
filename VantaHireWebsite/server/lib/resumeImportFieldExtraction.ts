@@ -81,6 +81,11 @@ const IGNORED_NAME_TOKENS = new Set([
   'references',
   'certifications',
   'achievements',
+  'core competencies',
+  'key skills',
+  'technical skills',
+  'core strengths',
+  'work history',
 ]);
 
 const TITLE_WORDS = new Set([

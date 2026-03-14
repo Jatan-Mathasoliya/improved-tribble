@@ -173,7 +173,7 @@ const Layout = ({ children }: LayoutProps) => {
                         : "text-white/70 hover:text-white hover:bg-white/10"
                     )}
                   >
-                    Candidates
+                    Talent Search
                   </Link>
                   <Link
                     href="/my-jobs"
@@ -621,7 +621,7 @@ const Layout = ({ children }: LayoutProps) => {
                         className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
                         onClick={(e) => { e.preventDefault(); setLocation("/candidates"); setIsMenuOpen(false); }}
                       >
-                        Candidates
+                        Talent Search
                       </a>
                       <a
                         href="/my-jobs"

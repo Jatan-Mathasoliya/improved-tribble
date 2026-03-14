@@ -134,7 +134,7 @@ describe('bulk resume import routes', () => {
     const app = express();
     app.use(express.json());
     app.use((req, _res, next) => {
-      req.user = { id: 11, role: 'recruiter' };
+      (req as any).user = { id: 11, role: 'recruiter' };
       next();
     });
     registerBulkResumeImportRoutes(app, csrf as any, upload);
@@ -366,7 +366,7 @@ describe('bulk resume import routes', () => {
   });
 
   it('serializes concurrent finalize requests for the same item so only one application is created', async () => {
-    let itemState = {
+    let itemState: any = {
       id: 1,
       batch_id: 10,
       organization_id: 1,

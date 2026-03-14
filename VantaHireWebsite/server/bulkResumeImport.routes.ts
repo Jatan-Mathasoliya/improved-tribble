@@ -525,13 +525,10 @@ export function registerBulkResumeImportRoutes(
         }
 
         const deterministicFields = extractResumeFields(rawText || canonicalText);
-        const shouldRunAi = !(deterministicFields.name && deterministicFields.email && deterministicFields.phone);
-        const aiFields = shouldRunAi
-          ? await extractStructuredResumeFieldsWithGroq(rawText || canonicalText)
-          : null;
+        const aiFields = await extractStructuredResumeFieldsWithGroq(rawText || canonicalText);
 
         const mergedFields = {
-          name: pickMergedName(item.parsedName, deterministicFields.name, aiFields?.name),
+          name: pickMergedName(aiFields?.name, deterministicFields.name, item.parsedName),
           email: pickMergedEmail(item.parsedEmail, deterministicFields.email, aiFields?.email),
           phone: pickMergedPhone(item.parsedPhone, deterministicFields.phone, aiFields?.phone),
         };

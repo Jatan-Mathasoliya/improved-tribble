@@ -121,7 +121,7 @@ async function createFixture(options?: {
     recruiterId: recruiter.id,
     jobId: job.id,
     batchId: batch.id,
-    itemIds: insertedItems.map((item) => item.id),
+    itemIds: insertedItems.map((item: any) => item.id),
   };
 }
 
@@ -228,9 +228,9 @@ dbDescribe('bulk resume import finalize integration', () => {
     expect(firstResult.kind).toBe('finalized');
     expect(secondResult.kind).toBe('duplicate');
     expect(createdApplications).toHaveLength(1);
-    expect(persistedItems.find((item) => item.id === fixture.itemIds[0])?.status).toBe('finalized');
-    expect(persistedItems.find((item) => item.id === fixture.itemIds[1])?.status).toBe('duplicate');
-    expect(persistedItems.find((item) => item.id === fixture.itemIds[1])?.applicationId).toBe(createdApplications[0]!.id);
+    expect(persistedItems.find((item: any) => item.id === fixture.itemIds[0])?.status).toBe('finalized');
+    expect(persistedItems.find((item: any) => item.id === fixture.itemIds[1])?.status).toBe('duplicate');
+    expect(persistedItems.find((item: any) => item.id === fixture.itemIds[1])?.applicationId).toBe(createdApplications[0]!.id);
   });
 
   it('reconciles a retry to the existing application when bulk-import provenance already exists', async () => {

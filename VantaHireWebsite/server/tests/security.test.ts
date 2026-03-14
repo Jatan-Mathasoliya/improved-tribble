@@ -36,8 +36,8 @@ interface TestResult {
   testName: string;
   passed: boolean;
   details: string;
-  severity?: 'critical' | 'high' | 'medium' | 'low';
-  recommendation?: string;
+  severity: 'critical' | 'high' | 'medium' | 'low' | undefined;
+  recommendation: string | undefined;
 }
 
 const testResults: TestResult[] = [];
@@ -62,7 +62,7 @@ function recordTest(
 
 // Helper to create a test session using supertest agent
 async function createTestSession(appInstance: express.Express): Promise<{
-  agent: request.Agent;
+  agent: any;
   csrfToken: string;
   userId: number;
 }> {
@@ -93,7 +93,7 @@ async function createTestSession(appInstance: express.Express): Promise<{
 
 // Helper to create recruiter session
 async function createRecruiterSession(appInstance: express.Express): Promise<{
-  agent: request.Agent;
+  agent: any;
   csrfToken: string;
 }> {
   const agent = request.agent(appInstance);

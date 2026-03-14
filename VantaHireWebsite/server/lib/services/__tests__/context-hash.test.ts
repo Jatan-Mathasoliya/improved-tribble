@@ -36,8 +36,8 @@ describe('deepSortKeys', () => {
   it('handles arrays of objects with different key order', () => {
     const input = [{ b: 2, a: 1 }, { d: 4, c: 3 }];
     const result = deepSortKeys(input) as Record<string, number>[];
-    expect(Object.keys(result[0])).toEqual(['a', 'b']);
-    expect(Object.keys(result[1])).toEqual(['c', 'd']);
+    expect(Object.keys(result[0]!)).toEqual(['a', 'b']);
+    expect(Object.keys(result[1]!)).toEqual(['c', 'd']);
   });
 });
 

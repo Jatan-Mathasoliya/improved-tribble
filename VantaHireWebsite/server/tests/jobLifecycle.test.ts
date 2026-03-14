@@ -92,7 +92,7 @@ maybeDescribe('Job Lifecycle System', () => {
         .where(eq(jobAuditLog.jobId, testJobId));
 
       expect(logs.length).toBeGreaterThan(0);
-      const deactivationLog = logs.find(l => l.action === 'deactivated');
+      const deactivationLog = logs.find((l: any) => l.action === 'deactivated');
       expect(deactivationLog).toBeDefined();
       expect(deactivationLog!.performedBy).toBe(testUserId);
       expect(deactivationLog!.reason).toBe('filled');
@@ -135,7 +135,7 @@ maybeDescribe('Job Lifecycle System', () => {
         .from(jobAuditLog)
         .where(eq(jobAuditLog.jobId, testJobId));
 
-      const reactivationLogs = logs.filter(l => l.action === 'reactivated');
+      const reactivationLogs = logs.filter((l: any) => l.action === 'reactivated');
       expect(reactivationLogs.length).toBeGreaterThanOrEqual(1);
 
       const latestReactivation = reactivationLogs[reactivationLogs.length - 1];
