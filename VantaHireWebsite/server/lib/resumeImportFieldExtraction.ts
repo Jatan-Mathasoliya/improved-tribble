@@ -381,6 +381,14 @@ export function extractResumeFields(text: string): ParsedResumeFields {
   };
 }
 
+export function isPlausibleCandidateName(value: string | null | undefined): boolean {
+  if (!value) {
+    return false;
+  }
+
+  return extractName(value) !== null;
+}
+
 export function assessResumeImportItem(fields: ParsedResumeFields, extractedText: string | null | undefined): ResumeImportItemAssessment {
   if (!extractedText || !validateResumeText(extractedText)) {
     return {

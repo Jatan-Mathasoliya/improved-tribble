@@ -137,7 +137,7 @@ export default function CandidatesPage() {
     queryFn: async () => {
       const res = await apiRequest("POST", "/api/candidates/semantic-search", {
         query: submittedQuery,
-        top_k: 20,
+        top_k: 10,
         use_reranker: true,
       });
       return res.json();

@@ -1,7 +1,6 @@
 import type { ResumeImportItem } from '@shared/schema';
 import { storage } from '../storage';
 import { downloadFromGCS } from '../gcs-storage';
-import { inferCandidateNameWithGroq } from './groqResumeFieldFallback';
 import { assessResumeImportItem, extractResumeFields } from './resumeImportFieldExtraction';
 import { extractResumeTextWithFallback } from './resumeImportExtraction';
 
@@ -48,7 +47,9 @@ async function processResumeImportItem(item: ResumeImportItem): Promise<void> {
   }
 
   const buffer = await downloadFromGCS(item.gcsPath);
-  const extraction = await extractResumeTextWithFallback(buffer, item.originalFilename);
+  const extraction = await extractResumeTextWithFallback(buffer, item.originalFilename, {
+    gcsPath: item.gcsPath,
+  });
 
   if (!extraction.success) {
     await storage.markResumeImportItemFailed(
@@ -60,9 +61,6 @@ async function processResumeImportItem(item: ResumeImportItem): Promise<void> {
   }
 
   const parsedFields = extractResumeFields(extraction.rawText || extraction.text);
-  if (!parsedFields.name) {
-    parsedFields.name = await inferCandidateNameWithGroq(extraction.rawText || extraction.text);
-  }
 
   if (parsedFields.email) {
     const existingApplication = await storage.findApplicationByJobAndEmail(item.jobId, parsedFields.email);

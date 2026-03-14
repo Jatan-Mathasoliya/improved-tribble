@@ -7,11 +7,16 @@ const storageMock = {
   getJob: vi.fn(),
   isRecruiterOnJob: vi.fn(),
   getResumeImportBatch: vi.fn(),
+  getResumeImportItem: vi.fn(),
   getResumeImportItemsByBatch: vi.fn(),
   getPipelineStages: vi.fn(),
   refreshResumeImportBatchStats: vi.fn(),
   updateApplicationSyncSkippedReason: vi.fn(),
   enqueueApplicationGraphSyncJob: vi.fn(),
+  findApplicationByJobAndEmail: vi.fn(),
+  findDuplicateResumeImportItemByEmail: vi.fn(),
+  markResumeImportItemProcessed: vi.fn(),
+  updateResumeImportItem: vi.fn(),
 };
 
 const dbMock = {
@@ -19,6 +24,10 @@ const dbMock = {
 };
 
 const getUserOrganizationMock = vi.fn();
+
+const downloadFromGCSMock = vi.fn();
+const extractResumeTextWithFallbackMock = vi.fn();
+const extractStructuredResumeFieldsWithGroqMock = vi.fn();
 
 vi.mock('../storage', () => ({
   storage: storageMock,
@@ -41,7 +50,21 @@ vi.mock('../rateLimit', () => ({
   recruiterAddRateLimit: (_req: any, _res: any, next: any) => next(),
 }));
 
-describe('bulk resume import finalize routes', () => {
+vi.mock('../gcs-storage', () => ({
+  downloadFromGCS: downloadFromGCSMock,
+  uploadToGCS: vi.fn(),
+}));
+
+vi.mock('../lib/resumeImportExtraction', () => ({
+  extractResumeTextWithFallback: extractResumeTextWithFallbackMock,
+}));
+
+vi.mock('../lib/resumeImportAiExtraction', () => ({
+  extractStructuredResumeFieldsWithGroq: extractStructuredResumeFieldsWithGroqMock,
+  isGroqAdvancedExtractionEnabled: () => process.env.GROQ_RESUME_FIELD_FALLBACK_ENABLED === 'true',
+}));
+
+describe('bulk resume import routes', () => {
   const csrf = (_req: any, _res: any, next: any) => next();
   const upload = {
     array: () => (_req: any, _res: any, next: any) => next(),
@@ -51,6 +74,21 @@ describe('bulk resume import finalize routes', () => {
     vi.clearAllMocks();
     process.env.BULK_RESUME_IMPORT_ENABLED = 'true';
     process.env.ACTIVEKG_SYNC_ENABLED = 'false';
+    process.env.GROQ_RESUME_FIELD_FALLBACK_ENABLED = 'true';
+
+    downloadFromGCSMock.mockResolvedValue(Buffer.from('pdf'));
+    extractResumeTextWithFallbackMock.mockResolvedValue({
+      success: true,
+      text: 'Jane Doe\njane@example.com\n415-555-1212',
+      rawText: 'Jane Doe\njane@example.com\n415-555-1212',
+      method: 'native_text',
+    });
+    extractStructuredResumeFieldsWithGroqMock.mockResolvedValue(null);
+    storageMock.getResumeImportItem.mockResolvedValue(undefined);
+    storageMock.findApplicationByJobAndEmail.mockResolvedValue(undefined);
+    storageMock.findDuplicateResumeImportItemByEmail.mockResolvedValue(undefined);
+    storageMock.markResumeImportItemProcessed.mockResolvedValue(undefined);
+    storageMock.updateResumeImportItem.mockResolvedValue(undefined);
 
     storageMock.getJob.mockResolvedValue({
       id: 5,
@@ -206,6 +244,126 @@ describe('bulk resume import finalize routes', () => {
       constraint: 'applications_job_lower_email_unique',
     };
   }
+
+  function makeImportItem(overrides: Record<string, any> = {}) {
+    return {
+      id: 1,
+      batchId: 10,
+      organizationId: 1,
+      jobId: 5,
+      uploadedByUserId: 11,
+      originalFilename: 'resume.pdf',
+      gcsPath: 'gs://bucket/resume.pdf',
+      contentHash: 'hash1',
+      extractedText: 'Profile Summary',
+      extractionMethod: 'native_text',
+      parsedName: null,
+      parsedEmail: null,
+      parsedPhone: null,
+      status: 'needs_review',
+      errorReason: 'Missing name, email_or_phone',
+      applicationId: null,
+      sourceMetadata: {},
+      attempts: 0,
+      nextAttemptAt: new Date(),
+      lastProcessedAt: null,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      ...overrides,
+    };
+  }
+
+  it('runs OCR plus Groq advanced extraction on demand and persists the merged result', async () => {
+    const item = makeImportItem({ parsedName: 'Delhi' });
+    storageMock.getResumeImportItem.mockResolvedValue(item);
+    extractResumeTextWithFallbackMock.mockResolvedValue({
+      success: true,
+      text: 'Jane Doe\njane@example.com\nPhone: 415-555-1212\nExperienced product designer building accessible interfaces across web and mobile products.',
+      rawText: 'Jane Doe\njane@example.com\nExperienced product designer building accessible interfaces across web and mobile products.',
+      method: 'google_vision_ocr',
+    });
+    extractStructuredResumeFieldsWithGroqMock.mockResolvedValue({
+      name: 'Jane Doe',
+      email: null,
+      phone: '4155551212',
+    });
+
+    const updatedItem = makeImportItem({
+      parsedName: 'Jane Doe',
+      parsedEmail: 'jane@example.com',
+      parsedPhone: '4155551212',
+      extractedText: 'Jane Doe\njane@example.com\nPhone: 415-555-1212\nExperienced product designer building accessible interfaces across web and mobile products.',
+      extractionMethod: 'google_vision_ocr',
+      status: 'processed',
+      errorReason: null,
+    });
+    storageMock.getResumeImportItem.mockResolvedValueOnce(item).mockResolvedValueOnce(updatedItem);
+
+    const app = await buildApp();
+    const response = await invokeRoute(app, 'post', '/api/jobs/:id/bulk-resume-import/items/:itemId/advanced-extract', {
+      params: { id: '5', itemId: '1' },
+      body: {},
+    });
+
+    expect(response.status).toBe(200);
+    expect(downloadFromGCSMock).toHaveBeenCalledWith('gs://bucket/resume.pdf');
+    expect(extractResumeTextWithFallbackMock).toHaveBeenCalledWith(Buffer.from('pdf'), 'resume.pdf', { gcsPath: 'gs://bucket/resume.pdf' });
+    expect(extractStructuredResumeFieldsWithGroqMock).toHaveBeenCalledWith('Jane Doe\njane@example.com\nExperienced product designer building accessible interfaces across web and mobile products.');
+    expect(storageMock.markResumeImportItemProcessed).toHaveBeenCalledWith(1, expect.objectContaining({
+      extractedText: 'Jane Doe\njane@example.com\nPhone: 415-555-1212\nExperienced product designer building accessible interfaces across web and mobile products.',
+      extractionMethod: 'google_vision_ocr',
+      parsedName: 'Jane Doe',
+      parsedEmail: 'jane@example.com',
+      parsedPhone: '4155551212',
+      status: 'processed',
+      errorReason: null,
+    }));
+    expect(response.body.item).toMatchObject({
+      id: 1,
+      parsedName: 'Jane Doe',
+      parsedEmail: 'jane@example.com',
+      parsedPhone: '4155551212',
+      extractionMethod: 'google_vision_ocr',
+      status: 'processed',
+    });
+  });
+
+  it('marks advanced extraction output duplicate when the merged email already belongs to another application', async () => {
+    const item = makeImportItem();
+    storageMock.getResumeImportItem.mockResolvedValue(item);
+    extractResumeTextWithFallbackMock.mockResolvedValue({
+      success: true,
+      text: 'Jane Doe\njane@example.com',
+      rawText: 'Jane Doe\njane@example.com',
+      method: 'native_text',
+    });
+    storageMock.findApplicationByJobAndEmail.mockResolvedValue({ id: 900 });
+    storageMock.updateResumeImportItem.mockResolvedValue(makeImportItem({
+      parsedName: 'Jane Doe',
+      parsedEmail: 'jane@example.com',
+      status: 'duplicate',
+      errorReason: 'Application with jane@example.com already exists for this job',
+      applicationId: 900,
+    }));
+
+    const app = await buildApp();
+    const response = await invokeRoute(app, 'post', '/api/jobs/:id/bulk-resume-import/items/:itemId/advanced-extract', {
+      params: { id: '5', itemId: '1' },
+      body: {},
+    });
+
+    expect(response.status).toBe(200);
+    expect(storageMock.updateResumeImportItem).toHaveBeenCalledWith(1, expect.objectContaining({
+      parsedName: 'Jane Doe',
+      parsedEmail: 'jane@example.com',
+      status: 'duplicate',
+      applicationId: 900,
+    }));
+    expect(response.body.item).toMatchObject({
+      status: 'duplicate',
+      applicationId: 900,
+    });
+  });
 
   it('serializes concurrent finalize requests for the same item so only one application is created', async () => {
     let itemState = {

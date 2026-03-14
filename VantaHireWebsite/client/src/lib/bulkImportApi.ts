@@ -59,6 +59,10 @@ export interface PatchItemResponse {
   item: ResumeImportItemDTO;
 }
 
+export interface AdvancedExtractResponse {
+  item: ResumeImportItemDTO;
+}
+
 export interface ReprocessResponse {
   reprocessed: number;
   total: number;
@@ -119,6 +123,11 @@ export const bulkImportApi = {
 
   async patchItem(jobId: number, itemId: number, data: PatchItemRequest): Promise<PatchItemResponse> {
     const res = await apiRequest('PATCH', `/api/jobs/${jobId}/bulk-resume-import/items/${itemId}`, data);
+    return res.json();
+  },
+
+  async advancedExtract(jobId: number, itemId: number): Promise<AdvancedExtractResponse> {
+    const res = await apiRequest('POST', `/api/jobs/${jobId}/bulk-resume-import/items/${itemId}/advanced-extract`, {});
     return res.json();
   },
 

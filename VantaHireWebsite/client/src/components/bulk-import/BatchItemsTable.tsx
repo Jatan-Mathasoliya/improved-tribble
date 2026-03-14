@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pencil, Save, X, Loader2, EyeOff } from 'lucide-react';
+import { Pencil, Save, X, Loader2, EyeOff, Sparkles } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -29,7 +29,9 @@ interface BatchItemsTableProps {
   selectedIds: Set<number>;
   onSelectionChange: (ids: Set<number>) => void;
   onPatchItem: (itemId: number, data: PatchItemRequest) => Promise<void>;
+  onAdvancedExtract: (itemId: number) => Promise<void>;
   isPatchPending: boolean;
+  advancedExtractingItemId: number | null;
   dismissedIds: Set<number>;
   onDismiss: (id: number) => void;
 }
@@ -54,14 +56,18 @@ function EditableRow({
   selected,
   onToggle,
   onPatch,
+  onAdvancedExtract,
   isPatchPending,
+  advancedExtractingItemId,
   onDismiss,
 }: {
   item: ResumeImportItemDTO;
   selected: boolean;
   onToggle: () => void;
   onPatch: (itemId: number, data: PatchItemRequest) => Promise<void>;
+  onAdvancedExtract: (itemId: number) => Promise<void>;
   isPatchPending: boolean;
+  advancedExtractingItemId: number | null;
   onDismiss: (id: number) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -100,7 +106,12 @@ function EditableRow({
   const notes = item.errorReason || item.reviewSummary || null;
   const isFailed = item.status === 'failed';
   const isFinalized = item.status === 'finalized';
-  const isEditable = item.status === 'needs_review' || item.status === 'processed';
+  const isEditable =
+    item.status === 'needs_review' ||
+    item.status === 'processed' ||
+    item.status === 'duplicate';
+  const canAdvancedExtract = !item.canFinalize && !isFinalized && item.status !== 'duplicate';
+  const isAdvancedPending = advancedExtractingItemId === item.id;
   const canDismiss = !isFinalized;
 
   return (
@@ -109,7 +120,7 @@ function EditableRow({
         <Checkbox
           checked={selected}
           onCheckedChange={onToggle}
-          disabled={!item.canFinalize}
+          disabled={!item.canFinalize || isFinalized}
           aria-label={`Select ${item.originalFilename}`}
         />
       </TableCell>
@@ -159,21 +170,46 @@ function EditableRow({
           </span>
         )}
       </TableCell>
-      <TableCell className="w-24">
+      <TableCell className="w-[220px]">
         {editing ? (
-          <div className="flex gap-1">
-            <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={handleSave} disabled={saving}>
-              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+          <div className="flex gap-1 justify-end">
+            <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={handleSave} disabled={saving || isPatchPending}>
+              {saving || isPatchPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             </Button>
-            <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={handleCancel}>
+            <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={handleCancel} disabled={saving || isPatchPending}>
               <X className="h-3.5 w-3.5" />
             </Button>
           </div>
         ) : (
-          <div className="flex gap-1">
+          <div className="flex gap-2 justify-end items-center flex-wrap">
             {isEditable && (
-              <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={() => setEditing(true)}>
-                <Pencil className="h-3.5 w-3.5" />
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="h-8 px-2"
+                onClick={() => setEditing(true)}
+              >
+                <Pencil className="h-3.5 w-3.5 mr-1" />
+                Edit
+              </Button>
+            )}
+            {canAdvancedExtract && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => onAdvancedExtract(item.id)}
+                disabled={isAdvancedPending}
+                title="Run advanced extraction"
+              >
+                {isAdvancedPending ? (
+                  <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" />
+                ) : (
+                  <Sparkles className="h-3.5 w-3.5 mr-1" />
+                )}
+                Advanced Extraction
               </Button>
             )}
             {canDismiss && (
@@ -200,12 +236,14 @@ export function BatchItemsTable({
   selectedIds,
   onSelectionChange,
   onPatchItem,
+  onAdvancedExtract,
   isPatchPending,
+  advancedExtractingItemId,
   dismissedIds,
   onDismiss,
 }: BatchItemsTableProps) {
   const visibleItems = items.filter((i) => !dismissedIds.has(i.id));
-  const finalizableItems = visibleItems.filter((i) => i.canFinalize);
+  const finalizableItems = visibleItems.filter((i) => i.canFinalize && i.status !== 'finalized');
   const allFinalizableSelected =
     finalizableItems.length > 0 && finalizableItems.every((i) => selectedIds.has(i.id));
 
@@ -243,7 +281,7 @@ export function BatchItemsTable({
             <TableHead>Phone</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Notes</TableHead>
-            <TableHead className="w-24">Actions</TableHead>
+            <TableHead className="w-[220px] text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -261,7 +299,9 @@ export function BatchItemsTable({
                 selected={selectedIds.has(item.id)}
                 onToggle={() => toggleOne(item.id)}
                 onPatch={onPatchItem}
+                onAdvancedExtract={onAdvancedExtract}
                 isPatchPending={isPatchPending}
+                advancedExtractingItemId={advancedExtractingItemId}
                 onDismiss={onDismiss}
               />
             ))

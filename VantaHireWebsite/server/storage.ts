@@ -366,6 +366,8 @@ export interface IStorage {
     applicationId?: number | null;
   }): Promise<void>;
   updateResumeImportItem(id: number, updates: Partial<{
+    extractedText: string | null;
+    extractionMethod: string;
     parsedName: string | null;
     parsedEmail: string | null;
     parsedPhone: string | null;
@@ -4032,6 +4034,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   async updateResumeImportItem(id: number, updates: Partial<{
+    extractedText: string | null;
+    extractionMethod: string;
     parsedName: string | null;
     parsedEmail: string | null;
     parsedPhone: string | null;

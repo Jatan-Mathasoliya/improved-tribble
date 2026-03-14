@@ -11,6 +11,7 @@ import { FinalizeResultCard } from '@/components/bulk-import/FinalizeResultCard'
 import {
   useBulkImportBatch,
   useBulkImportPatchItem,
+  useBulkImportAdvancedExtract,
   useBulkImportFinalize,
   useBulkImportReprocess,
 } from '@/hooks/use-bulk-import';
@@ -37,6 +38,7 @@ export default function BulkResumeImportPage() {
 
   const batchQuery = useBulkImportBatch(jobId, batchId);
   const patchMutation = useBulkImportPatchItem(jobId, batchId ?? 0);
+  const advancedExtractMutation = useBulkImportAdvancedExtract(jobId, batchId ?? 0);
   const finalizeMutation = useBulkImportFinalize(jobId, batchId ?? 0);
   const reprocessMutation = useBulkImportReprocess(jobId, batchId ?? 0);
 
@@ -49,12 +51,12 @@ export default function BulkResumeImportPage() {
   );
 
   const finalizableCount = useMemo(
-    () => visibleItems.filter((i) => i.canFinalize).length,
+    () => visibleItems.filter((i) => i.canFinalize && i.status !== 'finalized').length,
     [visibleItems],
   );
 
   const selectedFinalizableCount = useMemo(
-    () => visibleItems.filter((i) => i.canFinalize && selectedIds.has(i.id)).length,
+    () => visibleItems.filter((i) => i.canFinalize && i.status !== 'finalized' && selectedIds.has(i.id)).length,
     [visibleItems, selectedIds],
   );
 
@@ -71,9 +73,13 @@ export default function BulkResumeImportPage() {
     await patchMutation.mutateAsync({ itemId, data });
   };
 
+  const handleAdvancedExtract = async (itemId: number) => {
+    await advancedExtractMutation.mutateAsync(itemId);
+  };
+
   const handleFinalize = async () => {
     const idsToFinalize = selectedFinalizableCount > 0
-      ? items.filter((i) => i.canFinalize && selectedIds.has(i.id)).map((i) => i.id)
+      ? items.filter((i) => i.canFinalize && i.status !== 'finalized' && selectedIds.has(i.id)).map((i) => i.id)
       : undefined;
     const result = await finalizeMutation.mutateAsync(idsToFinalize);
     setFinalizeResult(result);
@@ -187,42 +193,15 @@ export default function BulkResumeImportPage() {
           <BatchSummaryBar batch={batch} />
         </div>
 
-        {/* Finalize result card */}
-        {finalizeResult && (
-          <div className="mb-4">
-            <FinalizeResultCard
-              result={finalizeResult}
-              jobId={jobId}
-              onContinueReview={handleContinueReview}
-            />
-          </div>
-        )}
-
-        {/* Completed fallback (refresh after finalize) */}
-        {completedFallback && (
-          <Card className="mb-4">
-            <CardContent className="py-4">
-              <p className="text-sm text-muted-foreground">
-                This batch has been completed. {batch.readyCount} candidates were processed.
-              </p>
-              <Button
-                size="sm"
-                className="mt-2"
-                onClick={() => setLocation(`/jobs/${jobId}/applications`)}
-              >
-                View Applications
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Items table */}
         <BatchItemsTable
           items={items}
           selectedIds={selectedIds}
           onSelectionChange={setSelectedIds}
           onPatchItem={handlePatch}
+          onAdvancedExtract={handleAdvancedExtract}
           isPatchPending={patchMutation.isPending}
+          advancedExtractingItemId={advancedExtractMutation.isPending ? advancedExtractMutation.variables ?? null : null}
           dismissedIds={dismissedIds}
           onDismiss={handleDismiss}
         />
@@ -251,6 +230,33 @@ export default function BulkResumeImportPage() {
               )}
             </Button>
           </div>
+        )}
+
+        {finalizeResult && (
+          <div className="mt-4">
+            <FinalizeResultCard
+              result={finalizeResult}
+              jobId={jobId}
+              onContinueReview={handleContinueReview}
+            />
+          </div>
+        )}
+
+        {completedFallback && (
+          <Card className="mt-4">
+            <CardContent className="py-4">
+              <p className="text-sm text-muted-foreground">
+                This batch has been completed. {batch.readyCount} candidates were processed.
+              </p>
+              <Button
+                size="sm"
+                className="mt-2"
+                onClick={() => setLocation(`/jobs/${jobId}/applications`)}
+              >
+                View Applications
+              </Button>
+            </CardContent>
+          </Card>
         )}
       </div>
     </Layout>

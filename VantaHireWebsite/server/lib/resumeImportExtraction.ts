@@ -1,7 +1,7 @@
 import { extractResumeText, extractResumeTextRaw, stripPII, validateResumeText } from './resumeExtractor';
-import { extractTextWithMistralOcr } from './mistralOcrClient';
+import { extractTextWithGoogleVisionOcr } from './googleVisionOcrClient';
 
-export type ResumeImportExtractionMethod = 'native_text' | 'mistral_ocr' | 'failed';
+export type ResumeImportExtractionMethod = 'native_text' | 'google_vision_ocr' | 'failed';
 
 export interface ResumeImportExtractionResult {
   success: boolean;
@@ -14,6 +14,7 @@ export interface ResumeImportExtractionResult {
 export async function extractResumeTextWithFallback(
   buffer: Buffer,
   filename: string,
+  options?: { gcsPath?: string | null },
 ): Promise<ResumeImportExtractionResult> {
   const normalizedExtraction = await extractResumeText(buffer);
   const rawExtraction = await extractResumeTextRaw(buffer);
@@ -31,13 +32,13 @@ export async function extractResumeTextWithFallback(
     };
   }
 
-  const ocrResult = await extractTextWithMistralOcr(buffer, filename);
+  const ocrResult = await extractTextWithGoogleVisionOcr(buffer, filename, options?.gcsPath);
   if (ocrResult.success && validateResumeText(ocrResult.text)) {
     return {
       success: true,
       text: stripPII(ocrResult.text),
       rawText: ocrResult.text,
-      method: 'mistral_ocr',
+      method: 'google_vision_ocr',
     };
   }
 

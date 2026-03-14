@@ -7,6 +7,7 @@ import {
   type GetBatchResponse,
   type PatchItemRequest,
   type PatchItemResponse,
+  type AdvancedExtractResponse,
   type FinalizeResponse,
   type ReprocessResponse,
 } from '@/lib/bulkImportApi';
@@ -69,6 +70,31 @@ export function useBulkImportPatchItem(jobId: number, batchId: number) {
     onError: (error) => {
       toast({
         title: 'Update failed',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Advanced extraction mutation
+// ---------------------------------------------------------------------------
+
+export function useBulkImportAdvancedExtract(jobId: number, batchId: number) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation<AdvancedExtractResponse, Error, number>({
+    mutationFn: (itemId) => bulkImportApi.advancedExtract(jobId, itemId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: bulkImportQueryKeys.batch(jobId, batchId),
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: 'Advanced extraction failed',
         description: error.message,
         variant: 'destructive',
       });
