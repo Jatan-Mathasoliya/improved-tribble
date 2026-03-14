@@ -110,7 +110,7 @@ function EditableRow({
     item.status === 'needs_review' ||
     item.status === 'processed' ||
     item.status === 'duplicate';
-  const canAdvancedExtract = !item.canFinalize && !isFinalized && item.status !== 'duplicate';
+  const canAdvancedExtract = !isFinalized && item.status !== 'duplicate';
   const isAdvancedPending = advancedExtractingItemId === item.id;
   const canDismiss = !isFinalized;
 
@@ -209,7 +209,7 @@ function EditableRow({
                 ) : (
                   <Sparkles className="h-3.5 w-3.5 mr-1" />
                 )}
-                Advanced Extraction
+                {item.canFinalize ? 'Re-extract' : 'Advanced Extraction'}
               </Button>
             )}
             {canDismiss && (

@@ -518,9 +518,9 @@ export default function CandidatesPage() {
                                 {result.source}
                               </Badge>
                             )}
-                            {semanticScoreType === "rrf_fused" && result.rankingScoreRaw !== undefined && (
-                              <span className="text-xs">
-                                Hybrid rank score {result.rankingScoreRaw.toFixed(4)}
+                            {result.matchedChunks > 0 && (
+                              <span className="text-xs text-muted-foreground">
+                                {result.matchedChunks} matching resume section{result.matchedChunks > 1 ? "s" : ""}
                               </span>
                             )}
                             {result.currentJobTitle && (
@@ -535,6 +535,22 @@ export default function CandidatesPage() {
                               </Badge>
                             )}
                           </div>
+
+                          {result.highlights && result.highlights.length > 0 && (
+                            <div className="mt-3 space-y-2">
+                              <p className="text-xs font-medium text-muted-foreground">
+                                Why this matched
+                              </p>
+                              {result.highlights.slice(0, 3).map((highlight: string, idx: number) => (
+                                <div
+                                  key={idx}
+                                  className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
+                                >
+                                  {highlight}
+                                </div>
+                              ))}
+                            </div>
+                          )}
 
                         </div>
 
