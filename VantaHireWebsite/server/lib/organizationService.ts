@@ -172,10 +172,20 @@ export async function createOrganization(
 
   const org = await db.transaction(async (tx: any) => {
     // Create organization
-    const [org] = await tx.insert(organizations).values({
+    const [createdOrg] = await tx.insert(organizations).values({
       ...data,
       slug,
     }).returning();
+
+    const org = createdOrg.signalTenantId
+      ? createdOrg
+      : (await tx.update(organizations)
+          .set({
+            signalTenantId: `org_${createdOrg.id}`,
+            updatedAt: new Date(),
+          })
+          .where(eq(organizations.id, createdOrg.id))
+          .returning())[0]!;
 
     // Add owner as first member
     await tx.insert(organizationMembers).values({
