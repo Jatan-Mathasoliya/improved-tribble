@@ -652,12 +652,11 @@ export async function serveStatic(app: Express) {
   }
 
   // fall through to index.html if the file doesn't exist
-  app.use("*", (req, res) => {
+  app.use("*", async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache, must-revalidate');
-    // Return 404 status for unknown routes (prevents soft-404 issues with crawlers)
-    if (!isKnownRoute(req.path)) {
-      res.status(404);
-    }
-    res.sendFile(path.resolve(distPath, "index.html"));
+    const statusCode = isKnownRoute(req.path) ? 200 : 404;
+    // Read file and send with explicit status (sendFile overrides status to 200)
+    const html = await fs.promises.readFile(path.resolve(distPath, "index.html"), "utf-8");
+    res.status(statusCode).setHeader('Content-Type', 'text/html').send(html);
   });
 }
