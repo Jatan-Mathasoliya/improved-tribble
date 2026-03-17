@@ -79,51 +79,77 @@ export async function setupVite(app: Express, server: Server) {
   }));
 
   // SSR meta injection for marketing pages (dev mode)
-  const MARKETING_PAGES_DEV: Record<string, { title: string; description: string; canonical: string }> = {
+  const MARKETING_PAGES_DEV: Record<string, { title: string; description: string; canonical: string; keywords?: string; jsonLd?: object[] }> = {
     '/': {
       title: 'VantaHire - Human Decisions, AI Acceleration | AI-Native Recruiting Platform',
       description: 'The AI-native recruiting platform that helps startups and recruiting firms find, rank, and engage the right candidates faster. AI sourcing, WhatsApp outreach, client portal, and pipeline management in one platform.',
       canonical: 'https://www.vantahire.com/',
+      keywords: 'AI recruiting platform, AI-native ATS, AI candidate sourcing, WhatsApp recruitment outreach, recruiting pipeline management, India APAC hiring',
     },
     '/product': {
       title: 'How VantaHire Works | AI Sourcing, Pipeline, Outreach in One Platform',
       description: 'Three layers. One platform. AI sourcing engine, recruiter workflow, and candidate memory system — from candidate discovery to client feedback without switching tools.',
       canonical: 'https://www.vantahire.com/product',
+      keywords: 'AI sourcing engine, resume knowledge graph, recruiter pipeline, candidate discovery, WhatsApp outreach tool, client feedback portal',
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Product", "item": "https://www.vantahire.com/product" }] }],
     },
     '/features': {
       title: 'Features | VantaHire - Six Pillars of AI-Native Recruiting',
       description: 'Resume Knowledge Graph, AI Candidate Discovery, WhatsApp + Email Outreach, Client Feedback Portal, Recruiter Dashboard, and Job Command Center. All the capabilities recruiters need.',
       canonical: 'https://www.vantahire.com/features',
+      keywords: 'resume knowledge graph, AI candidate discovery, WhatsApp email outreach, client feedback portal, recruiter dashboard, job command center',
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Features", "item": "https://www.vantahire.com/features" }] }],
     },
     '/pricing': {
       title: 'Pricing | VantaHire - Simple, Transparent Pricing',
       description: 'Simple pricing. No surprises. Start free, upgrade when your team grows. AI sourcing, WhatsApp outreach, client portal, and pipeline management included.',
       canonical: 'https://www.vantahire.com/pricing',
+      keywords: 'VantaHire pricing, ATS pricing India, recruiting software cost, free ATS plan, Growth plan pricing, enterprise recruiting platform',
+      jsonLd: [
+        { "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Pricing", "item": "https://www.vantahire.com/pricing" }] },
+        { "@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+          { "@type": "Question", "name": "Is there really a free plan?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. No credit card required. No time limit. Start using VantaHire today and upgrade when you need more capacity." } },
+          { "@type": "Question", "name": "Can I switch plans anytime?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Upgrade or downgrade at any time. No long-term contracts. Month-to-month billing on all plans." } },
+          { "@type": "Question", "name": "How does seat-based pricing work?", "acceptedAnswer": { "@type": "Answer", "text": "You pay per recruiter who actively uses the platform. Team members who only view reports or dashboards do not count as seats." } },
+          { "@type": "Question", "name": "Do you offer annual discounts?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Annual billing saves compared to monthly. Toggle between monthly and annual on the pricing page to see the difference." } },
+          { "@type": "Question", "name": "What payment methods do you accept?", "acceptedAnswer": { "@type": "Answer", "text": "Credit card and UPI for Free and Growth plans via Cashfree. Enterprise customers can pay by invoice. GST-compliant invoicing available for India." } },
+          { "@type": "Question", "name": "Is my data safe?", "acceptedAnswer": { "@type": "Answer", "text": "VantaHire enforces a three-tier privacy model. Your uploaded resumes and candidate data stay private to your organization. Only candidates who opt in are discoverable by other customers." } },
+          { "@type": "Question", "name": "Can I cancel anytime?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Cancel from your account settings. No cancellation fees. Your data remains accessible for 30 days after cancellation." } },
+        ] },
+      ],
     },
     '/compare': {
       title: 'Compare | VantaHire vs Complex ATS Platforms',
       description: 'See how VantaHire compares to legacy ATS platforms. Faster setup, recruiter-first design, and AI acceleration without the complexity.',
       canonical: 'https://www.vantahire.com/compare',
+      keywords: 'ATS comparison, VantaHire vs Greenhouse, VantaHire vs Lever, best ATS for startups, AI recruiting comparison',
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Compare", "item": "https://www.vantahire.com/compare" }] }],
     },
     '/use-cases': {
       title: 'Use Cases | VantaHire - Built for Teams Like Yours',
       description: 'Discover how consulting firms, staffing agencies, startups, and enterprise teams use VantaHire to hire faster across India and APAC.',
       canonical: 'https://www.vantahire.com/use-cases',
+      keywords: 'recruiting use cases, staffing agency ATS, startup hiring platform, enterprise recruiting, APAC recruitment tool',
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Use Cases", "item": "https://www.vantahire.com/use-cases" }] }],
     },
     '/about': {
       title: 'About Us | VantaHire - AI + Human Expertise for Better Hiring',
       description: 'VantaHire combines AI acceleration with human expertise to make recruiting faster and fairer. Learn about our mission, team, and vision.',
       canonical: 'https://www.vantahire.com/about',
+      keywords: 'VantaHire team, about VantaHire, AI recruiting company, Bangalore startup, recruiting technology mission',
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "About", "item": "https://www.vantahire.com/about" }] }],
     },
     '/jobs': {
       title: 'Browse Jobs | VantaHire - Find Your Next Role',
       description: 'Browse open positions across technology, consulting, and more. Apply directly through VantaHire\'s recruiter-first platform.',
       canonical: 'https://www.vantahire.com/jobs',
+      keywords: 'jobs India, tech jobs Bangalore, IT jobs APAC, apply online, VantaHire jobs',
     },
     '/recruiters': {
       title: 'Recruiters Directory | VantaHire',
       description: 'Meet VantaHire\'s specialist recruiters. Industry experts in IT, telecom, automotive, fintech, and healthcare hiring across India and APAC.',
       canonical: 'https://www.vantahire.com/recruiters',
+      keywords: 'specialist recruiters India, IT recruiters, telecom recruiters, healthcare recruiters APAC',
     },
     '/brand': {
       title: 'Brand Assets | VantaHire',
@@ -160,6 +186,9 @@ export async function setupVite(app: Express, server: Server) {
         template = upsertTitle(template, pageMeta.title);
         template = upsertMetaTag(template, 'name', 'title', pageMeta.title);
         template = upsertMetaTag(template, 'name', 'description', pageMeta.description);
+        if (pageMeta.keywords) {
+          template = upsertMetaTag(template, 'name', 'keywords', pageMeta.keywords);
+        }
         template = upsertLinkRel(template, 'canonical', pageMeta.canonical);
         template = upsertMetaTag(template, 'property', 'og:title', pageMeta.title);
         template = upsertMetaTag(template, 'property', 'og:description', pageMeta.description);
@@ -167,9 +196,16 @@ export async function setupVite(app: Express, server: Server) {
         template = upsertMetaTag(template, 'property', 'og:type', 'website');
         template = upsertMetaTag(template, 'property', 'og:image', `${baseUrl}/og-image.jpg`);
         template = upsertMetaTag(template, 'name', 'twitter:card', 'summary_large_image');
+        template = upsertMetaTag(template, 'name', 'twitter:url', pageMeta.canonical);
         template = upsertMetaTag(template, 'name', 'twitter:title', pageMeta.title);
         template = upsertMetaTag(template, 'name', 'twitter:description', pageMeta.description);
         template = upsertMetaTag(template, 'name', 'twitter:image', `${baseUrl}/twitter-image.jpg`);
+        // Inject page-specific JSON-LD schemas (BreadcrumbList, FAQPage, etc.)
+        if (pageMeta.jsonLd) {
+          for (const schema of pageMeta.jsonLd) {
+            template = injectJsonLd(template, schema);
+          }
+        }
       }
 
       // SSR body render for public routes (dev mode) — only for crawlers
@@ -278,6 +314,16 @@ export async function serveStatic(app: Express) {
   const distPath = path.resolve(__dirname, "public");
   const clientPublicPath = path.resolve(__dirname, "..", "client", "public");
 
+  // Strip trailing slashes with 301 redirect (prevents duplicate content)
+  app.use((req, res, next) => {
+    if (req.path !== '/' && req.path.endsWith('/') && !req.path.startsWith('/api/')) {
+      const cleanPath = req.path.replace(/\/+$/, '') + (req.url.includes('?') ? '?' + req.url.split('?')[1] : '');
+      res.redirect(301, cleanPath);
+      return;
+    }
+    next();
+  });
+
   if (!fs.existsSync(distPath)) {
     throw new Error(
       `Could not find the build directory: ${distPath}, make sure to build the client first`,
@@ -303,51 +349,77 @@ export async function serveStatic(app: Express) {
   // SSR meta injection for marketing pages (registered before static middleware
   // to prevent express.static from intercepting routes that match directories
   // like /brand which has a physical client/public/brand/ directory)
-  const MARKETING_PAGES: Record<string, { title: string; description: string; canonical: string }> = {
+  const MARKETING_PAGES: Record<string, { title: string; description: string; canonical: string; keywords?: string; jsonLd?: object[] }> = {
     '/': {
       title: 'VantaHire - Human Decisions, AI Acceleration | AI-Native Recruiting Platform',
       description: 'The AI-native recruiting platform that helps startups and recruiting firms find, rank, and engage the right candidates faster. AI sourcing, WhatsApp outreach, client portal, and pipeline management in one platform.',
       canonical: 'https://www.vantahire.com/',
+      keywords: 'AI recruiting platform, AI-native ATS, AI candidate sourcing, WhatsApp recruitment outreach, recruiting pipeline management, India APAC hiring',
     },
     '/product': {
       title: 'How VantaHire Works | AI Sourcing, Pipeline, Outreach in One Platform',
       description: 'Three layers. One platform. AI sourcing engine, recruiter workflow, and candidate memory system — from candidate discovery to client feedback without switching tools.',
       canonical: 'https://www.vantahire.com/product',
+      keywords: 'AI sourcing engine, resume knowledge graph, recruiter pipeline, candidate discovery, WhatsApp outreach tool, client feedback portal',
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Product", "item": "https://www.vantahire.com/product" }] }],
     },
     '/features': {
       title: 'Features | VantaHire - Six Pillars of AI-Native Recruiting',
       description: 'Resume Knowledge Graph, AI Candidate Discovery, WhatsApp + Email Outreach, Client Feedback Portal, Recruiter Dashboard, and Job Command Center. All the capabilities recruiters need.',
       canonical: 'https://www.vantahire.com/features',
+      keywords: 'resume knowledge graph, AI candidate discovery, WhatsApp email outreach, client feedback portal, recruiter dashboard, job command center',
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Features", "item": "https://www.vantahire.com/features" }] }],
     },
     '/pricing': {
       title: 'Pricing | VantaHire - Simple, Transparent Pricing',
       description: 'Simple pricing. No surprises. Start free, upgrade when your team grows. AI sourcing, WhatsApp outreach, client portal, and pipeline management included.',
       canonical: 'https://www.vantahire.com/pricing',
+      keywords: 'VantaHire pricing, ATS pricing India, recruiting software cost, free ATS plan, Growth plan pricing, enterprise recruiting platform',
+      jsonLd: [
+        { "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Pricing", "item": "https://www.vantahire.com/pricing" }] },
+        { "@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+          { "@type": "Question", "name": "Is there really a free plan?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. No credit card required. No time limit. Start using VantaHire today and upgrade when you need more capacity." } },
+          { "@type": "Question", "name": "Can I switch plans anytime?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Upgrade or downgrade at any time. No long-term contracts. Month-to-month billing on all plans." } },
+          { "@type": "Question", "name": "How does seat-based pricing work?", "acceptedAnswer": { "@type": "Answer", "text": "You pay per recruiter who actively uses the platform. Team members who only view reports or dashboards do not count as seats." } },
+          { "@type": "Question", "name": "Do you offer annual discounts?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Annual billing saves compared to monthly. Toggle between monthly and annual on the pricing page to see the difference." } },
+          { "@type": "Question", "name": "What payment methods do you accept?", "acceptedAnswer": { "@type": "Answer", "text": "Credit card and UPI for Free and Growth plans via Cashfree. Enterprise customers can pay by invoice. GST-compliant invoicing available for India." } },
+          { "@type": "Question", "name": "Is my data safe?", "acceptedAnswer": { "@type": "Answer", "text": "VantaHire enforces a three-tier privacy model. Your uploaded resumes and candidate data stay private to your organization. Only candidates who opt in are discoverable by other customers." } },
+          { "@type": "Question", "name": "Can I cancel anytime?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Cancel from your account settings. No cancellation fees. Your data remains accessible for 30 days after cancellation." } },
+        ] },
+      ],
     },
     '/compare': {
       title: 'Compare | VantaHire vs Complex ATS Platforms',
       description: 'See how VantaHire compares to legacy ATS platforms. Faster setup, recruiter-first design, and AI acceleration without the complexity.',
       canonical: 'https://www.vantahire.com/compare',
+      keywords: 'ATS comparison, VantaHire vs Greenhouse, VantaHire vs Lever, best ATS for startups, AI recruiting comparison',
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Compare", "item": "https://www.vantahire.com/compare" }] }],
     },
     '/use-cases': {
       title: 'Use Cases | VantaHire - Built for Teams Like Yours',
       description: 'Discover how consulting firms, staffing agencies, startups, and enterprise teams use VantaHire to hire faster across India and APAC.',
       canonical: 'https://www.vantahire.com/use-cases',
+      keywords: 'recruiting use cases, staffing agency ATS, startup hiring platform, enterprise recruiting, APAC recruitment tool',
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Use Cases", "item": "https://www.vantahire.com/use-cases" }] }],
     },
     '/about': {
       title: 'About Us | VantaHire - AI + Human Expertise for Better Hiring',
       description: 'VantaHire combines AI acceleration with human expertise to make recruiting faster and fairer. Learn about our mission, team, and vision.',
       canonical: 'https://www.vantahire.com/about',
+      keywords: 'VantaHire team, about VantaHire, AI recruiting company, Bangalore startup, recruiting technology mission',
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "About", "item": "https://www.vantahire.com/about" }] }],
     },
     '/jobs': {
       title: 'Browse Jobs | VantaHire - Find Your Next Role',
       description: 'Browse open positions across technology, consulting, and more. Apply directly through VantaHire\'s recruiter-first platform.',
       canonical: 'https://www.vantahire.com/jobs',
+      keywords: 'jobs India, tech jobs Bangalore, IT jobs APAC, apply online, VantaHire jobs',
     },
     '/recruiters': {
       title: 'Recruiters Directory | VantaHire',
       description: 'Meet VantaHire\'s specialist recruiters. Industry experts in IT, telecom, automotive, fintech, and healthcare hiring across India and APAC.',
       canonical: 'https://www.vantahire.com/recruiters',
+      keywords: 'specialist recruiters India, IT recruiters, telecom recruiters, healthcare recruiters APAC',
     },
     '/brand': {
       title: 'Brand Assets | VantaHire',
@@ -369,6 +441,9 @@ export async function serveStatic(app: Express) {
       html = upsertTitle(html, pageMeta.title);
       html = upsertMetaTag(html, 'name', 'title', pageMeta.title);
       html = upsertMetaTag(html, 'name', 'description', pageMeta.description);
+      if (pageMeta.keywords) {
+        html = upsertMetaTag(html, 'name', 'keywords', pageMeta.keywords);
+      }
       html = upsertLinkRel(html, 'canonical', pageMeta.canonical);
       html = upsertMetaTag(html, 'property', 'og:title', pageMeta.title);
       html = upsertMetaTag(html, 'property', 'og:description', pageMeta.description);
@@ -376,9 +451,17 @@ export async function serveStatic(app: Express) {
       html = upsertMetaTag(html, 'property', 'og:type', 'website');
       html = upsertMetaTag(html, 'property', 'og:image', `${baseUrl}/og-image.jpg`);
       html = upsertMetaTag(html, 'name', 'twitter:card', 'summary_large_image');
+      html = upsertMetaTag(html, 'name', 'twitter:url', pageMeta.canonical);
       html = upsertMetaTag(html, 'name', 'twitter:title', pageMeta.title);
       html = upsertMetaTag(html, 'name', 'twitter:description', pageMeta.description);
       html = upsertMetaTag(html, 'name', 'twitter:image', `${baseUrl}/twitter-image.jpg`);
+
+      // Inject page-specific JSON-LD schemas (BreadcrumbList, FAQPage, etc.)
+      if (pageMeta.jsonLd) {
+        for (const schema of pageMeta.jsonLd) {
+          html = injectJsonLd(html, schema);
+        }
+      }
 
       // SSR body render — only for crawlers (avoids hydration cost for real users)
       const bot = isCrawler(req);
@@ -394,7 +477,7 @@ export async function serveStatic(app: Express) {
       }
 
       res.setHeader('Content-Type', 'text/html');
-      res.setHeader('Cache-Control', 'no-store, must-revalidate');
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
       res.setHeader('X-SSR-Status', ssrRender ? (bot ? 'active' : 'bot-only') : 'disabled');
       res.setHeader('Vary', 'User-Agent');
       res.send(html);
@@ -420,7 +503,7 @@ export async function serveStatic(app: Express) {
   app.use(express.static(distPath, {
     setHeaders: (res, filePath) => {
       if (filePath.endsWith('index.html')) {
-        res.setHeader('Cache-Control', 'no-store, must-revalidate');
+        res.setHeader('Cache-Control', 'no-cache, must-revalidate');
       } else if (filePath.includes('/assets/')) {
         // hashed assets
         res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
@@ -532,7 +615,7 @@ export async function serveStatic(app: Express) {
 
       // Serve the modified HTML
       res.setHeader('Content-Type', 'text/html');
-      res.setHeader('Cache-Control', 'no-store, must-revalidate');
+      res.setHeader('Cache-Control', 'no-cache, must-revalidate');
       res.setHeader('Vary', 'User-Agent');
       res.send(html);
     } catch (error) {
@@ -542,10 +625,39 @@ export async function serveStatic(app: Express) {
     }
   });
 
+  // Known SPA routes that should return 200 (client-side routing handles them)
+  const KNOWN_SPA_ROUTES = new Set([
+    ...Object.keys(MARKETING_PAGES),
+    '/auth', '/candidate-auth', '/recruiter-auth', '/verify-email', '/reset-password',
+    '/register-hiring-manager', '/accept-co-recruiter', '/register-co-recruiter',
+    '/recruiter-dashboard', '/admin', '/admin-dashboard', '/admin-super-dashboard',
+    '/unified-admin-dashboard', '/applications', '/candidates', '/my-jobs',
+    '/jobs/post', '/clients', '/profile/settings', '/my-dashboard',
+    '/hiring-manager', '/application-management', '/analytics',
+    '/org/settings', '/org/team', '/org/billing', '/org/domain', '/org/analytics', '/org/choice',
+    '/blocked/seat-removed', '/admin/forms', '/admin/email-templates',
+    '/privacy-policy', '/terms-of-service', '/cookie-policy',
+    '/consultants',
+  ]);
+
+  function isKnownRoute(path: string): boolean {
+    if (KNOWN_SPA_ROUTES.has(path)) return true;
+    // Dynamic routes: /jobs/:id, /jobs/:id/*, /recruiters/:id, /form/*, /client-shortlist/*
+    if (/^\/jobs\/[^/]+/.test(path)) return true;
+    if (/^\/recruiters\/[^/]+/.test(path)) return true;
+    if (/^\/form\//.test(path)) return true;
+    if (/^\/client-shortlist\//.test(path)) return true;
+    if (/^\/admin\//.test(path)) return true;
+    return false;
+  }
+
   // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
-    // Ensure the SPA shell (index.html) is never cached, to avoid hash mismatches
-    res.setHeader('Cache-Control', 'no-store, must-revalidate');
+  app.use("*", (req, res) => {
+    res.setHeader('Cache-Control', 'no-cache, must-revalidate');
+    // Return 404 status for unknown routes (prevents soft-404 issues with crawlers)
+    if (!isKnownRoute(req.path)) {
+      res.status(404);
+    }
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }

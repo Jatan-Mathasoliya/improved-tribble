@@ -500,8 +500,9 @@ const Layout = ({ children }: LayoutProps) => {
               </div>
             ) : (
               <div className="flex items-center space-x-4">
-                <a 
-                  href="/candidate-auth" 
+                <a
+                  href="/candidate-auth"
+                  rel="nofollow"
                   className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70"
                   onClick={(e) => { e.preventDefault(); setLocation("/candidate-auth"); }}
                 >
@@ -510,6 +511,7 @@ const Layout = ({ children }: LayoutProps) => {
                 </a>
                 <a
                   href="/recruiter-auth"
+                  rel="nofollow"
                   className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70"
                   onClick={(e) => { e.preventDefault(); setLocation("/recruiter-auth"); }}
                 >
@@ -664,8 +666,9 @@ const Layout = ({ children }: LayoutProps) => {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  <a 
-                    href="/candidate-auth" 
+                  <a
+                    href="/candidate-auth"
+                    rel="nofollow"
                     className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
                     onClick={(e) => { e.preventDefault(); setLocation("/candidate-auth"); setIsMenuOpen(false); }}
                   >
@@ -673,6 +676,7 @@ const Layout = ({ children }: LayoutProps) => {
                   </a>
                   <a
                     href="/recruiter-auth"
+                    rel="nofollow"
                     className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
                     onClick={(e) => { e.preventDefault(); setLocation("/recruiter-auth"); setIsMenuOpen(false); }}
                   >
