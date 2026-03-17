@@ -284,13 +284,21 @@ export default function JobSourcingPage() {
     <Layout>
       <JobSubNav jobId={jobId ?? 0} />
 
-      <div className="container mx-auto px-4 py-6 max-w-6xl">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h1 className="text-xl font-semibold">Sourcing</h1>
-            {isPolling && (
-              <div className="flex items-center gap-2 mt-1">
-                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+	      <div className="container mx-auto px-4 py-6 max-w-6xl">
+	        <div className="flex items-center justify-between mb-4">
+	          <div>
+	            <div className="flex items-center gap-2">
+	              <h1 className="text-xl font-semibold">Sourcing</h1>
+	              <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
+	                Beta
+	              </Badge>
+	            </div>
+	            <p className="mt-1 text-sm text-amber-700">
+	              Beta feature, still being refined.
+	            </p>
+	            {isPolling && (
+	              <div className="flex items-center gap-2 mt-1">
+	                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
                 <span className="text-sm text-muted-foreground">
                   {isSourcingActive
                     ? "Searching for candidates..."

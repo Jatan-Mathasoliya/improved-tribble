@@ -13,6 +13,7 @@ type NavItem = {
   label: string;
   path: string;
   icon: React.ReactNode;
+  badge?: string;
 };
 
 export function JobSubNav({ jobId, jobTitle, className }: JobSubNavProps) {
@@ -36,6 +37,7 @@ export function JobSubNav({ jobId, jobTitle, className }: JobSubNavProps) {
       label: "Sourcing",
       path: `/jobs/${jobId}/sourcing`,
       icon: <Search className="h-4 w-4" />,
+      badge: "Beta",
     },
     {
       id: "pipeline",
@@ -85,6 +87,18 @@ export function JobSubNav({ jobId, jobTitle, className }: JobSubNavProps) {
           >
             {item.icon}
             <span>{item.label}</span>
+            {item.badge && (
+              <span
+                className={cn(
+                  "rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.08em]",
+                  activeId === item.id
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-amber-300 bg-amber-50 text-amber-700",
+                )}
+              >
+                {item.badge}
+              </span>
+            )}
           </button>
         ))}
       </nav>
