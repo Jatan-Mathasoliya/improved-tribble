@@ -19,6 +19,7 @@ import {
   createOrganizationWithOwner,
   createRecruiterUser,
 } from '../utils/db-helpers';
+import { CURRENT_DIGEST_VERSION } from '../../server/lib/jdDigest';
 
 // ── Mocks ──────────────────────────────────────────────────────────────
 const jwtMock = vi.hoisted(() => ({
@@ -251,6 +252,19 @@ maybeDescribe('Signal webhook callback integration', () => {
     return agent;
   }
 
+  async function loginSuperAdminAgent(username: string, password: string) {
+    const agent = request.agent(app);
+    const loginRes = await agent.post('/api/login').send({
+      username,
+      password,
+      expectedRole: ['super_admin'],
+    });
+    expect(loginRes.status).toBe(200);
+    const csrfRes = await agent.get('/api/csrf-token');
+    expect(csrfRes.status).toBe(200);
+    return { agent, csrfToken: csrfRes.body?.token as string };
+  }
+
   // ── Test 1: Successful callback with candidates ──────────────────────
   it('marks run completed and upserts candidates on success', async () => {
     const requestId = await createRun();
@@ -318,6 +332,56 @@ maybeDescribe('Signal webhook callback integration', () => {
       ),
     });
     expect(event?.status).toBe('processed');
+  });
+
+  it('allows super_admin to trigger sourcing using the job organization tenant', async () => {
+    const superAdmin = await createRecruiterUser({
+      username: `signal-admin-${randomUUID().slice(0, 8)}@test.com`,
+      password: 'TestPass1!',
+      role: 'super_admin',
+    });
+    created.userIds.push(superAdmin.id);
+
+    const adminOrg = await createOrganizationWithOwner({
+      name: `SignalAdminOrg-${randomUUID().slice(0, 8)}`,
+      ownerId: superAdmin.id,
+    });
+    created.orgIds.push(adminOrg.id);
+
+    await db.update(jobs)
+      .set({
+        jdDigest: {
+          summary: 'Senior TypeScript engineer',
+          topSkills: ['typescript', 'node'],
+          version: CURRENT_DIGEST_VERSION,
+        },
+        jdDigestVersion: CURRENT_DIGEST_VERSION,
+      })
+      .where(eq(jobs.id, jobId));
+
+    const requestId = randomUUID();
+    created.requestIds.push(requestId);
+    signalClientMock.sourceJob.mockResolvedValue({
+      success: true,
+      requestId,
+      status: 'queued',
+      idempotent: false,
+    });
+
+    const { agent, csrfToken } = await loginSuperAdminAgent(superAdmin.username, 'TestPass1!');
+    const res = await agent
+      .post(`/api/jobs/${jobId}/find-candidates`)
+      .set('x-csrf-token', csrfToken)
+      .send({});
+
+    expect(res.status).toBe(202);
+    expect(signalClientMock.sourceJob).toHaveBeenCalledWith(
+      TENANT_ID,
+      `vanta:jobs:${jobId}`,
+      expect.objectContaining({
+        callbackUrl: 'http://localhost:5000/api/webhooks/signal/callback',
+      }),
+    );
   });
 
   // ── Test 2: getResults failure → run marked 'failed' ────────────────

@@ -9,7 +9,7 @@
 import type { Express, Request, Response, NextFunction } from 'express';
 import { db } from './db';
 import { eq, and, desc, asc, sql } from 'drizzle-orm';
-import { jobs, jobSourcingRuns, jobSourcedCandidates, recruiterFeedbackEvents, type JobSourcingRun, type JobSourcedCandidate } from '@shared/schema';
+import { jobs, organizations, jobSourcingRuns, jobSourcedCandidates, recruiterFeedbackEvents, type JobSourcingRun, type JobSourcedCandidate } from '@shared/schema';
 import { requireRole } from './auth';
 import { requireSeat } from './auth';
 import { getUserOrganization, requireSignalTenantId } from './lib/organizationService';
@@ -115,6 +115,63 @@ function sortSourcedCandidatesForDisplay(
   });
 }
 
+interface SignalRouteUser {
+  id: number;
+  role: string;
+}
+
+interface AccessibleSignalJobContext {
+  job: typeof jobs.$inferSelect;
+  organizationId: number;
+  signalTenantId: string | null;
+}
+
+type AccessibleSignalJobContextResult =
+  | { ok: true; context: AccessibleSignalJobContext }
+  | { ok: false; error: 'NO_ORGANIZATION' | 'JOB_NOT_FOUND' | 'JOB_ORG_MISSING' };
+
+async function resolveAccessibleSignalJobContext(
+  user: SignalRouteUser,
+  jobId: number,
+): Promise<AccessibleSignalJobContextResult> {
+  const orgResult = await getUserOrganization(user.id);
+  if (!orgResult) {
+    return { ok: false, error: 'NO_ORGANIZATION' };
+  }
+
+  const job = await db.query.jobs.findFirst({
+    where: user.role === 'super_admin'
+      ? eq(jobs.id, jobId)
+      : and(eq(jobs.id, jobId), eq(jobs.organizationId, orgResult.organization.id)),
+  });
+
+  if (!job) {
+    return { ok: false, error: 'JOB_NOT_FOUND' };
+  }
+
+  if (!job.organizationId) {
+    return { ok: false, error: 'JOB_ORG_MISSING' };
+  }
+
+  const org = await db.query.organizations.findFirst({
+    where: eq(organizations.id, job.organizationId),
+    columns: { id: true, signalTenantId: true },
+  });
+
+  if (!org) {
+    return { ok: false, error: 'JOB_NOT_FOUND' };
+  }
+
+  return {
+    ok: true,
+    context: {
+      job,
+      organizationId: org.id,
+      signalTenantId: org.signalTenantId ?? null,
+    },
+  };
+}
+
 /**
  * Recursively sort object keys for deterministic JSON serialization.
  * Arrays preserve element order; only object key order is normalized.
@@ -185,25 +242,21 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         return;
       }
 
-      // Get org context
-      const orgResult = await getUserOrganization(req.user!.id);
-      if (!orgResult) {
+      const contextResult = await resolveAccessibleSignalJobContext(req.user as SignalRouteUser, jobId);
+      if (!contextResult.ok) {
+        if (contextResult.error === 'JOB_NOT_FOUND') {
+          res.status(404).json({ error: 'Job not found' });
+          return;
+        }
+        if (contextResult.error === 'JOB_ORG_MISSING') {
+          res.status(400).json({ error: 'Job has no organization', code: 'JOB_ORG_MISSING' });
+          return;
+        }
         res.status(403).json({ error: 'Organization required', code: 'NO_ORGANIZATION' });
         return;
       }
-      const org = orgResult.organization;
-
-      // Fail-fast: require Signal integration
-      const signalTenantId = await requireSignalTenantId(org.id);
-
-      // Verify job exists and belongs to org
-      const job = await db.query.jobs.findFirst({
-        where: and(eq(jobs.id, jobId), eq(jobs.organizationId, org.id)),
-      });
-      if (!job) {
-        res.status(404).json({ error: 'Job not found' });
-        return;
-      }
+      const { job, organizationId } = contextResult.context;
+      const signalTenantId = await requireSignalTenantId(organizationId);
 
       const externalJobId = `vanta:jobs:${job.id}`;
 
@@ -231,7 +284,7 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
       // Check for existing active (non-terminal) run with same context
       const existingRun = await db.query.jobSourcingRuns.findFirst({
         where: and(
-          eq(jobSourcingRuns.organizationId, org.id),
+          eq(jobSourcingRuns.organizationId, organizationId),
           eq(jobSourcingRuns.externalJobId, externalJobId),
           eq(jobSourcingRuns.contextHash, contextHash),
         ),
@@ -261,8 +314,8 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
           skills: normalizeSkillList(job.skills),
           goodToHaveSkills: normalizeSkillList(job.goodToHaveSkills),
           location: job.location,
-          experienceYears: job.experienceYears ?? undefined,
-          education: job.educationRequirement ?? undefined,
+          ...(job.experienceYears != null ? { experienceYears: job.experienceYears } : {}),
+          ...(job.educationRequirement ? { education: job.educationRequirement } : {}),
         },
         callbackUrl,
       };
@@ -295,7 +348,7 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
       const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
       try {
         await db.insert(jobSourcingRuns).values({
-          organizationId: org.id,
+          organizationId,
           jobId: job.id,
           requestId: signalResponse.requestId,
           externalJobId,
@@ -359,15 +412,24 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         return;
       }
 
-      const orgResult = await getUserOrganization(req.user!.id);
-      if (!orgResult) {
+      const contextResult = await resolveAccessibleSignalJobContext(req.user as SignalRouteUser, jobId);
+      if (!contextResult.ok) {
+        if (contextResult.error === 'JOB_NOT_FOUND') {
+          res.status(404).json({ error: 'Job not found' });
+          return;
+        }
+        if (contextResult.error === 'JOB_ORG_MISSING') {
+          res.status(400).json({ error: 'Job has no organization', code: 'JOB_ORG_MISSING' });
+          return;
+        }
         res.status(403).json({ error: 'Organization required', code: 'NO_ORGANIZATION' });
         return;
       }
+      const { organizationId } = contextResult.context;
 
       const latestRun = await db.query.jobSourcingRuns.findFirst({
         where: and(
-          eq(jobSourcingRuns.organizationId, orgResult.organization.id),
+          eq(jobSourcingRuns.organizationId, organizationId),
           eq(jobSourcingRuns.jobId, jobId),
         ),
         orderBy: desc(jobSourcingRuns.createdAt),
@@ -476,15 +538,24 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
         return;
       }
 
-      const orgResult = await getUserOrganization(req.user!.id);
-      if (!orgResult) {
+      const contextResult = await resolveAccessibleSignalJobContext(req.user as SignalRouteUser, jobId);
+      if (!contextResult.ok) {
+        if (contextResult.error === 'JOB_NOT_FOUND') {
+          res.status(404).json({ error: 'Job not found' });
+          return;
+        }
+        if (contextResult.error === 'JOB_ORG_MISSING') {
+          res.status(400).json({ error: 'Job has no organization', code: 'JOB_ORG_MISSING' });
+          return;
+        }
         res.status(403).json({ error: 'Organization required', code: 'NO_ORGANIZATION' });
         return;
       }
+      const { organizationId } = contextResult.context;
 
       const candidates: JobSourcedCandidate[] = await db.query.jobSourcedCandidates.findMany({
         where: and(
-          eq(jobSourcedCandidates.organizationId, orgResult.organization.id),
+          eq(jobSourcedCandidates.organizationId, organizationId),
           eq(jobSourcedCandidates.jobId, jobId),
         ),
         orderBy: [desc(jobSourcedCandidates.fitScore), asc(jobSourcedCandidates.id)],
@@ -519,7 +590,7 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
       // Look up latest run meta for diagnostics
       const latestRunForMeta = await db.query.jobSourcingRuns.findFirst({
         where: and(
-          eq(jobSourcingRuns.organizationId, orgResult.organization.id),
+          eq(jobSourcingRuns.organizationId, organizationId),
           eq(jobSourcingRuns.jobId, jobId),
         ),
         orderBy: desc(jobSourcingRuns.createdAt),
@@ -725,18 +796,27 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
       }
       const { state: newState } = parseResult.data;
 
-      const orgResult = await getUserOrganization(req.user!.id);
-      if (!orgResult) {
+      const contextResult = await resolveAccessibleSignalJobContext(req.user as SignalRouteUser, jobId);
+      if (!contextResult.ok) {
+        if (contextResult.error === 'JOB_NOT_FOUND') {
+          res.status(404).json({ error: 'Job not found' });
+          return;
+        }
+        if (contextResult.error === 'JOB_ORG_MISSING') {
+          res.status(400).json({ error: 'Job has no organization', code: 'JOB_ORG_MISSING' });
+          return;
+        }
         res.status(403).json({ error: 'Organization required', code: 'NO_ORGANIZATION' });
         return;
       }
+      const { organizationId, signalTenantId } = contextResult.context;
 
       // Fetch candidate — verify it belongs to org + job
       const candidate = await db.query.jobSourcedCandidates.findFirst({
         where: and(
           eq(jobSourcedCandidates.id, candidateId),
           eq(jobSourcedCandidates.jobId, jobId),
-          eq(jobSourcedCandidates.organizationId, orgResult.organization.id),
+          eq(jobSourcedCandidates.organizationId, organizationId),
         ),
       });
 
@@ -803,7 +883,7 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
           const eventId = randomUUID();
 
           await db.insert(recruiterFeedbackEvents).values({
-            organizationId: orgResult.organization.id,
+            organizationId,
             jobId: jobId,
             userId: req.user!.id,
             signalCandidateId: candidate.signalCandidateId,
@@ -820,10 +900,10 @@ export function registerSignalRoutes(app: Express, csrfProtection: any) {
           }).onConflictDoNothing();
 
           // Forward-sync to ActiveKG (fire-and-forget, never blocks response)
-          if (process.env.ACTIVEKG_BASE_URL && process.env.FEEDBACK_FORWARD_SYNC_ENABLED === 'true') {
+          if (signalTenantId && process.env.ACTIVEKG_BASE_URL && process.env.FEEDBACK_FORWARD_SYNC_ENABLED === 'true') {
             import('./lib/services/activekg-client').then(({ ingestFeedbackEvents }) => {
-              ingestFeedbackEvents(orgResult.organization.signalTenantId!, [{
-                tenant_id: orgResult.organization.signalTenantId!,
+              ingestFeedbackEvents(signalTenantId, [{
+                tenant_id: signalTenantId,
                 job_id: String(jobId),
                 recruiter_id: String(req.user!.id),
                 signal_candidate_id: candidate.signalCandidateId,
