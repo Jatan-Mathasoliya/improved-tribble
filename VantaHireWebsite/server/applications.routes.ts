@@ -55,6 +55,7 @@ import type { CsrfMiddleware } from './types/routes';
 import { normalizeStageName } from './lib/pipelineStageUtils';
 import { resolveActiveKGTenantId } from './lib/activekgTenant';
 import { MIN_RESUME_TEXT_LENGTH } from './lib/applicationGraphSyncProcessor';
+import { pickInitialPipelineStage } from './lib/pipelineStageSelection';
 
 // Base URL for email links
 const BASE_URL = process.env.BASE_URL || 'http://localhost:5000';
@@ -214,9 +215,8 @@ export function registerApplicationsRoutes(
       let initialStageId: number | null = null;
       try {
         const stages = await storage.getPipelineStages(job.organizationId ?? null);
-        if (stages && stages.length > 0) {
-          const explicitDefault = stages.find((s) => s.isDefault);
-          const chosen = explicitDefault ?? stages[0]!;
+        const chosen = pickInitialPipelineStage(stages, job.organizationId ?? null);
+        if (chosen) {
           initialStageId = chosen.id;
         }
       } catch (stageError) {
@@ -439,9 +439,8 @@ export function registerApplicationsRoutes(
         let defaultStageId: number | null = null;
         try {
           const stages = await storage.getPipelineStages(job.organizationId ?? null);
-          if (stages && stages.length > 0) {
-            const explicitDefault = stages.find((s) => s.isDefault);
-            const chosen = explicitDefault ?? stages[0]!;
+          const chosen = pickInitialPipelineStage(stages, job.organizationId ?? null);
+          if (chosen) {
             defaultStageId = chosen.id;
           }
         } catch (stageError) {

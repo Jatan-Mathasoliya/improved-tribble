@@ -22,6 +22,7 @@ import { MIN_RESUME_TEXT_LENGTH } from './lib/applicationGraphSyncProcessor';
 import { extractResumeTextWithFallback } from './lib/resumeImportExtraction';
 import { extractStructuredResumeFieldsWithGroq, isGroqAdvancedExtractionEnabled } from './lib/resumeImportAiExtraction';
 import { resolveActiveKGTenantId } from './lib/activekgTenant';
+import { pickInitialPipelineStage } from './lib/pipelineStageSelection';
 import {
   finalizeResumeImportItemInTransaction,
   type FinalizeResumeImportItemResult,
@@ -679,8 +680,7 @@ export function registerBulkResumeImportRoutes(
           : allItems;
 
         const stages = await storage.getPipelineStages(access.organizationId);
-        const explicitDefault = stages.find((stage) => stage.isDefault);
-        const initialStage = explicitDefault ?? stages[0] ?? null;
+        const initialStage = pickInitialPipelineStage(stages, access.organizationId);
 
         const finalized: Array<{ itemId: number; applicationId: number }> = [];
         const duplicates: Array<{ itemId: number; applicationId?: number | null; reason: string }> = [];

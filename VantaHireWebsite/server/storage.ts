@@ -77,6 +77,7 @@ import {
 import { db } from "./db";
 import { eq, desc, and, ilike, sql, or, inArray, count, gte, lte, isNull } from "drizzle-orm";
 import { normalizeStageName } from "./lib/pipelineStageUtils";
+import { pickInitialPipelineStage } from "./lib/pipelineStageSelection";
 import { computeResumeImportBatchStatus } from "./lib/resumeImportFieldExtraction";
 
 export type JobHealthStatus = 'green' | 'amber' | 'red';
@@ -3123,7 +3124,7 @@ export class DatabaseStorage implements IStorage {
 
     // Get first pipeline stage for initial placement
     const stages = await this.getPipelineStages(job.organizationId ?? null);
-    const firstStage = stages.length > 0 ? stages[0] : null;
+    const firstStage = pickInitialPipelineStage(stages, job.organizationId ?? null);
 
     // Create application from talent pool data
     const [application] = await db.insert(applications).values({
@@ -3231,7 +3232,7 @@ export class DatabaseStorage implements IStorage {
       if (job) {
         // Get first pipeline stage
         const stages = await this.getPipelineStages(job.organizationId ?? null);
-        const firstStage = stages.length > 0 ? stages[0] : null;
+        const firstStage = pickInitialPipelineStage(stages, job.organizationId ?? null);
 
         const [application] = await db.insert(applications).values({
           jobId: invitation.jobId,

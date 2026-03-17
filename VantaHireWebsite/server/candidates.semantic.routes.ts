@@ -19,6 +19,7 @@ import type { CsrfMiddleware } from './types/routes';
 import { db } from './db';
 import { applicationStageHistory, applications, organizations, type Application } from '@shared/schema';
 import { inArray } from 'drizzle-orm';
+import { pickInitialPipelineStage } from './lib/pipelineStageSelection';
 
 // ── Validation schemas ─────────────────────────────────────────────
 
@@ -817,17 +818,17 @@ export function registerCandidateSemanticRoutes(
           if (stages.length > 0) {
             if (targetStageId) {
               const explicit = stages.find((s) => s.id === targetStageId);
-              if (!explicit) {
-                res.status(400).json({ error: 'Invalid targetStageId for your organization' });
-                return;
-              }
-              initialStageId = explicit.id;
-            } else {
-              const defaultStage = stages.find((s) => s.isDefault);
-              initialStageId = (defaultStage ?? stages[0]!).id;
+            if (!explicit) {
+              res.status(400).json({ error: 'Invalid targetStageId for your organization' });
+              return;
             }
+            initialStageId = explicit.id;
+          } else {
+            const initialStage = pickInitialPipelineStage(stages, orgId);
+            initialStageId = initialStage?.id ?? null;
           }
-        } catch {
+        }
+      } catch {
           // non-blocking
         }
 
