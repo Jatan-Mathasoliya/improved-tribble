@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, isApiError } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { trackEvent } from "@/lib/analytics";
 import { useRef, useEffect } from "react";
@@ -247,9 +247,12 @@ export function useFindCandidates(jobId: number | undefined) {
       });
     },
     onError: (error: Error) => {
+      const isMissingTenant = isApiError(error) && error.code === "NO_SIGNAL_TENANT";
       toast({
-        title: "Failed to start sourcing",
-        description: error.message,
+        title: isMissingTenant ? "Candidate sourcing isn't enabled yet" : "Failed to start sourcing",
+        description: isMissingTenant
+          ? "Candidate sourcing has not been configured for this organization yet. Please contact your workspace admin."
+          : error.message,
         variant: "destructive",
       });
     },

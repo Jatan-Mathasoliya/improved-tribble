@@ -55,6 +55,31 @@ export function isRateLimitError(error: unknown): error is RateLimitError {
   return error instanceof RateLimitError;
 }
 
+export interface ApiErrorPayload {
+  error?: string;
+  message?: string;
+  code?: string;
+  [key: string]: unknown;
+}
+
+export class ApiError extends Error {
+  public readonly status: number;
+  public readonly code: string | undefined;
+  public readonly payload: ApiErrorPayload | undefined;
+
+  constructor(status: number, message: string, payload?: ApiErrorPayload) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = typeof payload?.code === 'string' ? payload.code : undefined;
+    this.payload = payload;
+  }
+}
+
+export function isApiError(error: unknown): error is ApiError {
+  return error instanceof ApiError;
+}
+
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
     // Handle rate limit responses specially
@@ -70,7 +95,20 @@ async function throwIfResNotOk(res: Response) {
     }
 
     const text = (await res.text()) || res.statusText;
-    throw new Error(`${res.status}: ${text}`);
+    let payload: ApiErrorPayload | undefined;
+    try {
+      payload = JSON.parse(text) as ApiErrorPayload;
+    } catch {
+      payload = undefined;
+    }
+
+    const message =
+      (typeof payload?.message === 'string' && payload.message) ||
+      (typeof payload?.error === 'string' && payload.error) ||
+      text ||
+      res.statusText;
+
+    throw new ApiError(res.status, message, payload);
   }
 }
 
