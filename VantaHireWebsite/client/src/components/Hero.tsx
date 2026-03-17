@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Sparkles, Zap } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
 
@@ -19,6 +19,8 @@ const HeroVideo = () => (
       }}
     >
       <video
+        poster="/og-image.jpg"
+        preload="none"
         autoPlay
         loop
         muted
@@ -36,14 +38,7 @@ const HeroVideo = () => (
 );
 
 const Hero = () => {
-  const [isVisible, setIsVisible] = useState(false);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setIsVisible(true);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, []);
+  const [isVisible] = useState(true);
 
   // Function to open Cal.com in a new window/tab
   const openCalendar = () => {
@@ -60,27 +55,23 @@ const Hero = () => {
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 border border-primary/20 mb-6 animate-fade-in-up">
             <Sparkles className="w-4 h-4 text-warning" />
-            <span className="text-sm text-primary">Recruiter-First ATS</span>
+            <span className="text-sm text-primary">AI-Native Recruiting Platform</span>
           </div>
 
           <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold mb-6 animate-fade-in-up-delay-1">
-            <span className="gradient-text-purple">Recruiting Velocity,</span>
+            <span className="gradient-text-purple">Human decisions.</span>
             <br />
-            <span className="text-white">by</span>{" "}
-            <span className="gradient-text-gold">Design</span>
+            <span className="text-white">AI</span>{" "}
+            <span className="gradient-text-gold">acceleration.</span>
           </h1>
 
-          <p className="text-xl text-white/80 mb-2 max-w-xl mx-auto lg:mx-0 leading-relaxed animate-fade-in-up-delay-2">
-            Human decisions, AI acceleration.
-          </p>
-
-          <p className="text-lg text-muted-foreground/70 mb-4 max-w-xl mx-auto lg:mx-0 leading-relaxed animate-fade-in-up-delay-2">
-            The recruiter-first ATS designed to remove friction—and double your team's efficiency.
+          <p className="text-xl text-white/80 mb-4 max-w-xl mx-auto lg:mx-0 leading-relaxed animate-fade-in-up-delay-2">
+            The AI-native recruiting platform that helps startups and recruiting firms find, rank, and engage the right candidates faster.
           </p>
 
           {/* Trust Signal */}
           <p className="text-sm text-muted-foreground/70 mb-8 animate-fade-in-up-delay-2">
-            Purpose-built for consulting firms, agencies, startups, and high-velocity teams.
+            Ranked candidates in minutes. No Boolean skills needed.
           </p>
 
           {/* CTA Buttons */}
@@ -101,7 +92,7 @@ const Hero = () => {
               className="rounded-full px-8 py-6 text-lg"
             >
               <Zap className="w-5 h-5 mr-2" />
-              Get a Walkthrough
+              Book Demo
             </Button>
           </div>
         </div>

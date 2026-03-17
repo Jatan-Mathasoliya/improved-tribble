@@ -222,6 +222,41 @@ export async function getOrganizationByDomain(domain: string): Promise<Organizat
   });
 }
 
+/**
+ * Get an organization's Signal tenant ID.
+ * Returns null if the org has no Signal integration configured.
+ */
+export async function getSignalTenantId(orgId: number): Promise<string | null> {
+  const org = await db.query.organizations.findFirst({
+    where: eq(organizations.id, orgId),
+    columns: { signalTenantId: true },
+  });
+  return org?.signalTenantId ?? null;
+}
+
+/**
+ * Require an organization's Signal tenant ID.
+ * Throws if the org has no Signal integration configured.
+ */
+export async function requireSignalTenantId(orgId: number): Promise<string> {
+  const tenantId = await getSignalTenantId(orgId);
+  if (!tenantId) {
+    throw new Error(`Organization ${orgId} has no Signal integration configured. Set signal_tenant_id in organization settings.`);
+  }
+  return tenantId;
+}
+
+/**
+ * Set or update an organization's Signal tenant ID.
+ */
+export async function setSignalTenantId(orgId: number, signalTenantId: string): Promise<Organization | undefined> {
+  const [updated] = await db.update(organizations)
+    .set({ signalTenantId, updatedAt: new Date() })
+    .where(eq(organizations.id, orgId))
+    .returning();
+  return updated;
+}
+
 export async function updateOrganization(
   id: number,
   updates: Partial<InsertOrganization>

@@ -4,6 +4,22 @@
 User-agent: *
 Allow: /
 
+# AI Crawlers - Allow for AI search visibility
+User-agent: GPTBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Amazonbot
+Allow: /
+
 # Block admin and dashboard pages
 Disallow: /admin
 Disallow: /admin-dashboard

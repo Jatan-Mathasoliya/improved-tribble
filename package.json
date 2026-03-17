@@ -4,15 +4,15 @@
   "version": "1.0.0",
   "description": "Monorepo wrapper for Railway to build VantaHireWebsite sub-app.",
   "engines": {
-    "node": ">=18"
+    "node": ">=20 <21"
   },
   "scripts": {
     "postinstall": "npm --prefix VantaHireWebsite ci --no-audit --no-fund || npm --prefix VantaHireWebsite install",
-    "build": "npm --prefix VantaHireWebsite run build",
-    "db:migrate": "npm --prefix VantaHireWebsite run db:migrate",
-    "start": "npm --prefix VantaHireWebsite run start",
-    "start:web": "npm --prefix VantaHireWebsite run start:web",
-    "start:worker": "npm --prefix VantaHireWebsite run start:worker",
-    "dev": "npm --prefix VantaHireWebsite run dev"
+    "build": "cd VantaHireWebsite && npm run build",
+    "db:migrate": "cd VantaHireWebsite && npm run db:migrate",
+    "start": "cd VantaHireWebsite && npm run start",
+    "start:web": "cd VantaHireWebsite && npm run start:web",
+    "start:worker": "cd VantaHireWebsite && npm run start:worker",
+    "dev": "cd VantaHireWebsite && npm run dev"
   }
 }

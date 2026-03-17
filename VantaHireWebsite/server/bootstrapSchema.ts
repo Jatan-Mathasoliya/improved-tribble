@@ -101,7 +101,8 @@ export async function ensureAtsSchema(): Promise<void> {
       submitted_by_recruiter BOOLEAN DEFAULT FALSE,
       created_by_user_id INTEGER REFERENCES users(id),
       source TEXT DEFAULT 'public_apply',
-      source_metadata JSONB
+      source_metadata JSONB,
+      sync_skipped_reason TEXT
     );
   `);
 
@@ -237,6 +238,10 @@ export async function ensureAtsSchema(): Promise<void> {
 
   // Functional index for case-insensitive duplicate detection (recruiter-add)
   await db.execute(sql`CREATE INDEX IF NOT EXISTS applications_job_email_idx ON applications(job_id, LOWER(email));`);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS applications_job_lower_email_unique
+    ON applications(job_id, LOWER(email));
+  `);
 
   // Fix jobs table: pending jobs should not be active by default
   await db.execute(sql`ALTER TABLE jobs ALTER COLUMN is_active SET DEFAULT FALSE;`);
@@ -1278,8 +1283,8 @@ export async function ensureAtsSchema(): Promise<void> {
     INSERT INTO subscription_plans (name, display_name, description, price_per_seat_monthly, price_per_seat_annual, ai_credits_per_seat_monthly, features, sort_order)
     VALUES
       ('free', 'Free', 'Basic ATS features for small teams', 0, 0, 5, '{"basicAts":true,"jobPosting":true,"applicationManagement":true,"aiMatching":false,"aiContent":false,"advancedAnalytics":false,"customBranding":false,"apiAccess":false,"prioritySupport":false}'::jsonb, 0),
-      ('pro', 'Pro', 'Full-featured ATS with AI capabilities', 99900, 999900, 600, '{"basicAts":true,"jobPosting":true,"applicationManagement":true,"aiMatching":true,"aiContent":true,"advancedAnalytics":true,"customBranding":true,"apiAccess":false,"prioritySupport":true}'::jsonb, 1),
-      ('business', 'Business', 'Enterprise-grade features and support', 0, 0, 1000, '{"basicAts":true,"jobPosting":true,"applicationManagement":true,"aiMatching":true,"aiContent":true,"advancedAnalytics":true,"customBranding":true,"apiAccess":true,"prioritySupport":true}'::jsonb, 2)
+      ('pro', 'Growth', 'Scale your hiring output', 199900, 1999000, 600, '{"basicAts":true,"jobPosting":true,"applicationManagement":true,"aiMatching":true,"aiContent":true,"advancedAnalytics":true,"customBranding":true,"apiAccess":false,"prioritySupport":true}'::jsonb, 1),
+      ('business', 'Enterprise', 'Custom fit for large teams', 0, 0, 1000, '{"basicAts":true,"jobPosting":true,"applicationManagement":true,"aiMatching":true,"aiContent":true,"advancedAnalytics":true,"customBranding":true,"apiAccess":true,"prioritySupport":true}'::jsonb, 2)
     ON CONFLICT (name) DO UPDATE SET
       display_name = EXCLUDED.display_name,
       description = EXCLUDED.description,
@@ -1312,8 +1317,188 @@ export async function ensureAtsSchema(): Promise<void> {
   console.log('  Adding paid_seats column to organization_subscriptions...');
   await db.execute(sql`ALTER TABLE organization_subscriptions ADD COLUMN IF NOT EXISTS paid_seats INTEGER NOT NULL DEFAULT 0;`);
 
-  });
+  // ============= SIGNAL SOURCING TABLES =============
 
+  // Add signal_tenant_id to organizations
+  console.log('  Adding signal_tenant_id to organizations...');
+  await db.execute(sql`ALTER TABLE organizations ADD COLUMN IF NOT EXISTS signal_tenant_id TEXT UNIQUE;`);
+
+  // Job Sourcing Runs table
+  console.log('  Creating job_sourcing_runs table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS job_sourcing_runs (
+      id SERIAL PRIMARY KEY,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+      request_id TEXT NOT NULL UNIQUE,
+      external_job_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      context_hash TEXT NOT NULL,
+      callback_url TEXT,
+      meta JSONB,
+      error_message TEXT,
+      candidate_count INTEGER DEFAULT 0,
+      expires_at TIMESTAMP,
+      submitted_at TIMESTAMP,
+      completed_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+  `);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourcing_runs_org_job_idx ON job_sourcing_runs(organization_id, job_id);`);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS job_sourcing_runs_request_id_idx ON job_sourcing_runs(request_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourcing_runs_status_idx ON job_sourcing_runs(status);`);
+  // Partial unique: only one non-terminal run per org+job+context. Terminal runs (completed/failed/expired) don't block reruns.
+  // DROP first: IF NOT EXISTS won't replace an existing non-partial index with the same name.
+  await db.execute(sql`DROP INDEX IF EXISTS job_sourcing_runs_active_idx;`);
+  await db.execute(sql`CREATE UNIQUE INDEX job_sourcing_runs_active_idx ON job_sourcing_runs(organization_id, external_job_id, context_hash) WHERE status NOT IN ('completed', 'failed', 'expired');`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourcing_runs_expires_at_idx ON job_sourcing_runs(expires_at);`);
+
+  // Job Sourced Candidates table
+  console.log('  Creating job_sourced_candidates table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS job_sourced_candidates (
+      id SERIAL PRIMARY KEY,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+      request_id TEXT NOT NULL REFERENCES job_sourcing_runs(request_id),
+      signal_candidate_id TEXT NOT NULL,
+      fit_score INTEGER,
+      fit_breakdown JSONB,
+      source_type TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT 'new',
+      candidate_summary JSONB,
+      converted_application_id INTEGER REFERENCES applications(id),
+      last_synced_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+  `);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS job_sourced_candidates_job_candidate_idx ON job_sourced_candidates(job_id, signal_candidate_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourced_candidates_org_job_idx ON job_sourced_candidates(organization_id, job_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourced_candidates_request_idx ON job_sourced_candidates(request_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourced_candidates_state_idx ON job_sourced_candidates(state);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourced_candidates_fit_score_idx ON job_sourced_candidates(fit_score);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS job_sourced_candidates_source_type_idx ON job_sourced_candidates(source_type);`);
+
+  // ActiveKG Graph Sync: Application resume sync jobs
+  console.log('  Creating application_graph_sync_jobs table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS application_graph_sync_jobs (
+      id SERIAL PRIMARY KEY,
+      application_id INTEGER NOT NULL REFERENCES applications(id) ON DELETE CASCADE UNIQUE,
+      organization_id INTEGER REFERENCES organizations(id),
+      job_id INTEGER NOT NULL REFERENCES jobs(id),
+      effective_recruiter_id INTEGER NOT NULL REFERENCES users(id),
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      last_error TEXT,
+      activekg_tenant_id TEXT NOT NULL,
+      activekg_parent_node_id TEXT,
+      chunk_count INTEGER,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+  `);
+
+  console.log('  Creating application_graph_sync_jobs indexes...');
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS app_graph_sync_status_next_attempt_idx ON application_graph_sync_jobs(status, next_attempt_at);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS app_graph_sync_org_idx ON application_graph_sync_jobs(organization_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS app_graph_sync_recruiter_idx ON application_graph_sync_jobs(effective_recruiter_id);`);
+
+  console.log('  Creating resume import staging tables...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS resume_import_batches (
+      id SERIAL PRIMARY KEY,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+      uploaded_by_user_id INTEGER NOT NULL REFERENCES users(id),
+      status TEXT NOT NULL DEFAULT 'queued',
+      file_count INTEGER NOT NULL DEFAULT 0,
+      processed_count INTEGER NOT NULL DEFAULT 0,
+      ready_count INTEGER NOT NULL DEFAULT 0,
+      needs_review_count INTEGER NOT NULL DEFAULT 0,
+      failed_count INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+  `);
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS resume_import_items (
+      id SERIAL PRIMARY KEY,
+      batch_id INTEGER NOT NULL REFERENCES resume_import_batches(id) ON DELETE CASCADE,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+      uploaded_by_user_id INTEGER NOT NULL REFERENCES users(id),
+      original_filename TEXT NOT NULL,
+      gcs_path TEXT,
+      content_hash TEXT,
+      extracted_text TEXT,
+      extraction_method TEXT NOT NULL DEFAULT 'failed',
+      parsed_name TEXT,
+      parsed_email TEXT,
+      parsed_phone TEXT,
+      status TEXT NOT NULL DEFAULT 'queued',
+      error_reason TEXT,
+      application_id INTEGER REFERENCES applications(id) ON DELETE SET NULL,
+      source_metadata JSONB,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      next_attempt_at TIMESTAMP NOT NULL DEFAULT NOW(),
+      last_processed_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+  `);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS resume_import_batches_org_job_idx ON resume_import_batches(organization_id, job_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS resume_import_batches_uploader_idx ON resume_import_batches(uploaded_by_user_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS resume_import_batches_status_idx ON resume_import_batches(status);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS resume_import_items_batch_idx ON resume_import_items(batch_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS resume_import_items_status_attempt_idx ON resume_import_items(status, next_attempt_at);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS resume_import_items_batch_status_idx ON resume_import_items(batch_id, status);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS resume_import_items_job_email_idx ON resume_import_items(job_id, parsed_email);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS resume_import_items_content_hash_idx ON resume_import_items(batch_id, content_hash);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS resume_import_items_application_idx ON resume_import_items(application_id);`);
+  await db.execute(sql`
+    CREATE UNIQUE INDEX IF NOT EXISTS resume_import_items_batch_content_hash_unique
+    ON resume_import_items(batch_id, content_hash)
+    WHERE content_hash IS NOT NULL;
+  `);
+
+  // Migration 005: Add sync_skipped_reason to applications
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS sync_skipped_reason TEXT;`);
+
+  // Migration 006: Recruiter feedback events + platform discovery consent
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS recruiter_feedback_events (
+      id SERIAL PRIMARY KEY,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+      user_id INTEGER REFERENCES users(id),
+      signal_candidate_id TEXT NOT NULL,
+      action TEXT NOT NULL,
+      event_id TEXT NOT NULL UNIQUE,
+      rank_at_time INTEGER,
+      fit_score_at_time INTEGER,
+      source_type_at_time TEXT,
+      match_tier_at_time TEXT,
+      location_match_at_time TEXT,
+      role_family TEXT,
+      location_country_code TEXT,
+      seniority_band TEXT,
+      synced_to_signal_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+  `);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS rfb_event_id_idx ON recruiter_feedback_events(event_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS rfb_org_job_idx ON recruiter_feedback_events(organization_id, job_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS rfb_candidate_idx ON recruiter_feedback_events(signal_candidate_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS rfb_action_idx ON recruiter_feedback_events(action);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS rfb_unsynced_idx ON recruiter_feedback_events(synced_to_signal_at);`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS platform_discovery_consent BOOLEAN DEFAULT FALSE;`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS consent_captured_at TIMESTAMP;`);
+
+  });
 
   console.log('✅ ATS schema ready');
 }

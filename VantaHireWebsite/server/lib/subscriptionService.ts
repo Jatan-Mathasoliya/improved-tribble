@@ -605,10 +605,10 @@ export async function seedDefaultPlans(): Promise<void> {
     },
     {
       name: PLAN_PRO,
-      displayName: 'Pro',
-      description: 'Full-featured ATS for teams',
-      pricePerSeatMonthly: 99900, // ₹999 in paise
-      pricePerSeatAnnual: 999000, // ₹9990 in paise (2 months free)
+      displayName: 'Growth',
+      description: 'Scale your hiring output',
+      pricePerSeatMonthly: 199900, // ₹1,999 in paise
+      pricePerSeatAnnual: 1999000, // ₹19,990 in paise (2 months free)
       aiCreditsPerSeatMonthly: 600,
       maxCreditRolloverMonths: 3,
       features: {
@@ -627,8 +627,8 @@ export async function seedDefaultPlans(): Promise<void> {
     },
     {
       name: PLAN_BUSINESS,
-      displayName: 'Business',
-      description: 'Enterprise features with dedicated support',
+      displayName: 'Enterprise',
+      description: 'Custom fit for large teams',
       pricePerSeatMonthly: 0, // Contact sales
       pricePerSeatAnnual: 0,
       aiCreditsPerSeatMonthly: 0, // Custom

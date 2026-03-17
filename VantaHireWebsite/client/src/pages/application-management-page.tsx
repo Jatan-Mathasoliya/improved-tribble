@@ -30,7 +30,8 @@ import {
   X,
   Info,
   AlertCircle,
-  Loader2
+  Loader2,
+  Upload
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -64,6 +65,7 @@ import { BulkActionBar } from "@/components/kanban/BulkActionBar";
 import { ApplicationDetailModal } from "@/components/kanban/ApplicationDetailModal";
 import { PageHeaderSkeleton, FilterBarSkeleton, KanbanBoardSkeleton } from "@/components/skeletons";
 import { JobSubNav } from "@/components/JobSubNav";
+import { UploadDialog } from "@/components/bulk-import/UploadDialog";
 
 export default function ApplicationManagementPage() {
   const [match, params] = useRoute("/jobs/:id/applications");
@@ -89,6 +91,7 @@ export default function ApplicationManagementPage() {
   const [newRecruiterNote, setNewRecruiterNote] = useState("");
   const [showInterviewDialog, setShowInterviewDialog] = useState(false);
   const [addCandidateModalOpen, setAddCandidateModalOpen] = useState(false);
+  const [bulkImportDialogOpen, setBulkImportDialogOpen] = useState(false);
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [showBulkEmailDialog, setShowBulkEmailDialog] = useState(false);
   const [bulkTemplateId, setBulkTemplateId] = useState<number | null>(null);
@@ -1302,6 +1305,10 @@ export default function ApplicationManagementPage() {
                 <Plus className="h-4 w-4 mr-2" />
                 Add Candidate
               </Button>
+              <Button variant="outline" size="sm" onClick={() => setBulkImportDialogOpen(true)}>
+                <Upload className="h-4 w-4 mr-2" />
+                Import Resumes
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -2235,6 +2242,15 @@ export default function ApplicationManagementPage() {
             jobId={jobId}
             open={addCandidateModalOpen}
             onOpenChange={setAddCandidateModalOpen}
+          />
+        )}
+
+        {/* Bulk Resume Import Dialog */}
+        {jobId && (
+          <UploadDialog
+            jobId={jobId}
+            open={bulkImportDialogOpen}
+            onOpenChange={setBulkImportDialogOpen}
           />
         )}
 

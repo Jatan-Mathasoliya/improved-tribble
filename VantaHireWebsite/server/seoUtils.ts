@@ -58,6 +58,32 @@ export function mapEmploymentType(type: string | null): string | undefined {
 }
 
 /**
+ * Derive BLS SOC occupational category from job title (best-effort)
+ */
+function deriveOccupationalCategory(title: string): string | undefined {
+  const lower = title.toLowerCase();
+  const map: Array<[RegExp, string]> = [
+    [/\b(software|engineer|developer|sde|swe|full.?stack|back.?end|front.?end|devops|sre|platform)\b/, '15-1252.00 - Software Developers'],
+    [/\bdata scien/, '15-2051.00 - Data Scientists'],
+    [/\bdata analy/, '15-2051.01 - Business Intelligence Analysts'],
+    [/\bproduct manag/, '11-2021.00 - Marketing Managers'],
+    [/\bproject manag/, '11-9199.00 - Managers, All Other'],
+    [/\b(designer|ux|ui)\b/, '27-1024.00 - Graphic Designers'],
+    [/\b(qa|quality|test|sdet)\b/, '15-1253.00 - Software Quality Assurance Analysts'],
+    [/\b(security|infosec|cyber)\b/, '15-1212.00 - Information Security Analysts'],
+    [/\b(recruiter|talent|hr|human resource)\b/, '13-1071.00 - Human Resources Specialists'],
+    [/\b(sales|business develop|account exec)\b/, '41-3091.00 - Sales Representatives'],
+    [/\bmarketing\b/, '13-1161.00 - Market Research Analysts'],
+    [/\b(finance|accounti|cfo)\b/, '13-2011.00 - Accountants and Auditors'],
+    [/\b(operations|ops manag)\b/, '11-1021.00 - General and Operations Managers'],
+  ];
+  for (const [re, code] of map) {
+    if (re.test(lower)) return code;
+  }
+  return undefined;
+}
+
+/**
  * Detect country from location string
  */
 function detectCountry(location: string): string {
@@ -110,6 +136,38 @@ function getCountryName(countryCode: string): string {
 }
 
 /**
+ * Map Indian cities to their state/UT for addressRegion.
+ * Returns undefined for unrecognized cities or non-IN countries.
+ */
+function detectRegion(city: string, countryCode: string): string | undefined {
+  if (countryCode !== 'IN') return undefined;
+
+  const lower = city.toLowerCase().trim();
+  const regionMap: Record<string, string> = {
+    bangalore: 'Karnataka', bengaluru: 'Karnataka',
+    mumbai: 'Maharashtra',
+    pune: 'Maharashtra',
+    delhi: 'Delhi', 'new delhi': 'Delhi',
+    gurgaon: 'Haryana', gurugram: 'Haryana',
+    noida: 'Uttar Pradesh', 'greater noida': 'Uttar Pradesh',
+    chennai: 'Tamil Nadu',
+    hyderabad: 'Telangana',
+    kolkata: 'West Bengal',
+    ahmedabad: 'Gujarat',
+    jaipur: 'Rajasthan',
+    lucknow: 'Uttar Pradesh',
+    chandigarh: 'Chandigarh',
+    kochi: 'Kerala', cochin: 'Kerala',
+    trivandrum: 'Kerala', thiruvananthapuram: 'Kerala',
+    indore: 'Madhya Pradesh',
+    coimbatore: 'Tamil Nadu',
+    vizag: 'Andhra Pradesh', visakhapatnam: 'Andhra Pradesh',
+  };
+
+  return regionMap[lower];
+}
+
+/**
  * Parse job location to determine if remote or physical location
  * Returns jobLocationType for remote, or jobLocation for physical
  * For remote jobs, also returns applicantLocationRequirements if region-specific
@@ -146,15 +204,26 @@ export function parseJobLocation(location: string | null) {
   // Handle multiple locations (e.g., "Bangalore/Mumbai") - use first one
   const firstLocation = location.split('/')[0]?.split(',')[0]?.trim() || '';
   const countryCode = detectCountry(location);
+  const region = detectRegion(firstLocation, countryCode);
+  const countryName = getCountryName(countryCode);
+
+  const address: any = {
+    '@type': 'PostalAddress',
+    addressLocality: firstLocation,
+    addressCountry: countryCode,
+  };
+  if (region) {
+    address.addressRegion = region;
+  }
 
   return {
     jobLocation: {
       '@type': 'Place',
-      address: {
-        '@type': 'PostalAddress',
-        addressLocality: firstLocation,
-        addressCountry: countryCode,
-      },
+      address,
+    },
+    applicantLocationRequirements: {
+      '@type': 'Country',
+      name: countryName,
     },
   };
 }
@@ -232,6 +301,11 @@ export function generateJobPostingSchema(job: {
   deadline?: Date | string | null;
   expiresAt?: Date | string | null;
   slug?: string | null;
+  salaryMin?: number | null;
+  salaryMax?: number | null;
+  salaryPeriod?: string | null;
+  experienceYears?: number | null;
+  educationRequirement?: string | null;
 }, baseUrl: string = 'https://www.vantahire.com') {
   // Validate required fields
   const errors = validateJobPosting(job);
@@ -318,6 +392,45 @@ export function generateJobPostingSchema(job: {
     jobPosting.skills = job.skills.join(', ');
   }
 
+  // baseSalary (Gap 1) — hardcodes INR until a currency column is added
+  if (job.salaryMin || job.salaryMax) {
+    const unitText = job.salaryPeriod === 'per_month' ? 'MONTH' : 'YEAR';
+    const quantValue: any = { '@type': 'QuantitativeValue', unitText };
+    if (job.salaryMin && job.salaryMax) {
+      quantValue.minValue = job.salaryMin;
+      quantValue.maxValue = job.salaryMax;
+    } else {
+      quantValue.value = job.salaryMin || job.salaryMax;
+    }
+    jobPosting.baseSalary = {
+      '@type': 'MonetaryAmount',
+      currency: 'INR',
+      value: quantValue,
+    };
+  }
+
+  // experienceRequirements (Gap 5)
+  if (job.experienceYears && job.experienceYears > 0) {
+    jobPosting.experienceRequirements = {
+      '@type': 'OccupationalExperienceRequirements',
+      monthsOfExperience: job.experienceYears * 12,
+    };
+  }
+
+  // educationRequirements (Gap 5)
+  if (job.educationRequirement) {
+    jobPosting.educationRequirements = {
+      '@type': 'EducationalOccupationalCredential',
+      credentialCategory: job.educationRequirement,
+    };
+  }
+
+  // occupationalCategory (Gap 6) — best-effort title match
+  const occCategory = deriveOccupationalCategory(job.title);
+  if (occCategory) {
+    jobPosting.occupationalCategory = occCategory;
+  }
+
   return jobPosting;
 }
 
@@ -330,11 +443,11 @@ export function generateJobsSitemapXML(jobs: Array<{
   updatedAt?: Date | string;
   createdAt: Date | string;
 }>, baseUrl: string = 'https://www.vantahire.com'): string {
+  const normalizedBase = baseUrl.replace(/\/+$/, '');
   const urlEntries = jobs.map(job => {
     // Prefer pure slug for SEO-friendly URLs
-    const url = job.slug
-      ? `${baseUrl}/jobs/${job.slug}`
-      : `${baseUrl}/jobs/${job.id}`;
+    const slug = job.slug ? encodeURI(job.slug) : String(job.id);
+    const url = `${normalizedBase}/jobs/${slug}`;
 
     const lastmod = formatISODate(job.updatedAt || job.createdAt);
 

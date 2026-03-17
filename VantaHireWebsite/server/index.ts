@@ -8,6 +8,8 @@ import { createTestJobs } from "./createTestJobs";
 import { seedAllATSDefaults } from "./seedATSDefaults";
 import { ensureAtsSchema } from "./bootstrapSchema";
 import { seedDefaultWhatsAppTemplates } from "./seedWhatsAppTemplates";
+import { startApplicationGraphSyncProcessor, stopApplicationGraphSyncProcessor } from "./lib/applicationGraphSyncProcessor";
+import { startResumeImportProcessor, stopResumeImportProcessor } from "./lib/resumeImportProcessor";
 
 const app = express();
 
@@ -104,7 +106,7 @@ app.use((req, res, next) => {
   if (app.get("env") === "development") {
     await setupVite(app, server);
   } else {
-    serveStatic(app);
+    await serveStatic(app);
   }
 
   // Bind to platform-provided PORT (e.g., Railway/Heroku), fallback to 5000
@@ -149,5 +151,28 @@ app.use((req, res, next) => {
 
     // Start job scheduler for automatic job expiration
     startJobScheduler();
+
+    // Start ActiveKG graph sync processor (if enabled)
+    if (process.env.ACTIVEKG_SYNC_ENABLED === 'true') {
+      startApplicationGraphSyncProcessor();
+      console.log('ActiveKG graph sync processor started');
+    }
+
+    if (process.env.BULK_RESUME_IMPORT_ENABLED === 'true') {
+      startResumeImportProcessor();
+      console.log('Bulk resume import processor started');
+    }
   });
+
+  // Graceful shutdown
+  const gracefulShutdown = (signal: string) => {
+    console.log(`Received ${signal}, shutting down gracefully...`);
+    stopApplicationGraphSyncProcessor();
+    stopResumeImportProcessor();
+    server.close(() => {
+      process.exit(0);
+    });
+  };
+  process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+  process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 })();

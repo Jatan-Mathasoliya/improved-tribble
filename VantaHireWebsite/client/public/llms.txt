@@ -1,145 +1,59 @@
-# VantaHire - AI + Human Expertise. Faster, Fairer Hiring.
+# VantaHire
 
-## About VantaHire
-VantaHire is a hybrid recruitment service that combines AI-powered candidate matching with a trusted network of specialist recruiters. We help startups and enterprises scale faster across India and APAC with the perfect blend of cutting-edge technology and human expertise.
+> AI-native recruiting platform for startups and recruiting agencies.
 
-## Core Value Proposition
-**AI + Human Expertise. Faster, Fairer Hiring.**
+VantaHire is an AI-native recruiting platform that helps teams find, rank, and engage the right candidates faster. It combines AI sourcing, pipeline management, WhatsApp outreach, and client collaboration in one platform.
 
-We leverage intelligent technology for smart candidate matching while maintaining the personal touch and industry knowledge of experienced recruitment specialists. Our approach delivers the speed and scale of AI with the irreplaceable insight and empathy of human expertise.
+## Core Capabilities
+
+- **AI Candidate Discovery**: AI sourcing engine that returns ranked candidates with fit scores, skill breakdowns, and identity confidence.
+- **Resume Knowledge Graph**: Semantic knowledge graph that indexes every resume — past candidates become searchable and reusable for new roles.
+- **WhatsApp + Email Outreach**: Native email and WhatsApp outreach with templates, stage-based automation, and compliance audit trail.
+- **Client Feedback Portal**: Shareable shortlists with structured client feedback — no spreadsheets, no email chains.
+- **Recruiter Dashboard**: Pipeline velocity, source performance, and recruiter productivity metrics in one view.
+- **Job Command Center**: Kanban pipeline per job with bulk actions, automation triggers, and stale candidate alerts.
+
+## Architecture
+
+Three layers power VantaHire:
+
+1. **Intelligence Layer**: AI sourcing, fit scoring, skill breakdowns, resume parsing, knowledge graph.
+2. **Outreach Layer**: WhatsApp Cloud API, email templates, stage-based triggers, audit trail.
+3. **Operations Layer**: Pipeline management, client portal, analytics, team collaboration.
+
+## Pricing
+
+- **Free**: $0/mo — up to limited active jobs, AI sourcing, talent search, email outreach, basic analytics.
+- **Growth**: ₹1,999/seat/mo + taxes — unlimited jobs, unlimited AI sourcing, WhatsApp outreach, client portal, advanced analytics.
+- **Enterprise**: Custom pricing — SSO/SAML, API access, custom integrations, dedicated account manager.
 
 ## Geographic Focus
+
 Headquartered in Bangalore, India. Serving companies across India and the Asia-Pacific (APAC) region including Singapore, Malaysia, Indonesia, Thailand, Philippines, Vietnam, and Australia.
 
-## Industries We Serve
-- Information Technology (IT)
-- Telecommunications
-- Automotive
-- Financial Technology (Fintech)
-- Healthcare
+## What Makes VantaHire Different
 
-## Services
-
-### For Companies
-- AI-powered candidate sourcing and matching
-- Access to industry-specialist recruiter network
-- Multi-sector hiring expertise across IT, Telecom, Automotive, Fintech, Healthcare
-- Accelerated time-to-hire with quality-focused screening
-- Diversity, Equity & Inclusion (DEI) recruitment practices
-- Real-time hiring analytics and insights
-- Custom recruitment workflows and pipeline management
-
-### For Job Seekers
-- Intelligent job matching powered by AI
-- Direct access to vetted opportunities across APAC
-- Industry-specialized career guidance from expert recruiters
-- Resume optimization and interview preparation
-- Access to hidden job market through specialist recruiter network
-- Fair, bias-reduced candidate evaluation process
-
-## Target Audience
-Startups and enterprises across India and APAC seeking to scale their teams rapidly with high-quality talent. Professionals looking for opportunities in IT, Telecom, Automotive, Fintech, and Healthcare sectors.
-
-## What Makes Us Different
-
-### Hybrid Intelligence Approach
-We combine the best of both worlds:
-- **AI Speed:** Rapid candidate sourcing and initial screening
-- **Human Judgment:** Expert evaluation and cultural fit assessment
-- **Fair Outcomes:** AI bias detection paired with human oversight
-- **Industry Expertise:** Specialist recruiter knowledge in each vertical
-
-### Technology Meets Human Touch
-- Proprietary AI technology for intelligent matching
-- Trained on recruitment-specific data for better outcomes
-- Automated screening saves time without losing quality
-- Human recruiters add context, empathy, and relationship building
-- Continuous learning from both AI insights and recruiter feedback
-
-### Industry Specialization
-Dedicated recruitment specialists for each industry vertical ensure deep understanding of:
-- Technical skill requirements
-- Industry-specific challenges and opportunities
-- Cultural fit and team dynamics
-- Salary benchmarks and market trends
-- Emerging roles and future skill needs
-
-## Platform Features
-- Public job board with AI-powered search and filtering
-- Specialist recruiter/consultant showcase
-- Direct application system with intelligent resume parsing
-- Candidate pipeline tracking and interview management
-- Automated email communications and customizable templates
-- Comprehensive hiring analytics dashboard
-- Custom recruitment workflow stages
-- Real-time job performance metrics
-
-## Content Coverage
-- AI-powered recruitment technology and best practices
-- Hybrid hiring models combining technology and human expertise
-- Candidate matching and assessment methodologies
-- Industry-specific hiring trends across IT, Telecom, Automotive, Fintech, Healthcare
-- Recruitment process automation and optimization
-- Diversity, equity, and inclusion in hiring
-- APAC talent market insights and regional hiring practices
-- Startup and enterprise scaling strategies
+- **AI-native, not AI-bolted-on**: AI is the foundation, not an add-on. Every workflow is designed around intelligent automation.
+- **Recruiter-first design**: Built for how recruiters actually work — pipeline-centric, not form-centric.
+- **One platform replaces many**: AI sourcing + ATS + outreach + client portal + analytics in a single login.
+- **Privacy by design**: Three-tier privacy model — your data stays yours. Only opt-in candidates are discoverable.
 
 ## Website Sections
-- `/` — Homepage and service overview featuring AI + Human expertise
-- `/jobs` — Public job board with AI-powered search across industries
-- `/consultants` — Specialist recruiter showcase by industry vertical
-- `/candidate-auth` — Candidate portal, application tracking, profile management
-- `/recruiter-auth` — Recruiter dashboard, analytics, and applicant management
 
-## Update Frequency
-- Job listings: Real-time updates as positions open and close
-- Recruiter network: Regular expansion with new industry specialists
-- AI models: Continuously refined with hiring outcome data and recruiter feedback
-- Platform features: Regular updates based on user needs and industry trends
-
-## API & Integration
-RESTful API with 56 endpoints covering:
-- Job posting and management
-- Application tracking and candidate pipeline
-- AI-powered job description analysis and scoring
-- Interview scheduling and coordination
-- Email automation and template management
-- Comprehensive analytics and reporting
-- Recruiter and candidate management
-
-## Technology Approach
-Our platform is powered by:
-- Custom AI models trained specifically for recruitment matching
-- Advanced natural language processing for resume and job description analysis
-- Proprietary algorithms for candidate ranking and recommendation
-- Real-time analytics for hiring insights
-- Scalable cloud infrastructure for APAC-wide operations
-- Modern security practices including CSRF protection, rate limiting, and data encryption
+- `/` — Homepage: "Human decisions. AI acceleration."
+- `/product` — Three-layer architecture overview
+- `/features` — Six pillars of AI-native recruiting
+- `/pricing` — Free, Growth, and Enterprise plans
+- `/jobs` — Public job board with AI-powered search
+- `/compare` — Comparison with legacy ATS platforms
+- `/use-cases` — Solutions for startups, agencies, and enterprise
+- `/about` — Company mission and team
 
 ## Contact Information
+
 - Website: https://www.vantahire.com
 - Email: hello@vantahire.com
 - Phone: +91-9742944825
 - LinkedIn: https://www.linkedin.com/company/vantahire/
 - Location: Bangalore, Karnataka, India
-- Service Region: India and Asia-Pacific (APAC)
-
-## Mission
-To transform recruitment across APAC by combining the speed and scale of AI with the irreplaceable insight and empathy of human expertise, making hiring faster, fairer, and more effective for everyone.
-
-## Core Values
-- **Speed:** AI-accelerated processes that respect everyone's time
-- **Fairness:** Technology-assisted bias reduction with human oversight
-- **Quality:** Never sacrifice candidate quality for speed
-- **Expertise:** Industry specialists who understand your unique needs
-- **Transparency:** Clear communication throughout the hiring journey
-- **Innovation:** Continuously evolving our technology and practices
-
-## Key Differentiators
-1. Hybrid model combining AI efficiency with human recruiter expertise
-2. Industry-specialized recruiters for IT, Telecom, Automotive, Fintech, Healthcare
-3. APAC-focused with deep regional market knowledge
-4. Proprietary AI technology trained specifically for recruitment
-5. Focus on both speed AND quality, not just volume
-6. DEI-focused hiring practices built into the process
-7. Comprehensive platform serving both employers and job seekers
+- Founded: 2024

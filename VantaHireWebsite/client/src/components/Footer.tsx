@@ -13,7 +13,7 @@ const Footer = ({ minimal = false }: FooterProps) => {
         <div className="container mx-auto px-4">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-white/50 text-sm">
-              © 2025 VantaHire. All rights reserved.
+              © 2026 VantaHire. All rights reserved.
             </p>
             <div className="flex flex-wrap gap-6 justify-center">
               <button
@@ -63,7 +63,7 @@ const Footer = ({ minimal = false }: FooterProps) => {
           {/* Brand Column */}
           <div className="lg:col-span-1">
             <Link href="/" className="flex items-center gap-2 mb-4">
-              <img src={vantahireLogo} alt="VantaHire" className="h-9 w-auto" />
+              <img src={vantahireLogo} alt="VantaHire" width={36} height={36} className="h-9 w-auto" />
               <span className="text-xl font-bold gradient-text-mixed">VantaHire</span>
             </Link>
             <p className="text-[var(--text-muted)] text-sm leading-relaxed max-w-xs">
@@ -143,7 +143,7 @@ const Footer = ({ minimal = false }: FooterProps) => {
         <div className="border-t border-[var(--border-subtle)] pt-8 max-w-6xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-center gap-4">
             <p className="text-[var(--text-muted)] text-sm">
-              © 2025 VantaHire. All rights reserved.
+              © 2026 VantaHire. All rights reserved.
             </p>
             <div className="flex flex-wrap gap-6 justify-center">
               <button

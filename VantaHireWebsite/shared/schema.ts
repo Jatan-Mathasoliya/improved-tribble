@@ -186,12 +186,18 @@ export const applications = pgTable("applications", {
   aiGoodToHaveSkillsMissing: text("ai_good_to_have_skills_missing").array(), // Good-to-have skills NOT found
   resumeId: integer("resume_id").references(() => candidateResumes.id),
   whatsappConsent: boolean("whatsapp_consent").notNull().default(true), // WhatsApp notification consent (opt-out model)
+  syncSkippedReason: text("sync_skipped_reason"), // Why ActiveKG sync was skipped (e.g. 'resume_text_missing', 'resume_text_below_threshold')
+  // Platform discovery consent (opt-in: default false)
+  platformDiscoveryConsent: boolean("platform_discovery_consent").default(false), // Whether applicant consents to cross-tenant discovery
+  consentCapturedAt: timestamp("consent_captured_at"), // When consent was explicitly captured
 }, (table) => ({
   // Indexes for ATS performance
   orgIdx: index("applications_org_idx").on(table.organizationId),
   currentStageIdx: index("applications_current_stage_idx").on(table.currentStage),
   jobIdIdx: index("applications_job_id_idx").on(table.jobId),
   emailIdx: index("applications_email_idx").on(table.email),
+  jobLowerEmailUniqueIdx: uniqueIndex("applications_job_lower_email_unique")
+    .on(table.jobId, sql`lower(${table.email})`),
   userIdIdx: index("applications_user_id_idx").on(table.userId),
   statusIdx: index("applications_status_idx").on(table.status),
   rejectionReasonIdx: index("applications_rejection_reason_idx").on(table.rejectionReason),
@@ -681,9 +687,13 @@ export const organizations = pgTable("organizations", {
   isActive: boolean("is_active").default(true).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+
+  // Signal integration
+  signalTenantId: text("signal_tenant_id").unique(),
 }, (table) => ({
   slugIdx: uniqueIndex("organizations_slug_idx").on(table.slug),
   domainIdx: index("organizations_domain_idx").on(table.domain),
+  signalTenantIdx: uniqueIndex("organizations_signal_tenant_idx").on(table.signalTenantId),
 }));
 
 // Organization members
@@ -941,8 +951,145 @@ export const checkoutIntents = pgTable("checkout_intents", {
 }));
 
 // =====================================================
+// SIGNAL SOURCING TABLES
+// =====================================================
+
+// Job Sourcing Runs — tracks each Signal sourcing request per job
+export const jobSourcingRuns = pgTable("job_sourcing_runs", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  jobId: integer("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  requestId: text("request_id").notNull().unique(), // Vanta-generated UUID sent to Signal
+  externalJobId: text("external_job_id").notNull(), // e.g. "vanta:jobs:123"
+  status: text("status").notNull().default('pending'), // pending, submitted, processing, completed, failed, expired
+  contextHash: text("context_hash").notNull(), // sha256 of canonicalized job context
+  callbackUrl: text("callback_url"),
+  meta: jsonb("meta"), // Signal response metadata (candidate counts, etc.)
+  errorMessage: text("error_message"),
+  candidateCount: integer("candidate_count").default(0),
+  expiresAt: timestamp("expires_at"),
+  submittedAt: timestamp("submitted_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  orgJobIdx: index("job_sourcing_runs_org_job_idx").on(table.organizationId, table.jobId),
+  requestIdIdx: uniqueIndex("job_sourcing_runs_request_id_idx").on(table.requestId),
+  statusIdx: index("job_sourcing_runs_status_idx").on(table.status),
+  // NOTE: partial unique index for active run dedupe is in bootstrapSchema.ts
+  // (Drizzle doesn't support WHERE clause on unique indexes)
+  expiresAtIdx: index("job_sourcing_runs_expires_at_idx").on(table.expiresAt),
+}));
+
+// Job Sourced Candidates — links Signal candidates to Vanta jobs
+export const jobSourcedCandidates = pgTable("job_sourced_candidates", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  jobId: integer("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  requestId: text("request_id").notNull().references(() => jobSourcingRuns.requestId),
+  signalCandidateId: text("signal_candidate_id").notNull(), // Signal's candidate ID
+  fitScore: integer("fit_score"), // 0-100
+  fitBreakdown: jsonb("fit_breakdown"), // Signal's fit breakdown object
+  sourceType: text("source_type").notNull(), // raw Signal values: 'pool_enriched' | 'pool' | 'discovered'
+  state: text("state").notNull().default('new'), // new, shortlisted, hidden, converted
+  candidateSummary: jsonb("candidate_summary"), // Signal intelligence snapshot for display
+  convertedApplicationId: integer("converted_application_id").references(() => applications.id),
+  lastSyncedAt: timestamp("last_synced_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  // Primary dedup: one entry per job+signal candidate
+  jobCandidateIdx: uniqueIndex("job_sourced_candidates_job_candidate_idx").on(table.jobId, table.signalCandidateId),
+  orgJobIdx: index("job_sourced_candidates_org_job_idx").on(table.organizationId, table.jobId),
+  requestIdx: index("job_sourced_candidates_request_idx").on(table.requestId),
+  stateIdx: index("job_sourced_candidates_state_idx").on(table.state),
+  fitScoreIdx: index("job_sourced_candidates_fit_score_idx").on(table.fitScore),
+  sourceTypeIdx: index("job_sourced_candidates_source_type_idx").on(table.sourceType),
+}));
+
+// =====================================================
+// END SIGNAL SOURCING TABLES
+// =====================================================
+
+// =====================================================
 // END ORGANIZATION & SUBSCRIPTION TABLES
 // =====================================================
+
+// ActiveKG Graph Sync: Track async resume sync jobs
+export const applicationGraphSyncJobs = pgTable("application_graph_sync_jobs", {
+  id: serial("id").primaryKey(),
+  applicationId: integer("application_id").notNull().references(() => applications.id, { onDelete: 'cascade' }).unique(),
+  organizationId: integer("organization_id").references(() => organizations.id),
+  jobId: integer("job_id").notNull().references(() => jobs.id),
+  effectiveRecruiterId: integer("effective_recruiter_id").notNull().references(() => users.id),
+  status: text("status").notNull().default("pending"), // pending, processing, succeeded, failed, dead_letter
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at").defaultNow().notNull(),
+  lastError: text("last_error"),
+  activekgTenantId: text("activekg_tenant_id").notNull(),
+  activekgParentNodeId: text("activekg_parent_node_id"),
+  chunkCount: integer("chunk_count"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  statusNextAttemptIdx: index("app_graph_sync_status_next_attempt_idx").on(table.status, table.nextAttemptAt),
+  orgIdx: index("app_graph_sync_org_idx").on(table.organizationId),
+  recruiterIdx: index("app_graph_sync_recruiter_idx").on(table.effectiveRecruiterId),
+}));
+
+export const resumeImportBatches = pgTable("resume_import_batches", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  jobId: integer("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  uploadedByUserId: integer("uploaded_by_user_id").notNull().references(() => users.id),
+  status: text("status").notNull().default("queued"), // queued, processing, ready_for_review, completed, failed
+  fileCount: integer("file_count").notNull().default(0),
+  processedCount: integer("processed_count").notNull().default(0),
+  readyCount: integer("ready_count").notNull().default(0),
+  needsReviewCount: integer("needs_review_count").notNull().default(0),
+  failedCount: integer("failed_count").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  orgJobIdx: index("resume_import_batches_org_job_idx").on(table.organizationId, table.jobId),
+  uploaderIdx: index("resume_import_batches_uploader_idx").on(table.uploadedByUserId),
+  statusIdx: index("resume_import_batches_status_idx").on(table.status),
+}));
+
+export const resumeImportItems = pgTable("resume_import_items", {
+  id: serial("id").primaryKey(),
+  batchId: integer("batch_id").notNull().references(() => resumeImportBatches.id, { onDelete: 'cascade' }),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  jobId: integer("job_id").notNull().references(() => jobs.id, { onDelete: 'cascade' }),
+  uploadedByUserId: integer("uploaded_by_user_id").notNull().references(() => users.id),
+  originalFilename: text("original_filename").notNull(),
+  gcsPath: text("gcs_path"),
+  contentHash: text("content_hash"),
+  extractedText: text("extracted_text"),
+  extractionMethod: text("extraction_method").notNull().default("failed"), // native_text, mistral_ocr, failed
+  parsedName: text("parsed_name"),
+  parsedEmail: text("parsed_email"),
+  parsedPhone: text("parsed_phone"),
+  status: text("status").notNull().default("queued"), // queued, processing, processed, needs_review, finalized, failed, duplicate
+  errorReason: text("error_reason"),
+  applicationId: integer("application_id").references(() => applications.id, { onDelete: 'set null' }),
+  sourceMetadata: jsonb("source_metadata"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at").defaultNow().notNull(),
+  lastProcessedAt: timestamp("last_processed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  batchIdx: index("resume_import_items_batch_idx").on(table.batchId),
+  statusAttemptIdx: index("resume_import_items_status_attempt_idx").on(table.status, table.nextAttemptAt),
+  batchStatusIdx: index("resume_import_items_batch_status_idx").on(table.batchId, table.status),
+  jobEmailIdx: index("resume_import_items_job_email_idx").on(table.jobId, table.parsedEmail),
+  contentHashIdx: index("resume_import_items_content_hash_idx").on(table.batchId, table.contentHash),
+  applicationIdx: index("resume_import_items_application_idx").on(table.applicationId),
+  uniqueContentHashPerBatch: uniqueIndex("resume_import_items_batch_content_hash_unique")
+    .on(table.batchId, table.contentHash)
+    .where(sql`${table.contentHash} IS NOT NULL`),
+}));
 
 // Relations
 export const usersRelations = relations(users, ({ many, one }) => ({
@@ -986,6 +1133,8 @@ export const jobsRelations = relations(jobs, ({ one, many }) => ({
     references: [jobAnalytics.jobId],
   }),
   shortlists: many(clientShortlists),
+  sourcingRuns: many(jobSourcingRuns),
+  sourcedCandidates: many(jobSourcedCandidates),
 }));
 
 export const applicationsRelations = relations(applications, ({ one, many }) => ({
@@ -1237,6 +1386,45 @@ export const candidateResumesRelations = relations(candidateResumes, ({ one, man
   applications: many(applications),
 }));
 
+export const resumeImportBatchesRelations = relations(resumeImportBatches, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [resumeImportBatches.organizationId],
+    references: [organizations.id],
+  }),
+  job: one(jobs, {
+    fields: [resumeImportBatches.jobId],
+    references: [jobs.id],
+  }),
+  uploadedByUser: one(users, {
+    fields: [resumeImportBatches.uploadedByUserId],
+    references: [users.id],
+  }),
+  items: many(resumeImportItems),
+}));
+
+export const resumeImportItemsRelations = relations(resumeImportItems, ({ one }) => ({
+  batch: one(resumeImportBatches, {
+    fields: [resumeImportItems.batchId],
+    references: [resumeImportBatches.id],
+  }),
+  organization: one(organizations, {
+    fields: [resumeImportItems.organizationId],
+    references: [organizations.id],
+  }),
+  job: one(jobs, {
+    fields: [resumeImportItems.jobId],
+    references: [jobs.id],
+  }),
+  uploadedByUser: one(users, {
+    fields: [resumeImportItems.uploadedByUserId],
+    references: [users.id],
+  }),
+  application: one(applications, {
+    fields: [resumeImportItems.applicationId],
+    references: [applications.id],
+  }),
+}));
+
 export const userAiUsageRelations = relations(userAiUsage, ({ one }) => ({
   user: one(users, {
     fields: [userAiUsage.userId],
@@ -1309,6 +1497,8 @@ export const organizationsRelations = relations(organizations, ({ many, one }) =
   emailTemplates: many(emailTemplates),
   pipelineStages: many(pipelineStages),
   talentPool: many(talentPool),
+  sourcingRuns: many(jobSourcingRuns),
+  sourcedCandidates: many(jobSourcedCandidates),
 }));
 
 export const organizationMembersRelations = relations(organizationMembers, ({ one }) => ({
@@ -1452,6 +1642,45 @@ export const checkoutIntentsRelations = relations(checkoutIntents, ({ one }) => 
     relationName: "claimedByUser",
   }),
 }));
+
+// =====================================================
+// SIGNAL SOURCING RELATIONS
+// =====================================================
+
+export const jobSourcingRunsRelations = relations(jobSourcingRuns, ({ one, many }) => ({
+  organization: one(organizations, {
+    fields: [jobSourcingRuns.organizationId],
+    references: [organizations.id],
+  }),
+  job: one(jobs, {
+    fields: [jobSourcingRuns.jobId],
+    references: [jobs.id],
+  }),
+  candidates: many(jobSourcedCandidates),
+}));
+
+export const jobSourcedCandidatesRelations = relations(jobSourcedCandidates, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [jobSourcedCandidates.organizationId],
+    references: [organizations.id],
+  }),
+  job: one(jobs, {
+    fields: [jobSourcedCandidates.jobId],
+    references: [jobs.id],
+  }),
+  sourcingRun: one(jobSourcingRuns, {
+    fields: [jobSourcedCandidates.requestId],
+    references: [jobSourcingRuns.requestId],
+  }),
+  convertedApplication: one(applications, {
+    fields: [jobSourcedCandidates.convertedApplicationId],
+    references: [applications.id],
+  }),
+}));
+
+// =====================================================
+// END SIGNAL SOURCING RELATIONS
+// =====================================================
 
 // =====================================================
 // END ORGANIZATION & SUBSCRIPTION RELATIONS
@@ -1841,6 +2070,49 @@ export type InsertCandidateResume = z.infer<typeof insertCandidateResumeSchema>;
 export type UserAiUsage = typeof userAiUsage.$inferSelect;
 export type InsertUserAiUsage = z.infer<typeof insertUserAiUsageSchema>;
 
+export const insertResumeImportBatchSchema = createInsertSchema(resumeImportBatches).pick({
+  organizationId: true,
+  jobId: true,
+  uploadedByUserId: true,
+  status: true,
+  fileCount: true,
+  processedCount: true,
+  readyCount: true,
+  needsReviewCount: true,
+  failedCount: true,
+}).extend({
+  status: z.enum(['queued', 'processing', 'ready_for_review', 'completed', 'failed']).optional(),
+});
+
+export const insertResumeImportItemSchema = createInsertSchema(resumeImportItems).pick({
+  batchId: true,
+  organizationId: true,
+  jobId: true,
+  uploadedByUserId: true,
+  originalFilename: true,
+  gcsPath: true,
+  contentHash: true,
+  extractedText: true,
+  extractionMethod: true,
+  parsedName: true,
+  parsedEmail: true,
+  parsedPhone: true,
+  status: true,
+  errorReason: true,
+  applicationId: true,
+  sourceMetadata: true,
+  attempts: true,
+  nextAttemptAt: true,
+  lastProcessedAt: true,
+}).extend({
+  extractionMethod: z.enum(['native_text', 'mistral_ocr', 'failed']).optional(),
+  parsedEmail: z.string().email().optional().nullable(),
+  parsedPhone: z.string().regex(/^\d{10}$/).optional().nullable(),
+  status: z.enum(['queued', 'processing', 'processed', 'needs_review', 'finalized', 'failed', 'duplicate']).optional(),
+  errorReason: z.string().max(1000).optional().nullable(),
+  sourceMetadata: z.record(z.any()).optional().nullable(),
+});
+
 // Rejection reasons enum for analytics
 export const rejectionReasons = [
   'skills_mismatch',
@@ -1940,6 +2212,14 @@ export const insertAiFitJobSchema = z.object({
 export type AiFitJob = typeof aiFitJobs.$inferSelect;
 export type InsertAiFitJob = z.infer<typeof insertAiFitJobSchema>;
 
+// ActiveKG Graph Sync: Types
+export type ApplicationGraphSyncJob = typeof applicationGraphSyncJobs.$inferSelect;
+export type InsertApplicationGraphSyncJob = typeof applicationGraphSyncJobs.$inferInsert;
+export type ResumeImportBatch = typeof resumeImportBatches.$inferSelect;
+export type InsertResumeImportBatch = z.infer<typeof insertResumeImportBatchSchema>;
+export type ResumeImportItem = typeof resumeImportItems.$inferSelect;
+export type InsertResumeImportItem = z.infer<typeof insertResumeImportItemSchema>;
+
 // Batch fit result types (for clarity)
 export interface BatchFitResultItem {
   applicationId: number;
@@ -1998,7 +2278,7 @@ export const paymentStatuses = ['pending', 'completed', 'failed', 'refunded'] as
 export type PaymentStatus = typeof paymentStatuses[number];
 
 // Webhook statuses
-export const webhookStatuses = ['processed', 'skipped', 'failed'] as const;
+export const webhookStatuses = ['processing', 'processed', 'skipped', 'failed'] as const;
 export type WebhookStatus = typeof webhookStatuses[number];
 
 // Subscription audit actions
@@ -2170,3 +2450,90 @@ export type InsertCheckoutIntent = z.infer<typeof insertCheckoutIntentSchema>;
 // =====================================================
 // END ORGANIZATION & SUBSCRIPTION INSERT SCHEMAS & TYPES
 // =====================================================
+
+// =====================================================
+// SIGNAL SOURCING ENUMS, INSERT SCHEMAS & TYPES
+// =====================================================
+
+// Sourcing run statuses
+export const sourcingRunStatuses = ['pending', 'submitted', 'processing', 'completed', 'failed', 'expired'] as const;
+export type SourcingRunStatus = typeof sourcingRunStatuses[number];
+
+// Raw Signal source types — store as-is, derive UI buckets at read time
+export const signalSourceTypes = ['pool_enriched', 'pool', 'discovered'] as const;
+export type SignalSourceType = typeof signalSourceTypes[number];
+
+// Recruiter-managed candidate states
+export const sourcedCandidateStates = ['new', 'shortlisted', 'hidden', 'converted'] as const;
+export type SourcedCandidateState = typeof sourcedCandidateStates[number];
+
+export const insertJobSourcingRunSchema = z.object({
+  organizationId: z.number().int().positive(),
+  jobId: z.number().int().positive(),
+  requestId: z.string().min(1).max(255),
+  externalJobId: z.string().min(1).max(255),
+  contextHash: z.string().min(1).max(128),
+  callbackUrl: z.string().url().optional(),
+  meta: z.record(z.any()).optional(),
+  expiresAt: z.date().optional(),
+});
+
+export const insertJobSourcedCandidateSchema = z.object({
+  organizationId: z.number().int().positive(),
+  jobId: z.number().int().positive(),
+  requestId: z.string().min(1).max(255),
+  signalCandidateId: z.string().min(1).max(255),
+  fitScore: z.number().int().min(0).max(100).optional(),
+  fitBreakdown: z.record(z.any()).optional(),
+  sourceType: z.enum(signalSourceTypes),
+  candidateSummary: z.record(z.any()).optional(),
+});
+
+export type JobSourcingRun = typeof jobSourcingRuns.$inferSelect;
+export type InsertJobSourcingRun = z.infer<typeof insertJobSourcingRunSchema>;
+
+export type JobSourcedCandidate = typeof jobSourcedCandidates.$inferSelect;
+export type InsertJobSourcedCandidate = z.infer<typeof insertJobSourcedCandidateSchema>;
+
+// =====================================================
+// END SIGNAL SOURCING INSERT SCHEMAS & TYPES
+// =====================================================
+
+// =====================================================
+// RECRUITER FEEDBACK EVENTS (Global Memory)
+// =====================================================
+
+export const recruiterFeedbackEvents = pgTable("recruiter_feedback_events", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull()
+    .references(() => organizations.id, { onDelete: 'cascade' }),
+  jobId: integer("job_id").notNull()
+    .references(() => jobs.id, { onDelete: 'cascade' }),
+  userId: integer("user_id").references(() => users.id),
+  signalCandidateId: text("signal_candidate_id").notNull(),
+  action: text("action").notNull(), // 'shortlisted' | 'hidden' | 'converted'
+  eventId: text("event_id").notNull().unique(), // idempotency key
+
+  // Snapshot of candidate state at action time
+  rankAtTime: integer("rank_at_time"),
+  fitScoreAtTime: integer("fit_score_at_time"),
+  sourceTypeAtTime: text("source_type_at_time"),
+  matchTierAtTime: text("match_tier_at_time"),
+  locationMatchAtTime: text("location_match_at_time"),
+
+  // Job context for aggregation
+  roleFamily: text("role_family"),
+  locationCountryCode: text("location_country_code"),
+  seniorityBand: text("seniority_band"),
+
+  // Forward-sync status
+  syncedToSignalAt: timestamp("synced_to_signal_at"), // null = not yet synced
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  eventIdIdx: uniqueIndex("rfb_event_id_idx").on(table.eventId),
+  orgJobIdx: index("rfb_org_job_idx").on(table.organizationId, table.jobId),
+  candidateIdx: index("rfb_candidate_idx").on(table.signalCandidateId),
+  actionIdx: index("rfb_action_idx").on(table.action),
+  unsyncedIdx: index("rfb_unsynced_idx").on(table.syncedToSignalAt),
+}));

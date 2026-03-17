@@ -29,6 +29,12 @@ npx vitest run test/unit
 npx vitest run test/integration
 ```
 
+**Bulk Import Finalize Concurrency Integration** - Real Postgres validation for bulk resume finalize locking and idempotency:
+```bash
+npm run test:bulk-import:integration
+```
+This suite requires `DATABASE_URL` to point to a real Postgres database. If `DATABASE_URL` is missing, the test file skips and bulk finalize concurrency coverage is incomplete.
+
 **Security Tests** - Validate security measures:
 ```bash
 npx vitest run test/security
@@ -124,6 +130,7 @@ Mock Service Worker provides:
 Automated testing includes:
 - Unit test execution on pull requests
 - Integration test validation
+- Real Postgres execution of `npm run test:bulk-import:integration` for bulk resume finalize concurrency/idempotency
 - Security scan completion
 - Performance regression detection
 - Cross-browser E2E testing
@@ -198,6 +205,7 @@ Automated testing includes:
 2. **API Rate Limits**: Tests may trigger rate limiting
 3. **File Uploads**: Check file permissions and paths
 4. **Browser Dependencies**: Ensure Playwright browsers are installed
+5. **Bulk Import Finalize Integration**: `server/tests/bulkResumeImport.finalize.integration.test.ts` must run with a real `DATABASE_URL`; a skipped run does not validate Postgres locking or unique-violation reconciliation
 
 ### Debug Mode
 Run tests with debugging enabled:

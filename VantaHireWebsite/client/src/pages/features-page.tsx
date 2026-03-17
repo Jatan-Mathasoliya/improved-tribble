@@ -4,150 +4,140 @@ import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
 import { trackEvent } from "@/lib/analytics";
 import {
+  Database,
   Search,
-  FileSearch,
-  Brain,
-  Shield,
-  Kanban,
-  Zap,
-  Mail,
-  Calendar,
   MessageSquare,
-  BarChart3,
-  Clock,
-  TrendingUp
+  Users,
+  LayoutDashboard,
+  Target,
+  ArrowRight,
+  Check
 } from "lucide-react";
 
-const featureCategories = [
+const pillars = [
   {
-    title: "Sourcing",
-    description: "Find the right candidates faster",
+    id: "pillar-1",
+    icon: <Database className="w-8 h-8" />,
+    layer: "Intelligence",
+    title: "Resume Knowledge Graph",
+    label: "Every resume builds your hiring intelligence",
+    outcome: "Recruiters never start from scratch. The talent library grows with every resume added to the system.",
     features: [
-      {
-        icon: <Search className="w-5 h-5" />,
-        title: "Job Board Distribution",
-        description: "Post to multiple job boards with one click"
-      },
-      {
-        icon: <Brain className="w-5 h-5" />,
-        title: "AI-Powered Matching",
-        description: "Our algorithms find candidates you'd miss"
-      },
-      {
-        icon: <FileSearch className="w-5 h-5" />,
-        title: "Smart Job Descriptions",
-        description: "AI-assisted JD writing that attracts top talent"
-      }
-    ]
+      "Resumes chunked into sentence-aware segments, embedded, and indexed into a vector-based knowledge graph",
+      "Talent Search is live — recruiters search their talent pool using natural language with hybrid ranking",
+      "Bulk resume import with AI-powered field extraction (name, email, phone, skills, experience)",
+      "Past candidates become searchable and reusable for new roles, even across different job titles",
+      "No manual tagging or categorization required"
+    ],
+    iconBg: "bg-primary/20",
+    iconColor: "text-primary"
   },
   {
-    title: "Screening",
-    description: "Qualify candidates automatically",
+    id: "pillar-2",
+    icon: <Search className="w-8 h-8" />,
+    layer: "Intelligence",
+    title: "AI Candidate Discovery",
+    label: "AI-sourced candidates, ranked for recruiter action",
+    outcome: "Recruiters get a ranked call sheet, not a raw database dump. They know who to contact first and why.",
     features: [
-      {
-        icon: <FileSearch className="w-5 h-5" />,
-        title: "Resume Parsing",
-        description: "Extract skills, experience, and education automatically"
-      },
-      {
-        icon: <TrendingUp className="w-5 h-5" />,
-        title: "Skill Scoring",
-        description: "AI-powered fit scores for every candidate"
-      },
-      {
-        icon: <Shield className="w-5 h-5" />,
-        title: "Bias Detection",
-        description: "Built-in checks for fairer hiring decisions"
-      }
-    ]
+      "AI sourcing returns ranked candidates with fit scores — skill match, seniority, location, freshness",
+      "Results tiered: Best Matches (high confidence) and Broader Pool (expanded criteria)",
+      "Identity confidence badges on every lead",
+      "Pool scan + web discovery sourcing flow — your talent pool is searched first, then the web",
+      "No Boolean skills needed — describe the role and let the AI work"
+    ],
+    iconBg: "bg-warning/20",
+    iconColor: "text-warning"
   },
   {
-    title: "Pipeline",
-    description: "Manage candidates with ease",
+    id: "pillar-3",
+    icon: <MessageSquare className="w-8 h-8" />,
+    layer: "Outreach",
+    title: "WhatsApp + Email Engagement",
+    label: "Reach candidates instantly via email and WhatsApp",
+    outcome: "Candidates respond on the channel they actually check. No-shows drop. Recruiters stop using personal phones.",
     features: [
-      {
-        icon: <Kanban className="w-5 h-5" />,
-        title: "Kanban Boards",
-        description: "Visual pipeline management with drag-and-drop"
-      },
-      {
-        icon: <Zap className="w-5 h-5" />,
-        title: "Stage Automation",
-        description: "Auto-move candidates based on actions"
-      },
-      {
-        icon: <Clock className="w-5 h-5" />,
-        title: "Bulk Actions",
-        description: "Move, email, or archive multiple candidates at once"
-      }
-    ]
+      "Email and WhatsApp outreach native to the platform — no third-party integrations",
+      "WhatsApp runs through Cloud API with pre-approved templates and full audit log",
+      "Stage-based automation triggers — move to a stage and the message fires automatically",
+      "90%+ WhatsApp read rates vs 15-20% email open rates in India and APAC (industry benchmark)",
+      "Every message logged for compliance"
+    ],
+    iconBg: "bg-green-500/20",
+    iconColor: "text-green-400"
   },
   {
-    title: "Communication",
-    description: "Stay connected with candidates",
+    id: "pillar-4",
+    icon: <Users className="w-8 h-8" />,
+    layer: "Operations",
+    title: "Client Feedback Portal",
+    label: "Share shortlists with clients. Get feedback without the back-and-forth.",
+    outcome: "Agencies close placements faster. Zero email ping-pong. All feedback visible in one dashboard across all clients and jobs.",
     features: [
-      {
-        icon: <Mail className="w-5 h-5" />,
-        title: "Email Templates",
-        description: "Pre-built templates for every stage"
-      },
-      {
-        icon: <Calendar className="w-5 h-5" />,
-        title: "Interview Scheduling",
-        description: "Calendar integration for easy booking"
-      },
-      {
-        icon: <MessageSquare className="w-5 h-5" />,
-        title: "Team Notes",
-        description: "Shared feedback and candidate notes"
-      }
-    ]
+      "Client portal generates a shareable link — no login required for clients",
+      "Structured feedback per candidate: approve, hold, or reject",
+      "Feedback appears in the recruiter dashboard in real time",
+      "Multi-client view — see all feedback across all clients and jobs in one place",
+      "No email chains. No chasing. Act on structured feedback."
+    ],
+    iconBg: "bg-blue-500/20",
+    iconColor: "text-blue-400"
   },
   {
-    title: "Analytics",
-    description: "Measure what matters",
+    id: "pillar-5",
+    icon: <LayoutDashboard className="w-8 h-8" />,
+    layer: "Operations",
+    title: "Recruiter Productivity Dashboard",
+    label: "One recruiter. Many open roles. Zero chaos.",
+    outcome: "A single recruiter manages more roles without dropping candidates. Leadership gets real-time visibility without asking for updates.",
     features: [
-      {
-        icon: <Clock className="w-5 h-5" />,
-        title: "Time-to-Hire",
-        description: "Track how long it takes to fill roles"
-      },
-      {
-        icon: <BarChart3 className="w-5 h-5" />,
-        title: "Source Effectiveness",
-        description: "See which channels deliver the best candidates"
-      },
-      {
-        icon: <TrendingUp className="w-5 h-5" />,
-        title: "Pipeline Health",
-        description: "Monitor bottlenecks and conversion rates"
-      }
-    ]
+      "Action-item dashboard with daily priorities across all jobs",
+      "Bulk pipeline actions — move, email, archive",
+      "Job health scoring (Green/Amber/Red) with stale candidate alerts",
+      "Analytics: pipeline velocity, conversion rates, time-in-stage, source performance",
+      "Day-1 productive — no training needed"
+    ],
+    iconBg: "bg-purple-500/20",
+    iconColor: "text-purple-400"
+  },
+  {
+    id: "pillar-6",
+    icon: <Target className="w-8 h-8" />,
+    layer: "Operations",
+    title: "Job Command Center",
+    label: "Post, source, and screen — one command center per job",
+    outcome: "Everything that matters for a role lives in one place. No switching between sourcing tools, email clients, spreadsheets, and calendar apps.",
+    features: [
+      "Single job view with full sub-navigation across all functions",
+      "AI-assisted JD writing with bias detection and SEO scoring",
+      "Application screening with AI fit scores",
+      "From \"I have a JD\" to \"I'm messaging the top 5 leads\" without ever leaving VantaHire",
+      "Replaces 4-6 separate tools"
+    ],
+    iconBg: "bg-gradient-to-br from-purple-500/15 to-amber-500/15",
+    iconColor: "text-primary"
   }
 ];
 
 export default function FeaturesPage() {
   const [isVisible, setIsVisible] = useState(false);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setIsVisible(true), 200);
-    return () => clearTimeout(timer);
-  }, []);
+  useEffect(() => { setIsVisible(true); }, []);
 
   return (
     <Layout>
       <Helmet>
-        <title>Features | VantaHire - Everything You Need to Hire Faster</title>
-        <meta name="description" content="Explore VantaHire's powerful features: AI matching, automated screening, pipeline management, team collaboration, and analytics—all in one platform." />
+        <title>Features | VantaHire - Six Pillars of AI-Native Recruiting</title>
+        <meta name="description" content="Resume Knowledge Graph, AI Candidate Discovery, WhatsApp + Email Outreach, Client Feedback Portal, Recruiter Dashboard, and Job Command Center. All the capabilities recruiters need." />
         <link rel="canonical" href="https://www.vantahire.com/features" />
-        <meta property="og:title" content="Features | VantaHire - Everything You Need to Hire Faster" />
-        <meta property="og:description" content="Powerful features, zero complexity. See everything VantaHire can do for your hiring process." />
+        <meta property="og:title" content="Features | VantaHire - Six Pillars of AI-Native Recruiting" />
+        <meta property="og:description" content="Resume Knowledge Graph, AI Discovery, WhatsApp Outreach, Client Portal, Dashboard, and Command Center — every capability recruiters need." />
         <meta property="og:url" content="https://www.vantahire.com/features" />
         <meta property="og:type" content="website" />
         <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Features | VantaHire - Everything You Need to Hire Faster" />
-        <meta name="twitter:description" content="Powerful features, zero complexity. See everything VantaHire can do for your hiring process." />
+        <meta name="twitter:title" content="Features | VantaHire - Six Pillars of AI-Native Recruiting" />
+        <meta name="twitter:description" content="Resume Knowledge Graph, AI Discovery, WhatsApp Outreach, Client Portal, Dashboard, and Command Center." />
         <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
         <script type="application/ld+json">
           {JSON.stringify({
@@ -172,36 +162,69 @@ export default function FeaturesPage() {
           <div className="text-center mb-20 pt-8">
             <div className="w-20 h-1.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] rounded-full mx-auto mb-6"></div>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
-              <span className="text-white">Everything You Need to</span>
+              <span className="text-white">Six Pillars of</span>
               <br />
-              <span className="gradient-text-purple">Hire Faster</span>
+              <span className="gradient-text-purple">AI-Native Recruiting</span>
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Powerful features, zero complexity.
+              Three layers. Six capabilities. Every recruiter action covered.
             </p>
           </div>
 
-          {/* Feature Categories */}
+          {/* Pillars */}
           <div className="space-y-16 mb-20">
-            {featureCategories.map((category, categoryIndex) => (
-              <div key={categoryIndex}>
-                <div className="text-center mb-8">
-                  <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">{category.title}</h2>
-                  <p className="text-muted-foreground">{category.description}</p>
+            {pillars.map((pillar, index) => (
+              <div key={index} id={pillar.id} className="max-w-4xl mx-auto scroll-mt-24">
+                {/* Layer badge */}
+                <div className="mb-4">
+                  <span className="text-xs font-medium uppercase tracking-wider text-white/40">
+                    {pillar.layer} Layer
+                  </span>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl mx-auto">
-                  {category.features.map((feature, featureIndex) => (
-                    <div
-                      key={featureIndex}
-                      className="bg-gradient-to-br from-[hsl(var(--vanta-dark))]/90 to-[hsl(var(--vanta-dark))]/70 p-6 rounded-xl border border-white/5 hover:border-primary/30 transition-all duration-300"
-                    >
-                      <div className="w-10 h-10 rounded-lg bg-primary/20 flex items-center justify-center mb-4 text-primary">
-                        {feature.icon}
-                      </div>
-                      <h3 className="text-lg font-semibold text-white mb-2">{feature.title}</h3>
-                      <p className="text-white/70 text-sm">{feature.description}</p>
+
+                <div className="bg-gradient-to-br from-[hsl(var(--vanta-dark))]/90 to-[hsl(var(--vanta-dark))]/70 p-8 md:p-10 rounded-2xl border border-white/5 hover:border-primary/20 transition-all duration-300">
+                  <div className="flex items-start gap-6">
+                    <div className={`w-16 h-16 rounded-xl ${pillar.iconBg} flex items-center justify-center flex-shrink-0`}>
+                      <span className={pillar.iconColor}>{pillar.icon}</span>
                     </div>
-                  ))}
+                    <div className="flex-1">
+                      <h2 className="text-2xl md:text-3xl font-bold text-white mb-2">
+                        {pillar.title}
+                      </h2>
+                      <p className="text-primary text-sm font-medium mb-4">
+                        {pillar.label}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Features */}
+                  <div className="mt-6 space-y-3">
+                    {pillar.features.map((feature, i) => (
+                      <div key={i} className="flex items-start gap-3">
+                        <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                        <span className="text-white/70">{feature}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Outcome */}
+                  <div className="mt-6 pt-6 border-t border-white/5">
+                    <p className="text-white/50 text-sm">
+                      <span className="text-white/70 font-medium">Outcome:</span>{" "}
+                      {pillar.outcome}
+                    </p>
+                  </div>
+
+                  {/* Link to product for context */}
+                  <div className="mt-4">
+                    <a
+                      href="/product"
+                      className="text-primary/60 text-sm hover:text-primary transition-colors inline-flex items-center gap-1"
+                      onClick={(e) => { e.preventDefault(); window.location.href = '/product'; }}
+                    >
+                      See platform context <ArrowRight className="w-3 h-3" />
+                    </a>
+                  </div>
                 </div>
               </div>
             ))}
@@ -210,10 +233,10 @@ export default function FeaturesPage() {
           {/* CTA Section */}
           <div className="text-center py-12">
             <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
-              Ready to Try These Features?
+              Try AI Sourcing
             </h2>
             <p className="text-lg text-muted-foreground mb-8">
-              Start free and explore everything VantaHire has to offer.
+              Start free and explore every capability VantaHire offers.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button
@@ -225,15 +248,19 @@ export default function FeaturesPage() {
                 }}
                 className="rounded-full px-8 py-6 text-lg font-semibold"
               >
-                Try It Free
+                Start Free
+                <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
               <Button
                 variant="outlinePurple"
                 size="lg"
-                onClick={() => window.location.href = '/pricing'}
+                onClick={() => {
+                  trackEvent("cta_click", { location: "features", action: "book_demo" });
+                  window.open('https://cal.com/vantahire/quick-connect', '_blank');
+                }}
                 className="rounded-full px-8 py-6 text-lg"
               >
-                View Pricing
+                Book Demo
               </Button>
             </div>
           </div>

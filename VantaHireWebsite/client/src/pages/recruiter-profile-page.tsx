@@ -37,11 +37,7 @@ export default function RecruiterProfilePage() {
   // Support both numeric ID and publicId in URL
   const recruiterIdOrPublicId = params?.id || null;
 
-  // Fade-in animation on mount
-  useEffect(() => {
-    const timer = setTimeout(() => setIsVisible(true), 200);
-    return () => clearTimeout(timer);
-  }, []);
+  useEffect(() => { setIsVisible(true); }, []);
 
   // Fetch recruiter profile
   const { data: profile, isLoading: profileLoading, error: profileError } = useQuery<RecruiterProfile>({

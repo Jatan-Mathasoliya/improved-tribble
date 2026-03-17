@@ -19,7 +19,7 @@ import { QUEUES, getIoRedisConnection, FitJobData, BatchFitJobData, SummaryBatch
 import { computeFitScore, isFitStale, checkCircuitBreaker, trackBudgetSpending, calculateAiCost } from './lib/aiMatchingEngine';
 import { getUserLimits, canUseFitComputation } from './lib/aiLimits';
 import { hasEnoughCredits, useCredits, getCreditCostForOperation } from './lib/creditService';
-import { generateJDDigest, JDDigest } from './lib/jdDigest';
+import { generateJDDigest, JDDigest, CURRENT_DIGEST_VERSION } from './lib/jdDigest';
 import { extractResumeText, validateResumeText } from './lib/resumeExtractor';
 import { downloadFromGCS } from './gcs-storage';
 import { generateCandidateSummary } from './aiJobAnalyzer';
@@ -27,6 +27,8 @@ import { db } from './db';
 import { candidateResumes, applications, jobs, userAiUsage, users } from '../shared/schema';
 import { eq, and } from 'drizzle-orm';
 import type { BatchFitResult, BatchFitResultItem } from '../shared/schema';
+import { createSourcingRefreshWorker } from './lib/sourcingRefreshWorker';
+import { isSourcingRefreshQueueAvailable } from './lib/sourcingRefreshQueue';
 
 // Summary batch result types
 interface SummaryBatchResultItem {
@@ -168,7 +170,7 @@ async function processOneApplication(
 
   // Get or generate JD digest
   let jdDigest: JDDigest = app.job.jdDigest as JDDigest;
-  if (!jdDigest || !app.job.jdDigestVersion || app.job.jdDigestVersion < 1) {
+  if (!jdDigest || !app.job.jdDigestVersion || app.job.jdDigestVersion < CURRENT_DIGEST_VERSION) {
     jdDigest = await generateJDDigest(app.job.title, app.job.description);
     await db.update(jobs).set({
       jdDigest,
@@ -731,6 +733,19 @@ async function main(): Promise<void> {
     const jobType = job?.name === 'batch-summary' ? 'summary' : 'fit';
     console.error(`[AI Worker] Batch ${jobType} job ${job?.id} failed:`, error.message);
   });
+
+  if (isSourcingRefreshQueueAvailable()) {
+    const sourcingRefreshWorker = createSourcingRefreshWorker(connection);
+    sourcingRefreshWorker.on('completed', (job: Job) => {
+      console.log(`[AI Worker] Sourcing refresh job ${job.id} completed`);
+    });
+    sourcingRefreshWorker.on('failed', (job: Job | undefined, error: Error) => {
+      console.error(`[AI Worker] Sourcing refresh job ${job?.id} failed:`, error.message);
+    });
+    console.log('[AI Worker] Sourcing refresh worker enabled');
+  } else {
+    console.log('[AI Worker] Sourcing refresh worker disabled');
+  }
 
   console.log('[AI Worker] Workers started, waiting for jobs...');
 }

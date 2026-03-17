@@ -46,19 +46,34 @@ interface PlanFeature {
   business: boolean | string;
 }
 
-// Static features (dynamic AI values are added in component)
+// Static features organized by capability area (per PRICING.md)
 const staticFeatures: PlanFeature[] = [
-  { name: "Candidate management", free: true, pro: true, business: true },
-  { name: "Application tracking", free: true, pro: true, business: true },
-  { name: "Email notifications", free: true, pro: true, business: true },
-  { name: "Co-recruiter sharing", free: true, pro: true, business: true },
-  { name: "Hiring manager access", free: true, pro: true, business: true },
-  { name: "Custom forms", free: true, pro: true, business: true },
-  { name: "Client shortlists", free: true, pro: true, business: true },
-  { name: "Advanced analytics", free: false, pro: true, business: true },
+  // Jobs & Sourcing
+  { name: "Talent Search (natural language)", free: true, pro: true, business: true },
+  { name: "Fit scoring + skill breakdowns", free: true, pro: true, business: true },
+  { name: "Identity confidence badges", free: true, pro: true, business: true },
+  // Pipeline
+  { name: "Kanban pipeline per job", free: true, pro: true, business: true },
+  { name: "AI application screening", free: true, pro: true, business: true },
+  { name: "Bulk pipeline actions", free: false, pro: true, business: true },
+  { name: "Stage-based automation", free: false, pro: true, business: true },
+  { name: "Stale candidate alerts", free: false, pro: true, business: true },
+  // Outreach
+  { name: "Email outreach + templates", free: true, pro: true, business: true },
+  { name: "WhatsApp outreach (Cloud API)", free: false, pro: true, business: true },
+  { name: "Automated stage triggers", free: false, pro: true, business: true },
+  { name: "Message audit trail", free: false, pro: true, business: true },
+  // Collaboration
+  { name: "Client Feedback Portal", free: false, pro: true, business: true },
+  { name: "Shareable shortlist links", free: false, pro: true, business: true },
+  // Analytics
+  { name: "Basic job analytics", free: true, pro: true, business: true },
+  { name: "Pipeline velocity + conversion", free: false, pro: true, business: true },
+  { name: "Source performance tracking", free: false, pro: true, business: true },
+  // Admin & Security
   { name: "Priority support", free: false, pro: true, business: true },
-  { name: "Custom domain", free: false, pro: false, business: true },
-  { name: "Dedicated instance", free: false, pro: false, business: true },
+  { name: "SSO / SAML", free: false, pro: false, business: true },
+  { name: "API access", free: false, pro: false, business: true },
   { name: "SLA guarantee", free: false, pro: false, business: true },
 ];
 
@@ -102,11 +117,9 @@ export default function PricingPage() {
 
   // Build features array with dynamic values
   const features: PlanFeature[] = [
-    { name: "Active job postings", free: "5", pro: "Unlimited", business: "Unlimited" },
-    { name: "Team members", free: "1", pro: "Pay per seat", business: "Custom" },
-    { name: "AI credits per seat/month", free: String(freeCredits), pro: String(proCredits), business: "Custom" },
-    { name: "AI analyses per day", free: String(freeDailyLimit), pro: String(proDailyLimit), business: "Custom" },
-    { name: "Credit rollover", free: `${freeRolloverMax.toLocaleString()} max`, pro: `${proRolloverMax.toLocaleString()} max`, business: "Custom" },
+    { name: "Active jobs", free: "5", pro: "Unlimited", business: "Unlimited" },
+    { name: "AI sourcing runs / month", free: String(freeCredits), pro: "Unlimited", business: "Unlimited" },
+    { name: "Team members", free: "1", pro: "Unlimited", business: "Unlimited" },
     ...staticFeatures,
   ];
 
@@ -152,10 +165,7 @@ export default function PricingPage() {
     },
   });
 
-  useEffect(() => {
-    const timer = setTimeout(() => setIsVisible(true), 200);
-    return () => clearTimeout(timer);
-  }, []);
+  useEffect(() => { setIsVisible(true); }, []);
 
   const handleSelectPro = () => {
     if (!proPlan) return;
@@ -300,12 +310,76 @@ export default function PricingPage() {
     <Layout>
       <Helmet>
         <title>Pricing | VantaHire - Simple, Transparent Pricing</title>
-        <meta name="description" content="Choose the perfect plan for your hiring needs. Start free, upgrade when ready. No hidden fees, no surprises." />
+        <meta name="description" content="Simple pricing. No surprises. Start free, upgrade when your team grows. No long contracts. AI sourcing, WhatsApp outreach, client portal, and pipeline management included." />
         <link rel="canonical" href="https://www.vantahire.com/pricing" />
         <meta property="og:title" content="Pricing | VantaHire - Simple, Transparent Pricing" />
-        <meta property="og:description" content="Choose the perfect plan for your hiring needs. Start free, upgrade when ready." />
+        <meta property="og:description" content="Simple pricing. No surprises. Start free, upgrade when your team grows." />
         <meta property="og:url" content="https://www.vantahire.com/pricing" />
         <meta property="og:type" content="website" />
+        <script type="application/ld+json">
+          {JSON.stringify({
+            "@context": "https://schema.org",
+            "@type": "FAQPage",
+            "mainEntity": [
+              {
+                "@type": "Question",
+                "name": "Is there really a free plan?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. No credit card required. No time limit. Start using VantaHire today and upgrade when you need more capacity."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can I switch plans anytime?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. Upgrade or downgrade at any time. No long-term contracts. Month-to-month billing on all plans."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "How does seat-based pricing work?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "You pay per recruiter who actively uses the platform. Team members who only view reports or dashboards do not count as seats."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Do you offer annual discounts?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. Annual billing saves compared to monthly. Toggle between monthly and annual on the pricing page to see the difference."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "What payment methods do you accept?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Credit card and UPI for Free and Growth plans via Cashfree. Enterprise customers can pay by invoice. GST-compliant invoicing available for India."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Is my data safe?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "VantaHire enforces a three-tier privacy model. Your uploaded resumes and candidate data stay private to your organization. Only candidates who opt in are discoverable by other customers."
+                }
+              },
+              {
+                "@type": "Question",
+                "name": "Can I cancel anytime?",
+                "acceptedAnswer": {
+                  "@type": "Answer",
+                  "text": "Yes. Cancel from your account settings. No cancellation fees. Your data remains accessible for 30 days after cancellation."
+                }
+              }
+            ]
+          })}
+        </script>
       </Helmet>
 
       <div className="public-theme min-h-screen bg-background text-foreground">
@@ -319,12 +393,12 @@ export default function PricingPage() {
           <div className="text-center mb-16 pt-8">
             <div className="w-20 h-1.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] rounded-full mx-auto mb-6"></div>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
-              <span className="text-white">Simple, Transparent</span>
+              <span className="text-white">Simple pricing.</span>
               <br />
-              <span className="gradient-text-purple">Pricing</span>
+              <span className="gradient-text-purple">No surprises.</span>
             </h1>
             <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-              Start free and scale as you grow. No hidden fees, no surprises.
+              Start free. Upgrade when your team grows. No long contracts. No hidden fees.
             </p>
           </div>
 
@@ -337,7 +411,7 @@ export default function PricingPage() {
                   <Users className="h-5 w-5 text-white/70" />
                   <h3 className="text-xl font-bold text-white">Free</h3>
                 </div>
-                <p className="text-white/60 text-sm">Perfect for solo recruiters</p>
+                <p className="text-white/60 text-sm">Get started in minutes</p>
               </div>
               <div className="mb-6">
                 <div className="text-4xl font-bold text-white">
@@ -348,23 +422,23 @@ export default function PricingPage() {
               <ul className="space-y-3 mb-6">
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  1 team member
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  {freeCredits} AI credits per month
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  {freeDailyLimit} AI analyses/day
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
                   Up to 5 active jobs
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Basic ATS features
+                  AI sourcing with fit scoring
+                </li>
+                <li className="flex items-center gap-2 text-white/80 text-sm">
+                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  Talent Search (natural language)
+                </li>
+                <li className="flex items-center gap-2 text-white/80 text-sm">
+                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  Kanban pipeline per job
+                </li>
+                <li className="flex items-center gap-2 text-white/80 text-sm">
+                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  Email outreach with templates
                 </li>
               </ul>
               {currentPlan === 'free' && isLoggedIn ? (
@@ -386,41 +460,42 @@ export default function PricingPage() {
               <div className="mb-6">
                 <div className="flex items-center gap-2 mb-2">
                   <Zap className="h-5 w-5 text-primary" />
-                  <h3 className="text-xl font-bold text-white">Pro</h3>
+                  <h3 className="text-xl font-bold text-white">Growth</h3>
                 </div>
-                <p className="text-white/60 text-sm">For growing teams</p>
+                <p className="text-white/60 text-sm">Scale your hiring output</p>
               </div>
               <div className="mb-6">
                 <div className="text-4xl font-bold text-white">
-                  {proPlan ? formatPriceINR(proPlan.pricePerSeatMonthly) : '...'}
+                  {proPlan ? formatPriceINR(proPlan.pricePerSeatMonthly) : '₹1,999'}
                   <span className="text-base font-normal text-white/50">/seat/month</span>
                 </div>
-                <p className="text-xs text-primary mt-1">Save 17% with annual billing</p>
+                <p className="text-xs text-white/50 mt-1">+ applicable taxes | Save with annual billing</p>
               </div>
+              <p className="text-xs text-white/50 mb-4">Everything in Free, plus:</p>
               <ul className="space-y-3 mb-6">
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Team collaboration features
+                  Unlimited active jobs + AI sourcing
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  {proCredits} AI credits per seat/month
+                  WhatsApp outreach (Cloud API)
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  {proDailyLimit} AI analyses/day
+                  Client Feedback Portal
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Unlimited active jobs
+                  Stage-based automation triggers
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Advanced analytics
+                  Pipeline velocity + analytics
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Priority support
+                  Unlimited team members
                 </li>
               </ul>
               {isPro ? (
@@ -429,7 +504,7 @@ export default function PricingPage() {
                 </Button>
               ) : (
                 <Button variant="gold" className="w-full" onClick={handleSelectPro}>
-                  Upgrade to Pro
+                  Upgrade to Growth
                   <ArrowRight className="h-4 w-4 ml-2" />
                 </Button>
               )}
@@ -440,26 +515,27 @@ export default function PricingPage() {
               <div className="mb-6">
                 <div className="flex items-center gap-2 mb-2">
                   <Building2 className="h-5 w-5 text-white/70" />
-                  <h3 className="text-xl font-bold text-white">Business</h3>
+                  <h3 className="text-xl font-bold text-white">Enterprise</h3>
                 </div>
-                <p className="text-white/60 text-sm">For large organizations</p>
+                <p className="text-white/60 text-sm">Custom fit for large teams</p>
               </div>
               <div className="mb-6">
                 <div className="text-4xl font-bold text-white">Custom</div>
                 <p className="text-xs text-white/50 mt-1">Tailored to your needs</p>
               </div>
+              <p className="text-xs text-white/50 mb-4">Everything in Growth, plus:</p>
               <ul className="space-y-3 mb-6">
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Dedicated instance
+                  Dedicated account manager
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Custom AI credit allocation
+                  SSO / SAML authentication
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Custom domain
+                  API access + custom integrations
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
@@ -467,7 +543,7 @@ export default function PricingPage() {
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Dedicated support
+                  Invoice billing (GST-compliant)
                 </li>
               </ul>
               <Button variant="outlinePurple" className="w-full" onClick={handleContactSales}>
@@ -478,15 +554,15 @@ export default function PricingPage() {
 
           {/* Feature Comparison */}
           <div className="mb-20 max-w-5xl mx-auto">
-            <h2 className="text-2xl md:text-3xl font-bold text-center text-white mb-8">Feature Comparison</h2>
+            <h2 className="text-2xl md:text-3xl font-bold text-center text-white mb-8">Compare plans side by side</h2>
             <div className="overflow-x-auto rounded-xl border border-white/10">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-white/10 bg-white/5">
                     <th className="text-left py-4 px-4 font-medium text-white">Feature</th>
                     <th className="py-4 px-4 font-medium text-center w-32 text-white">Free</th>
-                    <th className="py-4 px-4 font-medium text-center w-32 bg-primary/10 text-white">Pro</th>
-                    <th className="py-4 px-4 font-medium text-center w-32 text-white">Business</th>
+                    <th className="py-4 px-4 font-medium text-center w-32 bg-primary/10 text-white">Growth</th>
+                    <th className="py-4 px-4 font-medium text-center w-32 text-white">Enterprise</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -505,45 +581,33 @@ export default function PricingPage() {
 
           {/* FAQ Section */}
           <div className="max-w-3xl mx-auto mb-16">
-            <h2 className="text-2xl md:text-3xl font-bold text-center text-white mb-8">Frequently Asked Questions</h2>
+            <h2 className="text-2xl md:text-3xl font-bold text-center text-white mb-8">Pricing questions, answered.</h2>
             <div className="space-y-6">
-              <div className="bg-gradient-to-br from-[hsl(var(--vanta-dark))]/90 to-[hsl(var(--vanta-dark))]/70 p-6 rounded-xl border border-white/10">
-                <h3 className="font-semibold text-white mb-2">What are AI credits?</h3>
-                <p className="text-white/70">
-                  AI credits are used for AI-powered features like job description generation,
-                  resume analysis, and candidate matching. Each AI operation consumes credits.
-                </p>
-              </div>
-              <div className="bg-gradient-to-br from-[hsl(var(--vanta-dark))]/90 to-[hsl(var(--vanta-dark))]/70 p-6 rounded-xl border border-white/10">
-                <h3 className="font-semibold text-white mb-2">Can I change my plan anytime?</h3>
-                <p className="text-white/70">
-                  Yes! You can upgrade at any time and the change takes effect immediately with prorated billing.
-                  Downgrades take effect at the end of your current billing period.
-                </p>
-              </div>
-              <div className="bg-gradient-to-br from-[hsl(var(--vanta-dark))]/90 to-[hsl(var(--vanta-dark))]/70 p-6 rounded-xl border border-white/10">
-                <h3 className="font-semibold text-white mb-2">What payment methods do you accept?</h3>
-                <p className="text-white/70">
-                  We accept UPI, credit/debit cards, and net banking through our secure payment partner Cashfree.
-                </p>
-              </div>
-              <div className="bg-gradient-to-br from-[hsl(var(--vanta-dark))]/90 to-[hsl(var(--vanta-dark))]/70 p-6 rounded-xl border border-white/10">
-                <h3 className="font-semibold text-white mb-2">Do you offer refunds?</h3>
-                <p className="text-white/70">
-                  We offer a 7-day money-back guarantee for new Pro subscriptions.
-                  Contact support within 7 days of your first payment for a full refund.
-                </p>
-              </div>
+              {[
+                { q: "Is there really a free plan?", a: "Yes. No credit card required. No time limit. Start using VantaHire today and upgrade when you need more capacity." },
+                { q: "Can I switch plans anytime?", a: "Yes. Upgrade or downgrade at any time. No long-term contracts. Month-to-month billing on all plans." },
+                { q: "How does seat-based pricing work?", a: "You pay per recruiter who actively uses the platform. Team members who only view reports or dashboards do not count as seats." },
+                { q: "Do you offer annual discounts?", a: "Yes. Annual billing saves compared to monthly. Toggle between monthly and annual above to see the difference." },
+                { q: "What payment methods do you accept?", a: "Credit card and UPI for Free and Growth plans via Cashfree. Enterprise customers can pay by invoice. GST-compliant invoicing available for India." },
+                { q: "What happens when I hit my Free plan limits?", a: "You will be notified before you reach your limit. No disruption to active jobs or candidates. Upgrade to Growth to remove limits." },
+                { q: "Is my data safe?", a: "VantaHire enforces a three-tier privacy model. Your uploaded resumes and candidate data stay private to your organization. Only candidates who opt in are discoverable by other customers." },
+                { q: "Can I cancel anytime?", a: "Yes. Cancel from your account settings. No cancellation fees. Your data remains accessible for 30 days after cancellation." },
+              ].map((faq, i) => (
+                <div key={i} className="bg-gradient-to-br from-[hsl(var(--vanta-dark))]/90 to-[hsl(var(--vanta-dark))]/70 p-6 rounded-xl border border-white/10">
+                  <h3 className="font-semibold text-white mb-2">{faq.q}</h3>
+                  <p className="text-white/70">{faq.a}</p>
+                </div>
+              ))}
             </div>
           </div>
 
           {/* CTA Section */}
           <div className="text-center py-12">
             <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
-              Ready to Transform Your Hiring?
+              Start hiring with the right plan.
             </h2>
             <p className="text-lg text-muted-foreground mb-8">
-              Start free and experience the power of VantaHire.
+              Every plan includes AI sourcing, fit scoring, and a recruiter-grade pipeline. Pick the one that fits your team today.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button
@@ -552,7 +616,7 @@ export default function PricingPage() {
                 onClick={() => setLocation('/recruiter-auth')}
                 className="rounded-full px-8 py-6 text-lg font-semibold"
               >
-                Start Free Trial
+                Start Free
               </Button>
               <Button
                 variant="outlinePurple"
@@ -571,7 +635,7 @@ export default function PricingPage() {
       <Dialog open={checkoutDialogOpen} onOpenChange={setCheckoutDialogOpen}>
         <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Upgrade to Pro</DialogTitle>
+            <DialogTitle>Upgrade to Growth</DialogTitle>
             <DialogDescription>
               {checkoutMode === 'public'
                 ? "Enter your details to get started."

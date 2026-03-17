@@ -3,12 +3,12 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { AuthProvider } from "@/hooks/use-auth";
+import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import { CookieConsent, AnalyticsOnConsent } from "@/components/CookieConsent";
-import { lazy, Suspense } from "react";
+import React, { lazy, Suspense } from "react";
 
 const AuthPage = lazy(() => import("@/pages/auth-page"));
 const RecruiterAuth = lazy(() => import("@/pages/recruiter-auth"));
@@ -35,6 +35,8 @@ const ApplicationManagementPage = lazy(() => import("@/pages/application-managem
 const JobEditPage = lazy(() => import("@/pages/job-edit-page"));
 const JobPipelinePage = lazy(() => import("@/pages/job-pipeline-page"));
 const JobAnalyticsPage = lazy(() => import("@/pages/job-analytics-page"));
+const JobSourcingPage = lazy(() => import("@/pages/job-sourcing-page"));
+const BulkResumeImportPage = lazy(() => import("@/pages/bulk-resume-import-page"));
 const CandidateDashboard = lazy(() => import("@/pages/candidate-dashboard"));
 const JobAnalyticsDashboard = lazy(() => import("@/pages/job-analytics-dashboard"));
 const RecruiterDashboard = lazy(() => import("@/pages/recruiter-dashboard"));
@@ -84,8 +86,8 @@ const AboutPage = lazy(() => import("@/pages/about-page"));
 const DevUIGallery = import.meta.env.DEV
   ? lazy(() => import("@/pages/dev-ui-gallery"))
   : null;
-import { TourProvider } from "@/components/TourProvider";
-import { TourLauncher } from "@/components/TourLauncher";
+const TourProvider = lazy(() => import("@/components/TourProvider").then(m => ({ default: m.TourProvider })));
+const TourLauncher = lazy(() => import("@/components/TourLauncher").then(m => ({ default: m.TourLauncher })));
 
 function Router() {
   return (
@@ -122,6 +124,8 @@ function Router() {
       <ProtectedRoute path="/jobs/:id/edit" component={JobEditPage} requiredRole={['recruiter', 'super_admin']} />
       <ProtectedRoute path="/jobs/:id/pipeline" component={JobPipelinePage} requiredRole={['recruiter', 'super_admin']} />
       <ProtectedRoute path="/jobs/:id/analytics" component={JobAnalyticsPage} requiredRole={['recruiter', 'super_admin']} />
+      <ProtectedRoute path="/jobs/:id/sourcing" component={JobSourcingPage} requiredRole={['recruiter', 'super_admin']} />
+      <ProtectedRoute path="/jobs/:id/bulk-import" component={BulkResumeImportPage} requiredRole={['recruiter', 'super_admin']} />
       <Route path="/jobs/:id" component={JobDetailsPage} />
       <ProtectedRoute path="/my-dashboard" component={CandidateDashboard} requiredRole={['candidate']} />
       <ProtectedRoute path="/recruiter-dashboard" component={RecruiterDashboard} requiredRole={['recruiter', 'super_admin']} />
@@ -174,12 +178,26 @@ function Router() {
   );
 }
 
+/** Wraps children in TourProvider only when user is authenticated */
+function AuthenticatedTours({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  if (!user) return <>{children}</>;
+  return (
+    <Suspense fallback={null}>
+      <TourProvider>
+        {children}
+        <TourLauncher />
+      </TourProvider>
+    </Suspense>
+  );
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
-          <TourProvider>
+          <AuthenticatedTours>
             <Toaster />
             {/* Inject analytics only after consent */}
             <AnalyticsOnConsent />
@@ -187,8 +205,7 @@ function App() {
             <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
               <Router />
             </Suspense>
-            <TourLauncher />
-          </TourProvider>
+          </AuthenticatedTours>
         </TooltipProvider>
       </AuthProvider>
     </QueryClientProvider>

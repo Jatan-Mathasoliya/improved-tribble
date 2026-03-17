@@ -46,11 +46,7 @@ export default function JobsPage() {
   const [sortBy, setSortBy] = useState<string>(searchParams.get("sortBy") || "recent");
   const [isVisible, setIsVisible] = useState(false);
 
-  // Fade-in animation on mount
-  useEffect(() => {
-    const timer = setTimeout(() => setIsVisible(true), 200);
-    return () => clearTimeout(timer);
-  }, []);
+  useEffect(() => { setIsVisible(true); }, []);
 
   // Fetch AI feature flag (standardized endpoint)
   const { data: aiFeatures } = useQuery<{ resumeAdvisor: boolean; fitScoring: boolean }>({

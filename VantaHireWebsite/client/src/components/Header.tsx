@@ -85,6 +85,8 @@ const Header = () => {
           <img
             src={vantahireLogo}
             alt="VantaHire"
+            width={40}
+            height={40}
             className="h-10 w-auto transition-transform duration-300 group-hover:scale-105"
           />
           <span className="text-xl font-bold gradient-text-mixed hidden sm:inline">VantaHire</span>

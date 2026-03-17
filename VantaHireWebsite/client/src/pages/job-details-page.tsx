@@ -50,11 +50,7 @@ export default function JobDetailsPage() {
   // Support both numeric ID and slug in URL
   const jobIdOrSlug = params?.id || null;
 
-  // Fade-in animation on mount
-  useEffect(() => {
-    const timer = setTimeout(() => setIsVisible(true), 200);
-    return () => clearTimeout(timer);
-  }, []);
+  useEffect(() => { setIsVisible(true); }, []);
 
   // Extended type for job with client data for JSON-LD
   interface JobWithExtras extends Job {

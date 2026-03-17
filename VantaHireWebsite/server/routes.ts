@@ -2,7 +2,7 @@ import express, { type Express, type Request, type Response, type NextFunction }
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { db } from "./db";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, or, gt, isNull, sql } from "drizzle-orm";
 import { insertContactSchema, jobs, users, organizationMembers, hiringManagerInvitations } from "@shared/schema";
 import { z } from "zod";
 import { getEmailService } from "./simpleEmailService";
@@ -18,6 +18,7 @@ import { registerAdminRoutes } from "./admin.routes";
 import { registerClientsRoutes } from "./clients.routes";
 import { registerJobsRoutes } from "./jobs.routes";
 import { registerApplicationsRoutes } from "./applications.routes";
+import { registerBulkResumeImportRoutes } from "./bulkResumeImport.routes";
 import { registerCommunicationsRoutes } from "./communications.routes";
 import { registerWhatsAppRoutes } from "./whatsapp.routes";
 import { registerResumeRoutes } from "./resume.routes";
@@ -31,6 +32,9 @@ import { registerSubscriptionRoutes } from "./subscription.routes";
 import { registerBillingRoutes } from "./billing.routes";
 import { registerAdminSubscriptionRoutes } from "./admin-subscription.routes";
 import { registerCashfreeWebhook } from "./webhooks/cashfree.webhook";
+import { registerSignalWebhook } from "./webhooks/signal.webhook";
+import { registerSignalRoutes } from "./signal.routes";
+import { registerCandidateSemanticRoutes } from "./candidates.semantic.routes";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup security middleware with environment-aware CSP
@@ -147,11 +151,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return;
       }
 
-      // Query only approved and active jobs (using typed columns)
+      // Query only approved, active, and non-expired jobs
       const activeJobs = await db.query.jobs.findMany({
         where: and(
           eq(jobs.isActive, true),
-          eq(jobs.status, 'approved')
+          eq(jobs.status, 'approved'),
+          or(isNull(jobs.expiresAt), gt(jobs.expiresAt, new Date()))
         ),
         columns: {
           id: true,
@@ -163,7 +168,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         limit: 50000, // Google sitemap limit
       });
 
-      const baseUrl = process.env.BASE_URL || 'https://www.vantahire.com';
+      const baseUrl = (process.env.BASE_URL || 'https://www.vantahire.com').replace(/\/$/, '');
       const sitemapXML = generateJobsSitemapXML(activeJobs, baseUrl);
 
       res.header('Content-Type', 'application/xml');
@@ -433,6 +438,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Register applications routes (applications, pipeline, candidates, profiles)
   registerApplicationsRoutes(app, doubleCsrfProtection, upload);
 
+  // Register bulk resume import routes (staging/review/finalize flow)
+  registerBulkResumeImportRoutes(app, doubleCsrfProtection, upload);
+
   // Register communications routes (email templates, sending, AI drafts)
   registerCommunicationsRoutes(app, doubleCsrfProtection);
 
@@ -471,6 +479,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Register Cashfree webhook (payment callbacks)
   registerCashfreeWebhook(app);
+
+  // Register Signal webhook (sourcing callbacks — no CSRF, uses JWT auth)
+  registerSignalWebhook(app);
+
+  // Register Signal sourcing routes (recruiter-facing, with CSRF)
+  registerSignalRoutes(app, doubleCsrfProtection);
+
+  // Register candidate semantic search routes (ActiveKG-powered, with CSRF)
+  registerCandidateSemanticRoutes(app, doubleCsrfProtection);
 
   // Register AI matching routes (resume library + fit scoring)
   registerAIRoutes(app);

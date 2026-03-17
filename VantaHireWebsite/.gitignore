@@ -37,3 +37,6 @@ cookies.txt
 !client/src/assets/*.png
 screen/
 Screenshot*
+
+# Windows Zone.Identifier NTFS metadata
+*:Zone.Identifier
