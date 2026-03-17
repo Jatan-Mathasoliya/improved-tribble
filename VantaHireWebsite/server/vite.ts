@@ -654,7 +654,9 @@ export async function serveStatic(app: Express) {
   // fall through to index.html if the file doesn't exist
   app.use("*", async (req, res) => {
     res.setHeader('Cache-Control', 'no-cache, must-revalidate');
-    const statusCode = isKnownRoute(req.path) ? 200 : 404;
+    // Use originalUrl (not req.path which may be '/' in app.use('*') context)
+    const routePath = (req.originalUrl.split('?')[0] ?? '/').replace(/\/+$/, '') || '/';
+    const statusCode = isKnownRoute(routePath) ? 200 : 404;
     // Read file and send with explicit status (sendFile overrides status to 200)
     const html = await fs.promises.readFile(path.resolve(distPath, "index.html"), "utf-8");
     res.status(statusCode).setHeader('Content-Type', 'text/html').send(html);
