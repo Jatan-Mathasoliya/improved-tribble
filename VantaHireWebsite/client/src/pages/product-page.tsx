@@ -155,7 +155,7 @@ export default function ProductPage() {
               },
               {
                 title: "Outreach Layer",
-                items: ["Email (Mailgun)", "WhatsApp (Cloud API)", "Stage-Based Automation", "Template Library"],
+                items: ["Email Outreach", "WhatsApp (Cloud API)", "Stage-Based Automation", "Template Library"],
                 color: "from-green-500/20 to-green-500/5",
                 borderColor: "border-green-500/30"
               },
