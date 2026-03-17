@@ -19,6 +19,17 @@ export function log(message: string, source = "express") {
 }
 
 /**
+ * Detect crawler/bot user agents that benefit from SSR content.
+ * Real users get fast CSR (no hydration cost); bots get full SSR for indexing.
+ */
+const BOT_UA_PATTERN = /googlebot|bingbot|yandexbot|duckduckbot|slurp|baiduspider|facebookexternalhit|linkedinbot|twitterbot|applebot|semrushbot|ahrefsbot|mj12bot|dotbot|petalbot|bytespider|gptbot|claudebot|perplexitybot|chatgpt-user|ia_archiver|archive\.org_bot/i;
+
+function isCrawler(req: express.Request): boolean {
+  const ua = req.headers['user-agent'] || '';
+  return BOT_UA_PATTERN.test(ua);
+}
+
+/**
  * Inject SSR-rendered HTML into the root div.
  * Adds data-ssr attribute so the client knows to hydrate instead of full render.
  */
@@ -161,9 +172,9 @@ export async function setupVite(app: Express, server: Server) {
         template = upsertMetaTag(template, 'name', 'twitter:image', `${baseUrl}/twitter-image.jpg`);
       }
 
-      // SSR body render for public routes (dev mode)
+      // SSR body render for public routes (dev mode) — only for crawlers
       const isSSRRoute = SSR_ROUTES.has(url) || url.startsWith('/jobs/') || url.startsWith('/recruiters/');
-      if (isSSRRoute) {
+      if (isSSRRoute && isCrawler(req)) {
         try {
           const ssrModule = await vite.ssrLoadModule('/src/entry-server.tsx');
           const { html: ssrHtml } = ssrModule.render(url);
@@ -369,8 +380,9 @@ export async function serveStatic(app: Express) {
       html = upsertMetaTag(html, 'name', 'twitter:description', pageMeta.description);
       html = upsertMetaTag(html, 'name', 'twitter:image', `${baseUrl}/twitter-image.jpg`);
 
-      // SSR body render — inject React-rendered HTML for crawlers
-      if (ssrRender) {
+      // SSR body render — only for crawlers (avoids hydration cost for real users)
+      const bot = isCrawler(req);
+      if (ssrRender && bot) {
         try {
           const { html: ssrHtml } = ssrRender(req.path);
           if (ssrHtml) {
@@ -383,7 +395,8 @@ export async function serveStatic(app: Express) {
 
       res.setHeader('Content-Type', 'text/html');
       res.setHeader('Cache-Control', 'no-store, must-revalidate');
-      res.setHeader('X-SSR-Status', ssrRender ? 'enabled' : 'disabled');
+      res.setHeader('X-SSR-Status', ssrRender ? (bot ? 'active' : 'bot-only') : 'disabled');
+      res.setHeader('Vary', 'User-Agent');
       res.send(html);
     } catch (error) {
       console.error('[SSR Meta] Error injecting marketing page meta:', error);
@@ -500,8 +513,9 @@ export async function serveStatic(app: Express) {
         html = injectJsonLd(html, jsonLd, 'jobposting');
       }
 
-      // SSR body render — inject React-rendered job detail page for crawlers
-      if (ssrRender) {
+      // SSR body render — only for crawlers (avoids hydration cost for real users)
+      const bot = isCrawler(req);
+      if (ssrRender && bot) {
         try {
           // Pre-populate query cache with the job data we already fetched
           const initialData: Record<string, unknown> = {
@@ -519,6 +533,7 @@ export async function serveStatic(app: Express) {
       // Serve the modified HTML
       res.setHeader('Content-Type', 'text/html');
       res.setHeader('Cache-Control', 'no-store, must-revalidate');
+      res.setHeader('Vary', 'User-Agent');
       res.send(html);
     } catch (error) {
       console.error('[SSR JSON-LD] Error injecting job schema:', error);
