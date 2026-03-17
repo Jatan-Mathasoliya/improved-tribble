@@ -1,17 +1,21 @@
-import { HelpCircle, MousePointerClick, Boxes, ArrowRight } from "lucide-react";
+import { Clock, Shuffle, Search, UserX, ArrowRight } from "lucide-react";
 
 const painPoints = [
   {
-    icon: <HelpCircle className="w-6 h-6 text-red-400" />,
-    text: "No clear daily starting point — you open it and wonder where to begin"
+    icon: <Search className="w-6 h-6 text-red-400" />,
+    text: "Spending hours searching LinkedIn and writing Boolean queries"
   },
   {
-    icon: <MousePointerClick className="w-6 h-6 text-red-400" />,
-    text: "Too many clicks for simple actions — tools slow you down instead of speeding you up"
+    icon: <Shuffle className="w-6 h-6 text-red-400" />,
+    text: "Switching between tools — ATS, sourcing platform, outreach tool, spreadsheets"
   },
   {
-    icon: <Boxes className="w-6 h-6 text-red-400" />,
-    text: "Built for complexity, not clarity — workflows designed for enterprises, not recruiters"
+    icon: <Clock className="w-6 h-6 text-red-400" />,
+    text: "Waiting days for client feedback buried in email chains"
+  },
+  {
+    icon: <UserX className="w-6 h-6 text-red-400" />,
+    text: "Losing good candidates because you responded too slowly"
   }
 ];
 
@@ -22,7 +26,7 @@ const PainPoints = () => {
         <div className="max-w-3xl mx-auto">
           {/* Header */}
           <h2 className="text-3xl md:text-4xl font-bold text-white mb-12 text-center">
-            Why Recruiters Hate Their ATS
+            Recruiting today is broken.
           </h2>
 
           {/* Pain Points List */}
@@ -41,7 +45,7 @@ const PainPoints = () => {
 
             {/* Transition */}
             <p className="text-[var(--text-muted)] mb-6">
-              The result? Recruiters spend more time managing the ATS than recruiting.
+              The result: slow hiring, lost candidates, and recruiter burnout.
             </p>
 
             {/* Contrast */}
@@ -51,7 +55,7 @@ const PainPoints = () => {
               onClick={(e) => { e.preventDefault(); window.location.href = '/product'; }}
             >
               <ArrowRight className="w-6 h-6 text-primary" />
-              <span className="gradient-text-purple">We built VantaHire to give you that time back.</span>
+              <span className="gradient-text-purple">See how VantaHire fixes this.</span>
             </a>
           </div>
         </div>

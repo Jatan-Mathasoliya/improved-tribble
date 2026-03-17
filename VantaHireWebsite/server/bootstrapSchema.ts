@@ -1283,8 +1283,8 @@ export async function ensureAtsSchema(): Promise<void> {
     INSERT INTO subscription_plans (name, display_name, description, price_per_seat_monthly, price_per_seat_annual, ai_credits_per_seat_monthly, features, sort_order)
     VALUES
       ('free', 'Free', 'Basic ATS features for small teams', 0, 0, 5, '{"basicAts":true,"jobPosting":true,"applicationManagement":true,"aiMatching":false,"aiContent":false,"advancedAnalytics":false,"customBranding":false,"apiAccess":false,"prioritySupport":false}'::jsonb, 0),
-      ('pro', 'Pro', 'Full-featured ATS with AI capabilities', 99900, 999900, 600, '{"basicAts":true,"jobPosting":true,"applicationManagement":true,"aiMatching":true,"aiContent":true,"advancedAnalytics":true,"customBranding":true,"apiAccess":false,"prioritySupport":true}'::jsonb, 1),
-      ('business', 'Business', 'Enterprise-grade features and support', 0, 0, 1000, '{"basicAts":true,"jobPosting":true,"applicationManagement":true,"aiMatching":true,"aiContent":true,"advancedAnalytics":true,"customBranding":true,"apiAccess":true,"prioritySupport":true}'::jsonb, 2)
+      ('pro', 'Growth', 'Scale your hiring output', 199900, 1999000, 600, '{"basicAts":true,"jobPosting":true,"applicationManagement":true,"aiMatching":true,"aiContent":true,"advancedAnalytics":true,"customBranding":true,"apiAccess":false,"prioritySupport":true}'::jsonb, 1),
+      ('business', 'Enterprise', 'Custom fit for large teams', 0, 0, 1000, '{"basicAts":true,"jobPosting":true,"applicationManagement":true,"aiMatching":true,"aiContent":true,"advancedAnalytics":true,"customBranding":true,"apiAccess":true,"prioritySupport":true}'::jsonb, 2)
     ON CONFLICT (name) DO UPDATE SET
       display_name = EXCLUDED.display_name,
       description = EXCLUDED.description,

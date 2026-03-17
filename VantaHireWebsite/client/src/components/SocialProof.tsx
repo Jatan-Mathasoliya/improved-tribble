@@ -23,7 +23,7 @@ const SocialProof = () => {
           {/* Section Header */}
           <div className="text-center mb-12">
             <h2 className="text-2xl md:text-3xl font-bold text-white mb-3">
-              Built Different. Built With You.
+              Trusted by recruiting teams who source.
             </h2>
             <p className="text-[var(--text-muted)]">
               Hear from recruiters who made the switch.

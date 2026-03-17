@@ -2,47 +2,90 @@ import { useState, useEffect } from "react";
 import Layout from "@/components/Layout";
 import { Helmet } from "react-helmet-async";
 import { Button } from "@/components/ui/button";
-import { Brain, ListChecks, Kanban, Users, ArrowRight, Check } from "lucide-react";
+import { Database, Search, Kanban, MessageSquare, Users, Shield, ArrowRight, Check } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
 
-const features = [
+const sections = [
   {
-    icon: <Brain className="w-8 h-8" />,
-    title: "Flexible Screening",
-    description: "Manual review when you need control. AI screening when volume demands speed. Your call."
+    icon: <Search className="w-8 h-8" />,
+    title: "AI finds your candidates. You choose who to call.",
+    description: "When you click \"Find Candidates,\" VantaHire's sourcing engine goes to work.",
+    details: [
+      "Job digest — the platform reads your JD and extracts key requirements",
+      "Pool scan — your existing talent pool is searched first",
+      "Web discovery — AI searches the web for net-new candidates who match",
+      "Fit scoring — every candidate receives a score (0-100) broken down by skill match, seniority, location, and freshness",
+      "Tiering — results split into Best Matches and Broader Pool",
+      "Delivery — a ranked shortlist appears in minutes"
+    ],
+    cta: "Try AI Sourcing",
+    anchor: "ai-sourcing"
   },
   {
-    icon: <ListChecks className="w-8 h-8" />,
-    title: "Recruiter Dashboard",
-    description: "Clear daily priorities. Open VantaHire and know exactly what needs attention—today."
+    icon: <Database className="w-8 h-8" />,
+    title: "Your talent library compounds with every hire.",
+    description: "Every resume that enters VantaHire is automatically processed into a semantic knowledge graph.",
+    details: [
+      "Text extraction with AI-powered field parsing",
+      "Sentence-aware chunking into meaningful segments",
+      "Vector embedding into a semantic knowledge graph",
+      "Natural language search — \"Senior backend engineers with Kubernetes experience in Bangalore\" returns ranked results",
+      "Past candidates become searchable and reusable for new roles",
+      "No manual tagging or categorization required"
+    ],
+    anchor: "knowledge-graph"
   },
   {
     icon: <Kanban className="w-8 h-8" />,
-    title: "Job Command Center",
-    description: "Candidates, outreach, scheduling—all centered on the job. No more 12-tab chaos."
+    title: "Track every candidate. Move fast.",
+    description: "The pipeline is a drag-and-drop Kanban board built for speed.",
+    details: [
+      "Custom stages per job — define your own hiring workflow",
+      "Bulk actions — move, email, or archive 20 candidates in one click",
+      "Stage automation — move to \"Interview\" and confirmation fires automatically",
+      "AI-screened applications — inbound candidates scored on arrival",
+      "Stale candidate alerts — candidates sitting too long get flagged"
+    ],
+    anchor: "pipeline"
+  },
+  {
+    icon: <MessageSquare className="w-8 h-8" />,
+    title: "WhatsApp and email. Built in. Not bolted on.",
+    description: "Native outreach inside the ATS. No third-party integrations. No switching tabs.",
+    details: [
+      "Email with variable substitution — candidate name, job title, interview details",
+      "WhatsApp via Cloud API with pre-approved templates and full audit log",
+      "Stage-based triggers — move a candidate and the message fires automatically",
+      "In India and APAC, WhatsApp read rates exceed 90% (industry benchmark)",
+      "Every message logged for compliance"
+    ],
+    anchor: "outreach"
   },
   {
     icon: <Users className="w-8 h-8" />,
-    title: "Leadership Insights",
-    description: "Real-time pipeline health and bottleneck detection—without running reports or chasing updates."
-  }
-];
-
-const steps = [
-  {
-    number: "01",
-    title: "Post Your Job",
-    description: "Create a job posting in minutes. Our AI helps you write compelling descriptions that attract the right candidates."
+    title: "Client feedback in hours, not days.",
+    description: "For staffing agencies, the bottleneck is getting client feedback. VantaHire's Client Portal fixes that.",
+    details: [
+      "Share a curated shortlist via a single link",
+      "No login required for the client",
+      "Structured feedback per candidate: advance, hold, or reject",
+      "Feedback appears in the recruiter's dashboard immediately",
+      "All feedback across all clients and jobs in one place"
+    ],
+    anchor: "client-portal"
   },
   {
-    number: "02",
-    title: "Get Matched Candidates",
-    description: "Our AI scans and scores applications instantly. You get a ranked shortlist of the best fits—no manual screening required."
-  },
-  {
-    number: "03",
-    title: "Hire with Confidence",
-    description: "Move candidates through your pipeline, schedule interviews, and make offers—all from one platform."
+    icon: <Shield className="w-8 h-8" />,
+    title: "Your data stays yours.",
+    description: "VantaHire enforces a three-tier privacy model.",
+    details: [
+      "Private — resumes uploaded by your team, visible only to your organization",
+      "Platform — candidates who opted in to be discoverable across the platform",
+      "Public — web discoveries from LinkedIn, GitHub, and public profiles",
+      "Application history always stays private",
+      "Consent enforced at every layer"
+    ],
+    anchor: "privacy"
   }
 ];
 
@@ -54,17 +97,17 @@ export default function ProductPage() {
   return (
     <Layout>
       <Helmet>
-        <title>Product | VantaHire - The Recruiter-First ATS</title>
-        <meta name="description" content="The ATS designed to remove friction and double your team's efficiency. Human decisions, AI acceleration." />
+        <title>How VantaHire Works | AI Sourcing, Pipeline, Outreach in One Platform</title>
+        <meta name="description" content="Three layers. One platform. AI sourcing engine, recruiter workflow, and candidate memory system — from candidate discovery to client feedback without switching tools." />
         <link rel="canonical" href="https://www.vantahire.com/product" />
-        <meta property="og:title" content="The Recruiter-First ATS That Actually Works" />
-        <meta property="og:description" content="The recruiter-first ATS that removes friction. Built with recruiters, designed for velocity." />
+        <meta property="og:title" content="How VantaHire Works | AI-Native Recruiting Platform" />
+        <meta property="og:description" content="Three layers. One platform. AI sourcing engine, recruiter workflow, and candidate memory system." />
         <meta property="og:url" content="https://www.vantahire.com/product" />
         <meta property="og:type" content="website" />
         <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="twitter:title" content="Product | VantaHire - Recruiter-First ATS" />
-        <meta name="twitter:description" content="The ATS designed to remove friction and double your team's efficiency." />
+        <meta name="twitter:title" content="How VantaHire Works | AI-Native Recruiting Platform" />
+        <meta name="twitter:description" content="Three layers. One platform. From candidate discovery to client feedback without switching tools." />
         <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
         <script type="application/ld+json">
           {JSON.stringify({
@@ -89,107 +132,104 @@ export default function ProductPage() {
           <div className="text-center mb-20 pt-8">
             <div className="w-20 h-1.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] rounded-full mx-auto mb-6"></div>
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold mb-6">
-              <span className="text-white">The Recruiter-First ATS That</span>
+              <span className="text-white">How VantaHire</span>
               <br />
-              <span className="gradient-text-purple">Actually Works</span>
+              <span className="gradient-text-purple">works.</span>
             </h1>
             <p className="text-xl text-white/80 max-w-2xl mx-auto mb-2">
-              Human decisions, AI acceleration.
+              Three layers. One platform.
             </p>
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
-              Track candidates, automate workflows, and hire faster—without the complexity.
+              Every recruiter action — from candidate discovery to client feedback — in a single operating system.
             </p>
-            <Button
-              variant="gold"
-              size="lg"
-              onClick={() => {
-                trackEvent("cta_click", { location: "product", action: "start_free" });
-                window.location.href = '/recruiter-auth';
-              }}
-              className="rounded-full px-8 py-6 text-lg font-semibold"
-            >
-              See the Difference
-              <ArrowRight className="ml-2 w-5 h-5" />
-            </Button>
           </div>
 
-          {/* Platform Features */}
-          <div className="mb-24">
-            <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-4">
-              What Efficiency Looks Like
-            </h2>
-            <p className="text-lg text-muted-foreground text-center mb-12 max-w-2xl mx-auto">
-              Most recruiting systems add features. We remove friction.
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-5xl mx-auto">
-              {features.map((feature, index) => (
-                <div
-                  key={index}
-                  className="bg-gradient-to-br from-[hsl(var(--vanta-dark))]/90 to-[hsl(var(--vanta-dark))]/70 p-8 rounded-2xl border border-white/5 hover:border-primary/30 transition-all duration-300"
-                >
-                  <div className="w-16 h-16 rounded-xl bg-primary/20 flex items-center justify-center mb-6 text-primary">
-                    {feature.icon}
-                  </div>
-                  <h3 className="text-xl font-semibold text-white mb-3">{feature.title}</h3>
-                  <p className="text-white/70 leading-relaxed">{feature.description}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* How It Works */}
-          <div className="mb-24">
-            <h2 className="text-3xl md:text-4xl font-bold text-white text-center mb-4">
-              How It Works
-            </h2>
-            <p className="text-lg text-muted-foreground text-center mb-12 max-w-2xl mx-auto">
-              Three simple steps to better hiring.
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-              {steps.map((step, index) => (
-                <div key={index} className="relative">
-                  <div className="text-6xl font-bold text-primary/20 mb-4">{step.number}</div>
-                  <h3 className="text-xl font-semibold text-white mb-3">{step.title}</h3>
-                  <p className="text-white/70">{step.description}</p>
-                  {index < steps.length - 1 && (
-                    <div className="hidden md:block absolute top-12 right-0 transform translate-x-1/2">
-                      <ArrowRight className="w-6 h-6 text-primary/40" />
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Benefits */}
-          <div className="max-w-4xl mx-auto mb-24">
-            <div className="bg-gradient-to-br from-[hsl(var(--vanta-dark))]/90 to-[hsl(var(--vanta-dark))]/70 p-8 md:p-12 rounded-2xl border border-white/5">
-              <h2 className="text-2xl md:text-3xl font-bold text-white mb-8">Built Different. Built With You.</h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {[
-                  "Designed for 2X recruiter efficiency",
-                  "70% fewer clicks to action",
-                  "Day-1 productivity—no training required",
-                  "One-glance pipeline visibility",
-                  "No per-seat pricing—invite your whole team",
-                  "Built with recruiter feedback from day one"
-                ].map((benefit, index) => (
-                  <div key={index} className="flex items-center gap-3">
-                    <Check className="w-5 h-5 text-primary flex-shrink-0" />
-                    <span className="text-white/80">{benefit}</span>
-                  </div>
-                ))}
+          {/* Three-Layer Overview */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto mb-24">
+            {[
+              {
+                title: "Intelligence Layer",
+                items: ["Resume Knowledge Graph", "AI Sourcing Engine", "Fit Scoring + Identity Resolution", "Talent Search (semantic)"],
+                color: "from-primary/20 to-primary/5",
+                borderColor: "border-primary/30"
+              },
+              {
+                title: "Outreach Layer",
+                items: ["Email (Mailgun)", "WhatsApp (Cloud API)", "Stage-Based Automation", "Template Library"],
+                color: "from-green-500/20 to-green-500/5",
+                borderColor: "border-green-500/30"
+              },
+              {
+                title: "Operations Layer",
+                items: ["Recruiter Dashboard", "Kanban Pipeline", "Client Portal", "Analytics + Reporting"],
+                color: "from-blue-500/20 to-blue-500/5",
+                borderColor: "border-blue-500/30"
+              }
+            ].map((layer, i) => (
+              <div key={i} className={`bg-gradient-to-br ${layer.color} p-6 rounded-xl border ${layer.borderColor}`}>
+                <h3 className="text-lg font-bold text-white mb-4">{layer.title}</h3>
+                <ul className="space-y-2">
+                  {layer.items.map((item, j) => (
+                    <li key={j} className="flex items-center gap-2 text-white/70 text-sm">
+                      <Check className="w-4 h-4 text-white/40 flex-shrink-0" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
               </div>
-            </div>
+            ))}
+          </div>
+
+          {/* Product Sections */}
+          <div className="space-y-20 mb-24">
+            {sections.map((section, index) => (
+              <div key={index} id={section.anchor} className="max-w-4xl mx-auto">
+                <div className="flex items-start gap-6">
+                  <div className="w-16 h-16 rounded-xl bg-primary/20 flex items-center justify-center flex-shrink-0 text-primary">
+                    {section.icon}
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-2xl md:text-3xl font-bold text-white mb-3">
+                      {section.title}
+                    </h2>
+                    <p className="text-lg text-white/70 mb-6">
+                      {section.description}
+                    </p>
+                    <ul className="space-y-3 mb-6">
+                      {section.details.map((detail, i) => (
+                        <li key={i} className="flex items-start gap-3 text-white/60">
+                          <Check className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
+                          <span>{detail}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {section.cta && (
+                      <Button
+                        variant="outlinePurple"
+                        size="sm"
+                        onClick={() => {
+                          trackEvent("cta_click", { location: "product", action: section.anchor });
+                          window.location.href = '/recruiter-auth';
+                        }}
+                        className="rounded-full"
+                      >
+                        {section.cta}
+                        <ArrowRight className="ml-2 w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* CTA Section */}
           <div className="text-center py-12">
             <h2 className="text-2xl md:text-3xl font-bold text-white mb-4">
-              Ready to Recruit Faster?
+              See it in action.
             </h2>
             <p className="text-lg text-muted-foreground mb-8">
-              Remove the friction. Start free. No credit card required.
+              VantaHire replaces the tools you are stitching together today. Start free and run your first sourcing job in minutes.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button
@@ -201,19 +241,19 @@ export default function ProductPage() {
                 }}
                 className="rounded-full px-8 py-6 text-lg font-semibold"
               >
-                Start Recruiting Faster
+                Start Free
                 <ArrowRight className="ml-2 w-5 h-5" />
               </Button>
               <Button
                 variant="outlinePurple"
                 size="lg"
                 onClick={() => {
-                  trackEvent("cta_click", { location: "product", action: "get_walkthrough" });
+                  trackEvent("cta_click", { location: "product", action: "book_demo" });
                   window.open('https://cal.com/vantahire/quick-connect', '_blank');
                 }}
                 className="rounded-full px-8 py-6 text-lg"
               >
-                Get a Walkthrough
+                Book Demo
               </Button>
             </div>
           </div>

@@ -81,23 +81,23 @@ export async function setupVite(app: Express, server: Server) {
   // SSR meta injection for marketing pages (dev mode)
   const MARKETING_PAGES_DEV: Record<string, { title: string; description: string; canonical: string }> = {
     '/': {
-      title: 'VantaHire - Recruiting Velocity, by Design | Recruiter-First ATS',
-      description: 'The recruiter-first ATS designed to remove friction and double your team\'s efficiency. Human decisions, AI acceleration. Built for consulting firms, agencies, and startups.',
+      title: 'VantaHire - Human Decisions, AI Acceleration | AI-Native Recruiting Platform',
+      description: 'The AI-native recruiting platform that helps startups and recruiting firms find, rank, and engage the right candidates faster. AI sourcing, WhatsApp outreach, client portal, and pipeline management in one platform.',
       canonical: 'https://www.vantahire.com/',
     },
     '/product': {
-      title: 'Product | VantaHire - The Recruiter-First ATS',
-      description: 'Explore VantaHire\'s recruiter-first ATS platform. AI-powered candidate matching, Kanban pipeline management, team collaboration, and analytics—all designed for speed.',
+      title: 'How VantaHire Works | AI Sourcing, Pipeline, Outreach in One Platform',
+      description: 'Three layers. One platform. AI sourcing engine, recruiter workflow, and candidate memory system — from candidate discovery to client feedback without switching tools.',
       canonical: 'https://www.vantahire.com/product',
     },
     '/features': {
-      title: 'Features | VantaHire - Everything You Need to Hire Faster',
-      description: 'AI candidate matching, Kanban pipelines, email templates, interview scheduling, analytics dashboard, and team collaboration. All the features recruiters need.',
+      title: 'Features | VantaHire - Six Pillars of AI-Native Recruiting',
+      description: 'Resume Knowledge Graph, AI Candidate Discovery, WhatsApp + Email Outreach, Client Feedback Portal, Recruiter Dashboard, and Job Command Center. All the capabilities recruiters need.',
       canonical: 'https://www.vantahire.com/features',
     },
     '/pricing': {
       title: 'Pricing | VantaHire - Simple, Transparent Pricing',
-      description: 'Start free, scale as you grow. VantaHire offers transparent pricing for recruiting teams of all sizes. No hidden fees, no long-term contracts.',
+      description: 'Simple pricing. No surprises. Start free, upgrade when your team grows. AI sourcing, WhatsApp outreach, client portal, and pipeline management included.',
       canonical: 'https://www.vantahire.com/pricing',
     },
     '/compare': {
@@ -305,23 +305,23 @@ export async function serveStatic(app: Express) {
   // like /brand which has a physical client/public/brand/ directory)
   const MARKETING_PAGES: Record<string, { title: string; description: string; canonical: string }> = {
     '/': {
-      title: 'VantaHire - Recruiting Velocity, by Design | Recruiter-First ATS',
-      description: 'The recruiter-first ATS designed to remove friction and double your team\'s efficiency. Human decisions, AI acceleration. Built for consulting firms, agencies, and startups.',
+      title: 'VantaHire - Human Decisions, AI Acceleration | AI-Native Recruiting Platform',
+      description: 'The AI-native recruiting platform that helps startups and recruiting firms find, rank, and engage the right candidates faster. AI sourcing, WhatsApp outreach, client portal, and pipeline management in one platform.',
       canonical: 'https://www.vantahire.com/',
     },
     '/product': {
-      title: 'Product | VantaHire - The Recruiter-First ATS',
-      description: 'Explore VantaHire\'s recruiter-first ATS platform. AI-powered candidate matching, Kanban pipeline management, team collaboration, and analytics—all designed for speed.',
+      title: 'How VantaHire Works | AI Sourcing, Pipeline, Outreach in One Platform',
+      description: 'Three layers. One platform. AI sourcing engine, recruiter workflow, and candidate memory system — from candidate discovery to client feedback without switching tools.',
       canonical: 'https://www.vantahire.com/product',
     },
     '/features': {
-      title: 'Features | VantaHire - Everything You Need to Hire Faster',
-      description: 'AI candidate matching, Kanban pipelines, email templates, interview scheduling, analytics dashboard, and team collaboration. All the features recruiters need.',
+      title: 'Features | VantaHire - Six Pillars of AI-Native Recruiting',
+      description: 'Resume Knowledge Graph, AI Candidate Discovery, WhatsApp + Email Outreach, Client Feedback Portal, Recruiter Dashboard, and Job Command Center. All the capabilities recruiters need.',
       canonical: 'https://www.vantahire.com/features',
     },
     '/pricing': {
       title: 'Pricing | VantaHire - Simple, Transparent Pricing',
-      description: 'Start free, scale as you grow. VantaHire offers transparent pricing for recruiting teams of all sizes. No hidden fees, no long-term contracts.',
+      description: 'Simple pricing. No surprises. Start free, upgrade when your team grows. AI sourcing, WhatsApp outreach, client portal, and pipeline management included.',
       canonical: 'https://www.vantahire.com/pricing',
     },
     '/compare': {

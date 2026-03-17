@@ -424,43 +424,59 @@ const Layout = ({ children }: LayoutProps) => {
               </>
             ) : (
               <>
-                <a 
-                  href="/#about" 
-                  className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    if (window.location.pathname === '/') {
-                      document.getElementById("about")?.scrollIntoView({ behavior: "smooth" });
-                    } else {
-                      window.location.href = '/#about';
-                    }
-                  }}
+                <a
+                  href="/about"
+                  className={`relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group ${
+                    location === '/about' ? 'text-white font-medium' : 'text-white/70'
+                  }`}
+                  onClick={(e) => { e.preventDefault(); setLocation("/about"); }}
                 >
                   <span className="relative z-10">About</span>
-                  <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
+                  <span className={`absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 ${
+                    location === '/about' ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+                  }`}></span>
                 </a>
-                
+
+                <a
+                  href="/features"
+                  className={`relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group ${
+                    location === '/features' ? 'text-white font-medium' : 'text-white/70'
+                  }`}
+                  onClick={(e) => { e.preventDefault(); setLocation("/features"); }}
+                >
+                  <span className="relative z-10">Features</span>
+                  <span className={`absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 ${
+                    location === '/features' ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+                  }`}></span>
+                </a>
+
+                <a
+                  href="/pricing"
+                  className={`relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group ${
+                    location === '/pricing' ? 'text-white font-medium' : 'text-white/70'
+                  }`}
+                  onClick={(e) => { e.preventDefault(); setLocation("/pricing"); }}
+                >
+                  <span className="relative z-10">Pricing</span>
+                  <span className={`absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 ${
+                    location === '/pricing' ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+                  }`}></span>
+                </a>
+
                 <a
                   href="/jobs"
-                  className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70"
+                  className={`relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group ${
+                    location === '/jobs' ? 'text-white font-medium' : 'text-white/70'
+                  }`}
                   onClick={(e) => { e.preventDefault(); setLocation("/jobs"); }}
                 >
                   <span className="relative z-10 flex items-center gap-2">
                     <Briefcase className="h-4 w-4" />
                     Jobs
                   </span>
-                  <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
-                </a>
-
-                <a
-                  href="/recruiters"
-                  className="relative px-3 py-2 hover:text-white transition-all duration-300 overflow-hidden group text-white/70"
-                  onClick={(e) => { e.preventDefault(); setLocation("/recruiters"); }}
-                >
-                  <span className="relative z-10 flex items-center gap-2">
-                    Browse Recruiters
-                  </span>
-                  <span className="absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 scale-x-0 group-hover:scale-x-100"></span>
+                  <span className={`absolute bottom-0 left-0 h-0.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] w-full transform origin-left transition-transform duration-300 ${
+                    location === '/jobs' ? 'scale-x-100' : 'scale-x-0 group-hover:scale-x-100'
+                  }`}></span>
                 </a>
               </>
             )}
@@ -565,20 +581,26 @@ const Layout = ({ children }: LayoutProps) => {
                 </>
               ) : (
                 <>
-                  <a 
-                    href="/#about" 
+                  <a
+                    href="/about"
                     className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      setIsMenuOpen(false);
-                      if (window.location.pathname === '/') {
-                        document.getElementById("about")?.scrollIntoView({ behavior: "smooth" });
-                      } else {
-                        window.location.href = '/#about';
-                      }
-                    }}
+                    onClick={(e) => { e.preventDefault(); setLocation("/about"); setIsMenuOpen(false); }}
                   >
                     About
+                  </a>
+                  <a
+                    href="/features"
+                    className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
+                    onClick={(e) => { e.preventDefault(); setLocation("/features"); setIsMenuOpen(false); }}
+                  >
+                    Features
+                  </a>
+                  <a
+                    href="/pricing"
+                    className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
+                    onClick={(e) => { e.preventDefault(); setLocation("/pricing"); setIsMenuOpen(false); }}
+                  >
+                    Pricing
                   </a>
                   <a
                     href="/jobs"
@@ -586,13 +608,6 @@ const Layout = ({ children }: LayoutProps) => {
                     onClick={(e) => { e.preventDefault(); setLocation("/jobs"); setIsMenuOpen(false); }}
                   >
                     Jobs
-                  </a>
-                  <a
-                    href="/recruiters"
-                    className="text-xl relative px-2 py-1 text-white transition-all duration-300 border-l-2 pl-4 border-transparent hover:border-[#7B38FB]"
-                    onClick={(e) => { e.preventDefault(); setLocation("/recruiters"); setIsMenuOpen(false); }}
-                  >
-                    Browse Recruiters
                   </a>
                 </>
               )}
