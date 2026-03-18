@@ -467,6 +467,50 @@ export default function OrgBillingPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {creditUsagePercent >= 75 && (
+              <div className={`flex items-start justify-between gap-4 rounded-lg border p-4 ${
+                creditUsagePercent >= 100
+                  ? "border-red-200 bg-red-50"
+                  : creditUsagePercent >= 90
+                    ? "border-amber-200 bg-amber-50"
+                    : "border-yellow-200 bg-yellow-50"
+              }`}>
+                <div className="flex items-start gap-3">
+                  <AlertCircle className={`mt-0.5 h-5 w-5 ${
+                    creditUsagePercent >= 100 ? "text-red-600" : "text-amber-600"
+                  }`} />
+                  <div>
+                    <p className="font-medium">
+                      {creditUsagePercent >= 100
+                        ? "AI credits exhausted"
+                        : `${creditUsagePercent}% of AI credits used`}
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      {isPro
+                        ? "Your organization is close to its shared AI credit limit for this term. Buy more credits if you need more AI usage."
+                        : "Your Free plan is close to its AI credit limit. Upgrade to Growth for more included credits and top-ups."}
+                    </p>
+                  </div>
+                </div>
+                {isOwner && (
+                  isPro ? (
+                    <Button variant="outline" onClick={() => setCreditPackDialogOpen(true)}>
+                      Buy More Credits
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setSelectedPlan(proPlan?.id || null);
+                        setUpgradeDialogOpen(true);
+                      }}
+                    >
+                      Upgrade to Growth
+                    </Button>
+                  )
+                )}
+              </div>
+            )}
             <div>
               <div className="flex justify-between text-sm mb-2">
                 <span>{credits.used} used</span>

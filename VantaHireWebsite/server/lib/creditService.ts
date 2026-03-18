@@ -4,7 +4,10 @@ import {
   organizationCreditTransactions,
   organizationMembers,
   organizationSubscriptions,
+  organizations,
+  subscriptionAlerts,
   userAiUsage,
+  users,
   type OrganizationMember,
   type UserAiUsage,
 } from "@shared/schema";
@@ -19,6 +22,7 @@ import {
   getPlanRateLimitInfo,
   PRO_DAILY_RATE_LIMIT,
 } from "./planConfig";
+import { getEmailService } from "../simpleEmailService";
 
 export interface CreditBalance {
   allocated: number;
@@ -75,6 +79,7 @@ export interface AiCreditExhaustionPayload {
 export { FREE_DAILY_RATE_LIMIT as FREE_AI_DAILY_RATE_LIMIT };
 export { PRO_DAILY_RATE_LIMIT as PRO_AI_DAILY_RATE_LIMIT };
 export { getPlanRateLimitInfo } from "./planConfig";
+export const CREDIT_USAGE_WARNING_THRESHOLDS = [75, 90, 100] as const;
 
 function getCreditPeriodWindow(now: Date = new Date()): { periodStart: Date; periodEnd: Date } {
   const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
@@ -108,6 +113,143 @@ function buildCreditBalance(balance: typeof organizationCreditBalances.$inferSel
     periodStart: balance.periodStart,
     periodEnd: balance.periodEnd,
   };
+}
+
+export function getCrossedCreditUsageThresholds(
+  totalAllocated: number,
+  usedBefore: number,
+  usedAfter: number,
+): number[] {
+  if (totalAllocated <= 0) {
+    return [];
+  }
+
+  const beforeUsagePercent = (usedBefore / totalAllocated) * 100;
+  const afterUsagePercent = (usedAfter / totalAllocated) * 100;
+
+  return CREDIT_USAGE_WARNING_THRESHOLDS.filter((threshold) =>
+    beforeUsagePercent < threshold && afterUsagePercent >= threshold,
+  );
+}
+
+function getCreditWarningAlertType(threshold: number): string {
+  return `credit_usage_${threshold}`;
+}
+
+async function getOrganizationBillingContact(orgId: number): Promise<{
+  organizationName: string;
+  billingEmail: string | null;
+  billingName: string | null;
+} | null> {
+  const org = await db.query.organizations.findFirst({
+    where: eq(organizations.id, orgId),
+  });
+
+  if (!org) {
+    return null;
+  }
+
+  let billingEmail = org.billingContactEmail || null;
+  let billingName = org.billingContactName || null;
+
+  if (!billingEmail) {
+    const owner = await db
+      .select({
+        email: users.username,
+        firstName: users.firstName,
+      })
+      .from(organizationMembers)
+      .innerJoin(users, eq(organizationMembers.userId, users.id))
+      .where(
+        and(
+          eq(organizationMembers.organizationId, orgId),
+          eq(organizationMembers.role, "owner"),
+        ),
+      )
+      .limit(1);
+
+    if (owner.length > 0) {
+      billingEmail = owner[0].email;
+      billingName = billingName || owner[0].firstName || null;
+    }
+  }
+
+  return {
+    organizationName: org.name,
+    billingEmail,
+    billingName,
+  };
+}
+
+async function maybeSendCreditUsageWarning(params: {
+  orgId: number;
+  threshold: number;
+  remainingCredits: number;
+  totalAllocated: number;
+  periodStart: Date | null;
+  periodEnd: Date | null;
+}): Promise<void> {
+  const subscription = await getOrganizationSubscription(params.orgId);
+  if (!subscription) {
+    return;
+  }
+
+  const existingAlert = await db.query.subscriptionAlerts.findFirst({
+    where: and(
+      eq(subscriptionAlerts.subscriptionId, subscription.id),
+      eq(subscriptionAlerts.alertType, getCreditWarningAlertType(params.threshold)),
+      gte(subscriptionAlerts.sentAt, params.periodStart ?? getCreditPeriodWindow().periodStart),
+    ),
+  });
+
+  if (existingAlert) {
+    return;
+  }
+
+  const contact = await getOrganizationBillingContact(params.orgId);
+  const emailService = await getEmailService();
+  if (!contact?.billingEmail || !emailService) {
+    return;
+  }
+
+  const baseUrl = process.env.APP_URL || process.env.BASE_URL || "http://localhost:5001";
+  const isFreePlan = subscription.plan.name === PLAN_FREE;
+  const actionLabel = isFreePlan ? "Upgrade to Growth" : "Buy more credits";
+  const actionUrl = `${baseUrl}${isFreePlan ? "/pricing" : "/org/billing?buy_credits=1"}`;
+  const periodEndLabel = params.periodEnd ? params.periodEnd.toLocaleDateString() : "the end of the current billing term";
+  const subject = `${params.threshold}% of AI credits used - ${contact.organizationName}`;
+  const html = `
+    <h2>AI Credit Usage Alert</h2>
+    <p>Hello${contact.billingName ? ` ${contact.billingName}` : ""},</p>
+    <p><strong>${contact.organizationName}</strong> has used <strong>${params.threshold}%</strong> of its AI credits for the current billing term.</p>
+    <ul>
+      <li><strong>Plan:</strong> ${subscription.plan.displayName}</li>
+      <li><strong>Credits remaining:</strong> ${params.remainingCredits}</li>
+      <li><strong>Current credit pool:</strong> ${params.totalAllocated}</li>
+      <li><strong>Term end:</strong> ${periodEndLabel}</li>
+    </ul>
+    <p>${isFreePlan ? "Upgrade to Growth to continue with a larger AI credit pool." : "Buy more credits from billing if you need more AI usage this term."}</p>
+    <p><a href="${actionUrl}">${actionLabel}</a></p>
+  `;
+  const text = `${contact.organizationName} has used ${params.threshold}% of its AI credits for the current billing term.\nPlan: ${subscription.plan.displayName}\nCredits remaining: ${params.remainingCredits}\nCurrent credit pool: ${params.totalAllocated}\nTerm end: ${periodEndLabel}\n\n${actionLabel}: ${actionUrl}`;
+
+  const sent = await emailService.sendEmail({
+    to: contact.billingEmail,
+    subject,
+    html,
+    text,
+  });
+
+  if (!sent) {
+    return;
+  }
+
+  await db.insert(subscriptionAlerts).values({
+    subscriptionId: subscription.id,
+    alertType: getCreditWarningAlertType(params.threshold),
+    recipientEmail: contact.billingEmail,
+    emailStatus: "sent",
+  });
 }
 
 async function getEffectiveRecurringLimit(
@@ -332,8 +474,7 @@ export async function useCredits(userId: number, amount: number): Promise<{
   }
 
   const { member } = context;
-
-  return db.transaction(async (tx: any) => {
+  const usageResult = await db.transaction(async (tx: any) => {
     const current = await tx.query.organizationCreditBalances.findFirst({
       where: eq(organizationCreditBalances.organizationId, member.organizationId),
     });
@@ -348,6 +489,8 @@ export async function useCredits(userId: number, amount: number): Promise<{
 
     const recurringRemaining = getBalanceRecurringRemaining(current);
     const totalRemaining = recurringRemaining + current.purchasedCredits;
+    const totalAllocated = getBalanceTotalAllocated(current);
+    const usedBefore = getBalanceTotalUsed(current);
 
     if (totalRemaining < amount) {
       return {
@@ -383,8 +526,38 @@ export async function useCredits(userId: number, amount: number): Promise<{
     return {
       success: true,
       remaining: totalRemaining - amount,
+      totalAllocated,
+      usedBefore,
+      periodStart: current.periodStart,
+      periodEnd: current.periodEnd,
     };
   });
+
+  if (usageResult.success) {
+    const crossedThresholds = getCrossedCreditUsageThresholds(
+      usageResult.totalAllocated,
+      usageResult.usedBefore,
+      usageResult.usedBefore + amount,
+    );
+    const highestThreshold = crossedThresholds[crossedThresholds.length - 1];
+
+    if (highestThreshold) {
+      await maybeSendCreditUsageWarning({
+        orgId: member.organizationId,
+        threshold: highestThreshold,
+        remainingCredits: usageResult.remaining,
+        totalAllocated: usageResult.totalAllocated,
+        periodStart: usageResult.periodStart,
+        periodEnd: usageResult.periodEnd,
+      });
+    }
+  }
+
+  return {
+    success: usageResult.success,
+    remaining: usageResult.remaining,
+    message: usageResult.message,
+  };
 }
 
 // Check if user has enough credits
