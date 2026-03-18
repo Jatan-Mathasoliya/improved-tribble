@@ -19,6 +19,48 @@ export interface CreditUsageEntry {
   metadata?: Record<string, any>;
 }
 
+export interface OrgCreditDetails {
+  planAllocation: number;
+  bonusCredits: number;
+  customLimit: number | null;
+  effectiveLimit: number;
+  purchasedCredits: number;
+  rolloverCredits: number;
+  proratedCreditsAddedThisPeriod: number;
+  usedThisPeriod: number;
+  remaining: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+  seatedMembers: number;
+}
+
+export interface OrgCreditLedgerEntry {
+  id: number;
+  type: string;
+  amount: number;
+  createdAt: string;
+  actor: {
+    userId: number | null;
+    name: string | null;
+    email: string | null;
+  };
+  metadata: Record<string, any> | null;
+}
+
+export interface CreditUsageResponse {
+  userHistory: CreditUsageEntry[];
+  orgSummary: {
+    totalAllocated: number;
+    totalUsed: number;
+    totalRemaining: number;
+    includedAllocation: number;
+    purchasedCredits: number;
+    seatedMembers: number;
+  } | null;
+  orgDetails: OrgCreditDetails | null;
+  orgLedger: OrgCreditLedgerEntry[];
+}
+
 // API functions
 async function fetchCreditBalance() {
   const res = await fetch('/api/ai/credits', {
@@ -53,7 +95,7 @@ export function useAiCredits() {
 }
 
 export function useAiCreditUsage() {
-  return useQuery<CreditUsageEntry[]>({
+  return useQuery<CreditUsageResponse>({
     queryKey: ['ai', 'credits', 'usage'],
     queryFn: fetchCreditUsage,
     staleTime: 1000 * 60, // 1 minute

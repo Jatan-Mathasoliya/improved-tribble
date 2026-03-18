@@ -11,7 +11,7 @@ import {
   type OrganizationMember,
   type UserAiUsage,
 } from "@shared/schema";
-import { and, desc, eq, lte, sql, gte } from "drizzle-orm";
+import { and, desc, eq, gte, lte, sql, inArray, type SQL } from "drizzle-orm";
 import { getOrganizationSubscription, logSubscriptionAction } from "./subscriptionService";
 import {
   FREE_CREDITS_CAP,
@@ -49,6 +49,8 @@ export interface OrgCreditDetails {
   customLimit: number | null;
   effectiveLimit: number;
   purchasedCredits: number;
+  rolloverCredits: number;
+  proratedCreditsAddedThisPeriod: number;
   usedThisPeriod: number;
   remaining: number;
   periodStart: Date | null;
@@ -60,6 +62,28 @@ export interface OrgCreditDetails {
     email: string;
     used: number;
     seatAssigned: boolean;
+  }[];
+}
+
+export interface OrgCreditLedgerEntry {
+  id: number;
+  type: string;
+  amount: number;
+  createdAt: Date;
+  actor: {
+    userId: number | null;
+    name: string | null;
+    email: string | null;
+  };
+  metadata: Record<string, unknown> | null;
+}
+
+export interface OrgCreditWarningState {
+  recipients: string[];
+  recentAlerts: {
+    alertType: string;
+    recipientEmail: string;
+    sentAt: Date;
   }[];
 }
 
@@ -330,6 +354,100 @@ async function maybeSendCreditUsageWarning(params: {
       emailStatus: "sent",
     });
   }
+}
+
+async function getProratedCreditsAddedThisPeriod(
+  orgId: number,
+  periodStart: Date | null,
+): Promise<number> {
+  const conditions: SQL[] = [
+    eq(organizationCreditTransactions.organizationId, orgId),
+    eq(organizationCreditTransactions.type, "seat_add_proration"),
+  ];
+
+  if (periodStart) {
+    conditions.push(gte(organizationCreditTransactions.createdAt, periodStart));
+  }
+
+  const rows = await db
+    .select({
+      total: sql<number>`COALESCE(SUM(${organizationCreditTransactions.amount}), 0)`,
+    })
+    .from(organizationCreditTransactions)
+    .where(and(...conditions));
+
+  return Number(rows[0]?.total || 0);
+}
+
+export async function getOrgCreditLedger(
+  orgId: number,
+  limit: number = 50,
+): Promise<OrgCreditLedgerEntry[]> {
+  const transactions = await db
+    .select({
+      id: organizationCreditTransactions.id,
+      type: organizationCreditTransactions.type,
+      amount: organizationCreditTransactions.amount,
+      createdAt: organizationCreditTransactions.createdAt,
+      metadata: organizationCreditTransactions.metadata,
+      userId: users.id,
+      email: users.username,
+      firstName: users.firstName,
+      lastName: users.lastName,
+    })
+    .from(organizationCreditTransactions)
+    .leftJoin(users, eq(organizationCreditTransactions.userId, users.id))
+    .where(eq(organizationCreditTransactions.organizationId, orgId))
+    .orderBy(desc(organizationCreditTransactions.createdAt))
+    .limit(limit);
+
+  return transactions.map((transaction: typeof transactions[number]) => {
+    const name = transaction.firstName || transaction.lastName
+      ? `${transaction.firstName || ""} ${transaction.lastName || ""}`.trim()
+      : transaction.email;
+
+    return {
+      id: transaction.id,
+      type: transaction.type,
+      amount: transaction.amount,
+      createdAt: transaction.createdAt,
+      actor: {
+        userId: transaction.userId ?? null,
+        name: name || null,
+        email: transaction.email ?? null,
+      },
+      metadata: (transaction.metadata as Record<string, unknown> | null) ?? null,
+    };
+  });
+}
+
+export async function getOrgCreditWarningState(orgId: number): Promise<OrgCreditWarningState> {
+  const contact = await getOrganizationCreditWarningRecipients(orgId);
+  const subscription = await getOrganizationSubscription(orgId);
+  if (!subscription) {
+    return {
+      recipients: contact?.recipients ?? [],
+      recentAlerts: [],
+    };
+  }
+
+  const recentAlerts = await db.query.subscriptionAlerts.findMany({
+    where: and(
+      eq(subscriptionAlerts.subscriptionId, subscription.id),
+      inArray(subscriptionAlerts.alertType, CREDIT_USAGE_WARNING_THRESHOLDS.map((threshold) => getCreditWarningAlertType(threshold))),
+    ),
+    orderBy: desc(subscriptionAlerts.sentAt),
+    limit: 10,
+  });
+
+  return {
+    recipients: contact?.recipients ?? [],
+    recentAlerts: recentAlerts.map((alert: typeof recentAlerts[number]) => ({
+      alertType: alert.alertType,
+      recipientEmail: alert.recipientEmail,
+      sentAt: alert.sentAt,
+    })),
+  };
 }
 
 async function getEffectiveRecurringLimit(
@@ -863,6 +981,7 @@ export async function getOrgCreditDetails(orgId: number): Promise<OrgCreditDetai
     .groupBy(userAiUsage.userId);
 
   const usageMap = new Map(usageByUser.map((entry: typeof usageByUser[number]) => [entry.userId, Number(entry.used)]));
+  const proratedCreditsAddedThisPeriod = await getProratedCreditsAddedThisPeriod(orgId, periodStart);
 
   return {
     planAllocation: getIncludedCreditsForSeats(creditsPerSeat, subscription.seats),
@@ -870,6 +989,8 @@ export async function getOrgCreditDetails(orgId: number): Promise<OrgCreditDetai
     customLimit: subscription.customCreditLimit,
     effectiveLimit: await getEffectiveRecurringLimit(orgId, subscription),
     purchasedCredits: balance.purchasedCredits,
+    rolloverCredits: balance.rolloverCredits,
+    proratedCreditsAddedThisPeriod,
     usedThisPeriod: getBalanceTotalUsed(balance),
     remaining: getBalanceTotalRemaining(balance),
     periodStart: balance.periodStart,

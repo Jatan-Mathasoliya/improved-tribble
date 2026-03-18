@@ -16,7 +16,7 @@ import {
   formatPriceINR,
 } from "@/hooks/use-subscription";
 import { useOrganization } from "@/hooks/use-organization";
-import { useAiCredits } from "@/hooks/use-ai-credits";
+import { useAiCredits, useAiCreditUsage } from "@/hooks/use-ai-credits";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -68,6 +68,7 @@ export default function OrgBillingPage() {
   const { data: seatUsage } = useSeatUsage();
   const { data: invoices } = useInvoices();
   const { data: credits } = useAiCredits();
+  const { data: creditUsage } = useAiCreditUsage();
   const createCheckout = useCreateCheckout();
   const createCreditPackCheckout = useCreateCreditPackCheckout();
   const cancelSubscription = useCancelSubscription();
@@ -252,6 +253,36 @@ export default function OrgBillingPage() {
   const creditUsagePercent = credits && credits.allocated > 0
     ? Math.min(100, Math.round((credits.used / credits.allocated) * 100))
     : 0;
+  const orgCreditDetails = creditUsage?.orgDetails;
+  const creditLedger = creditUsage?.orgLedger ?? [];
+
+  const formatCreditLedgerType = (type: string, metadata?: Record<string, any> | null) => {
+    if (type === "cycle_reset") return "Monthly allocation reset";
+    if (type === "seat_add_proration") {
+      const seatsAdded = Number(metadata?.additionalSeats || 0);
+      return seatsAdded > 0 ? `Seat add proration (+${seatsAdded} seat${seatsAdded === 1 ? "" : "s"})` : "Seat add proration";
+    }
+    if (type === "credit_pack_purchase") {
+      const reason = typeof metadata?.reason === "string" ? metadata.reason : "";
+      if (reason.startsWith("credit_pack:")) {
+        const quantity = Number(reason.split(":")[1] || 0);
+        return quantity > 0 ? `Credit pack purchase (${quantity} pack${quantity === 1 ? "" : "s"})` : "Credit pack purchase";
+      }
+      return "Credit pack purchase";
+    }
+    if (type === "bonus_grant") return "Bonus credits granted";
+    if (type === "bonus_clear") return "Bonus credits cleared";
+    if (type === "custom_limit") return "Custom credit limit change";
+    if (type === "migration") return "Legacy credit migration";
+    if (type === "usage") return "AI usage";
+    return type.replace(/_/g, " ");
+  };
+
+  const formatCreditLedgerAmount = (type: string, amount: number) => {
+    const negativeTypes = new Set(["usage", "bonus_clear"]);
+    const prefix = negativeTypes.has(type) ? "-" : "+";
+    return `${prefix}${Math.abs(amount).toLocaleString()}`;
+  };
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -534,6 +565,26 @@ export default function OrgBillingPage() {
               Included credits this term: {currentIncludedCredits}
               {isPro ? ` (${proCreditsPerSeat} per seat × ${subscription?.seats || 1} seat${(subscription?.seats || 1) === 1 ? '' : 's'})` : ""}
             </div>
+            {orgCreditDetails && (
+              <div className="grid gap-3 md:grid-cols-4">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Plan allocation</p>
+                  <p className="text-lg font-semibold">{orgCreditDetails.planAllocation.toLocaleString()}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Prorated seat credits</p>
+                  <p className="text-lg font-semibold">{orgCreditDetails.proratedCreditsAddedThisPeriod.toLocaleString()}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Purchased available</p>
+                  <p className="text-lg font-semibold">{orgCreditDetails.purchasedCredits.toLocaleString()}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">Rollover carried</p>
+                  <p className="text-lg font-semibold">{orgCreditDetails.rolloverCredits.toLocaleString()}</p>
+                </div>
+              </div>
+            )}
             {credits.purchasedCredits && credits.purchasedCredits > 0 && (
               <div className="text-sm text-muted-foreground">
                 Purchased credits available: {credits.purchasedCredits}
@@ -550,6 +601,47 @@ export default function OrgBillingPage() {
                 <Button onClick={() => setCreditPackDialogOpen(true)}>
                   Buy More Credits
                 </Button>
+              </div>
+            )}
+            {creditLedger.length > 0 && (
+              <div className="space-y-3">
+                <div>
+                  <p className="font-medium">Credit activity</p>
+                  <p className="text-sm text-muted-foreground">
+                    Included monthly credits, seat-add proration, top-ups, and AI usage for the shared org pool.
+                  </p>
+                </div>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Event</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Actor</TableHead>
+                      <TableHead className="text-right">Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {creditLedger.slice(0, 10).map((entry) => (
+                      <TableRow key={entry.id}>
+                        <TableCell>
+                          <div>
+                            <p className="font-medium">{formatCreditLedgerType(entry.type, entry.metadata)}</p>
+                            {entry.type === "usage" && (
+                              <p className="text-xs text-muted-foreground">
+                                Recurring used first, then purchased credits.
+                              </p>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell>{format(new Date(entry.createdAt), "MMM d, yyyy p")}</TableCell>
+                        <TableCell>{entry.actor.name || entry.actor.email || "System"}</TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatCreditLedgerAmount(entry.type, entry.amount)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               </div>
             )}
           </CardContent>

@@ -25,6 +25,9 @@ interface CreditDetails {
   bonusCredits: number;
   customLimit: number | null;
   effectiveLimit: number;
+  purchasedCredits: number;
+  rolloverCredits: number;
+  proratedCreditsAddedThisPeriod: number;
   usedThisPeriod: number;
   remaining: number;
   periodStart: string | null;
@@ -37,6 +40,26 @@ interface CreditDetails {
     used: number;
     seatAssigned: boolean;
   }[];
+  ledger: {
+    id: number;
+    type: string;
+    amount: number;
+    createdAt: string;
+    actor: {
+      userId: number | null;
+      name: string | null;
+      email: string | null;
+    };
+    metadata: Record<string, any> | null;
+  }[];
+  warningState: {
+    recipients: string[];
+    recentAlerts: {
+      alertType: string;
+      recipientEmail: string;
+      sentAt: string;
+    }[];
+  };
 }
 
 interface CreditsTabProps {
@@ -90,7 +113,7 @@ export default function CreditsTab({ orgId, planName }: CreditsTabProps) {
       queryClient.invalidateQueries({ queryKey: ["admin", "org-audit-log", orgId] });
       toast({
         title: "Bonus credits granted",
-        description: `Granted ${data.totalGranted} credits to ${data.membersAffected} members.`,
+        description: `Granted ${data.totalGranted} shared credits to the organization pool.`,
       });
       setBonusAmount("");
       setBonusReason("");
@@ -246,6 +269,24 @@ export default function CreditsTab({ orgId, planName }: CreditsTabProps) {
   const utilizationPercent = credits.effectiveLimit > 0
     ? Math.round((credits.usedThisPeriod / credits.effectiveLimit) * 100)
     : 0;
+  const formatLedgerType = (type: string, metadata?: Record<string, any> | null) => {
+    if (type === "cycle_reset") return "Monthly allocation reset";
+    if (type === "seat_add_proration") {
+      const seatsAdded = Number(metadata?.additionalSeats || 0);
+      return seatsAdded > 0 ? `Seat add proration (+${seatsAdded} seat${seatsAdded === 1 ? "" : "s"})` : "Seat add proration";
+    }
+    if (type === "credit_pack_purchase") return "Credit pack purchase";
+    if (type === "bonus_grant") return "Bonus grant";
+    if (type === "bonus_clear") return "Bonus clear";
+    if (type === "custom_limit") return "Custom limit change";
+    if (type === "migration") return "Legacy migration";
+    if (type === "usage") return "AI usage";
+    return type.replace(/_/g, " ");
+  };
+  const formatLedgerAmount = (type: string, amount: number) => {
+    const negativeTypes = new Set(["usage", "bonus_clear"]);
+    return `${negativeTypes.has(type) ? "-" : "+"}${Math.abs(amount).toLocaleString()}`;
+  };
 
   return (
     <div className="space-y-6">
@@ -284,6 +325,18 @@ export default function CreditsTab({ orgId, planName }: CreditsTabProps) {
                   {credits.remaining.toLocaleString()}
                 </p>
               </div>
+              <div className="bg-muted/50 p-4 rounded-lg">
+                <p className="text-sm text-muted-foreground">Purchased Available</p>
+                <p className="text-2xl font-bold">{credits.purchasedCredits.toLocaleString()}</p>
+              </div>
+              <div className="bg-muted/50 p-4 rounded-lg">
+                <p className="text-sm text-muted-foreground">Rollover Carried</p>
+                <p className="text-2xl font-bold">{credits.rolloverCredits.toLocaleString()}</p>
+              </div>
+              <div className="bg-muted/50 p-4 rounded-lg">
+                <p className="text-sm text-muted-foreground">Seat Proration Added</p>
+                <p className="text-2xl font-bold">{credits.proratedCreditsAddedThisPeriod.toLocaleString()}</p>
+              </div>
             </div>
 
             {/* Progress Bar */}
@@ -311,6 +364,46 @@ export default function CreditsTab({ orgId, planName }: CreditsTabProps) {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Warning Recipients</CardTitle>
+          <CardDescription>
+            Credit warning emails go to the billing contact if set, plus the organization owner.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex flex-wrap gap-2">
+            {credits.warningState.recipients.length > 0 ? (
+              credits.warningState.recipients.map((recipient) => (
+                <Badge key={recipient} variant="secondary">{recipient}</Badge>
+              ))
+            ) : (
+              <p className="text-sm text-muted-foreground">No warning recipients configured.</p>
+            )}
+          </div>
+          {credits.warningState.recentAlerts.length > 0 && (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Alert</TableHead>
+                  <TableHead>Recipient</TableHead>
+                  <TableHead>Date</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {credits.warningState.recentAlerts.map((alert) => (
+                  <TableRow key={`${alert.alertType}-${alert.recipientEmail}-${alert.sentAt}`}>
+                    <TableCell>{alert.alertType.replace("credit_usage_", "").replace(/_/g, " ")}%</TableCell>
+                    <TableCell>{alert.recipientEmail}</TableCell>
+                    <TableCell>{new Date(alert.sentAt).toLocaleString()}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Grant Bonus Credits */}
       <Card>
         <CardHeader>
@@ -334,7 +427,7 @@ export default function CreditsTab({ orgId, planName }: CreditsTabProps) {
               placeholder="500"
             />
             <p className="text-xs text-muted-foreground">
-              Credits will be distributed evenly among all seated members.
+              Credits are added to the shared org pool immediately.
             </p>
           </div>
           <div className="space-y-2">
@@ -463,6 +556,46 @@ export default function CreditsTab({ orgId, planName }: CreditsTabProps) {
                     </TableRow>
                   );
                 })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      )}
+
+      {credits.ledger.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Credit Ledger</CardTitle>
+            <CardDescription>
+              Full org-level credit events for included allocations, proration, top-ups, and usage.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Event</TableHead>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Actor</TableHead>
+                  <TableHead className="text-right">Amount</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {credits.ledger.map((entry) => (
+                  <TableRow key={entry.id}>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium">{formatLedgerType(entry.type, entry.metadata)}</p>
+                        {entry.type === "custom_limit" && entry.metadata?.reason && (
+                          <p className="text-xs text-muted-foreground">{String(entry.metadata.reason)}</p>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>{new Date(entry.createdAt).toLocaleString()}</TableCell>
+                    <TableCell>{entry.actor.name || entry.actor.email || "System"}</TableCell>
+                    <TableCell className="text-right font-medium">{formatLedgerAmount(entry.type, entry.amount)}</TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </CardContent>

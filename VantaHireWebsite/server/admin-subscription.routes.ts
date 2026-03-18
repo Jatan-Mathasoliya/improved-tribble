@@ -35,6 +35,8 @@ import {
 } from "./lib/featureGating";
 import {
   getOrgCreditDetails,
+  getOrgCreditLedger,
+  getOrgCreditWarningState,
   grantBonusCredits,
   setCustomCreditLimit,
   clearBonusCredits,
@@ -781,6 +783,8 @@ export function registerAdminSubscriptionRoutes(
         organizationId: orgId,
         organizationName: org.name,
         ...creditDetails,
+        ledger: await getOrgCreditLedger(orgId),
+        warningState: await getOrgCreditWarningState(orgId),
       });
     } catch (error: any) {
       console.error("Error getting organization credits:", error);

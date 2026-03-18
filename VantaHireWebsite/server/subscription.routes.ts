@@ -27,6 +27,8 @@ import {
 } from "./lib/seatService";
 import {
   getMemberCreditBalance,
+  getOrgCreditDetails,
+  getOrgCreditLedger,
   getOrgCreditSummary,
   getCreditUsageHistory,
   getUserDailyRateLimit,
@@ -1297,10 +1299,14 @@ export function registerSubscriptionRoutes(
 
       const userHistory = await getCreditUsageHistory(user.id);
       const orgSummary = isAdmin ? await getOrgCreditSummary(orgResult.organization.id) : null;
+      const orgDetails = isAdmin ? await getOrgCreditDetails(orgResult.organization.id) : null;
+      const orgLedger = isAdmin ? await getOrgCreditLedger(orgResult.organization.id) : [];
 
       res.json({
         userHistory,
         orgSummary,
+        orgDetails,
+        orgLedger,
       });
     } catch (error: any) {
       console.error("Error getting credit usage:", error);
