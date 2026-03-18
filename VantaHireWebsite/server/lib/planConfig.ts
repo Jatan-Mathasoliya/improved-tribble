@@ -40,6 +40,10 @@ export const BUSINESS_DAILY_RATE_LIMIT = getEnvInt(
   PRO_DAILY_RATE_LIMIT,
 );
 
+export const EXTRA_CREDIT_PACK_SIZE = getEnvInt("EXTRA_CREDIT_PACK_SIZE", 300);
+export const EXTRA_CREDIT_PACK_PRICE = getEnvInt("EXTRA_CREDIT_PACK_PRICE", 99900);
+export const MAX_CREDIT_PACK_QUANTITY = getEnvInt("MAX_CREDIT_PACK_QUANTITY", 10);
+
 type PlanLike = Pick<SubscriptionPlan, "name" | "aiCreditsPerSeatMonthly" | "maxCreditRolloverMonths" | "features" | "displayName">;
 
 export interface PlanCreditSettings {
@@ -138,6 +142,20 @@ export interface PlanRateLimitInfo {
   monthlyCredits: number;
   rolloverMonths: number;
   maxCredits: number;
+}
+
+export interface CreditPackConfig {
+  creditsPerPack: number;
+  pricePerPack: number;
+  maxQuantity: number;
+}
+
+export function getCreditPackConfig(): CreditPackConfig {
+  return {
+    creditsPerPack: EXTRA_CREDIT_PACK_SIZE,
+    pricePerPack: EXTRA_CREDIT_PACK_PRICE,
+    maxQuantity: MAX_CREDIT_PACK_QUANTITY,
+  };
 }
 
 export function getPlanRateLimitInfo(

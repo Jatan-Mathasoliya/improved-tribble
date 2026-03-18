@@ -50,6 +50,12 @@ export interface Invoice {
   invoiceUrl?: string | null;
 }
 
+export interface CreditPackConfig {
+  creditsPerPack: number;
+  pricePerPack: number;
+  maxQuantity: number;
+}
+
 // API functions
 async function fetchPlans() {
   const res = await fetch('/api/subscription/plans', {
@@ -94,6 +100,16 @@ async function fetchInvoices() {
   return res.json();
 }
 
+async function fetchCreditPackConfig() {
+  const res = await fetch('/api/subscription/credit-packs/config', {
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch credit pack config');
+  }
+  return res.json();
+}
+
 // Hooks
 export function usePlans() {
   return useQuery<SubscriptionPlan[]>({
@@ -127,6 +143,14 @@ export function useInvoices() {
   });
 }
 
+export function useCreditPackConfig() {
+  return useQuery<CreditPackConfig>({
+    queryKey: ['subscription', 'credit-packs', 'config'],
+    queryFn: fetchCreditPackConfig,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
 export function useCreateCheckout() {
   return useMutation({
     mutationFn: async (data: { planId: number; seats: number; billingCycle: 'monthly' | 'annual' }) => {
@@ -145,6 +169,30 @@ export function useCreateCheckout() {
       if (!res.ok) {
         const error = await res.json();
         throw new Error(error.error || 'Failed to create checkout');
+      }
+      return res.json();
+    },
+  });
+}
+
+export function useCreateCreditPackCheckout() {
+  return useMutation({
+    mutationFn: async (data: { quantity: number }) => {
+      const csrfRes = await fetch('/api/csrf-token', { credentials: 'include' });
+      const { token } = await csrfRes.json();
+
+      const res = await fetch('/api/subscription/credit-packs/checkout', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-csrf-token': token,
+        },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const error = await res.json();
+        throw new Error(error.error || 'Failed to create credit pack checkout');
       }
       return res.json();
     },

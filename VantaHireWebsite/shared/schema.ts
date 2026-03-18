@@ -2302,7 +2302,7 @@ export const domainClaimStatuses = ['pending', 'approved', 'rejected'] as const;
 export type DomainClaimStatus = typeof domainClaimStatuses[number];
 
 // Payment transaction types
-export const paymentTransactionTypes = ['subscription', 'seat_addition', 'refund'] as const;
+export const paymentTransactionTypes = ['subscription', 'seat_addition', 'credit_pack', 'refund'] as const;
 export type PaymentTransactionType = typeof paymentTransactionTypes[number];
 
 // Payment statuses

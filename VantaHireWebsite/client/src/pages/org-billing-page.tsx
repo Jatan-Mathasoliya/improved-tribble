@@ -6,7 +6,9 @@ import {
   usePlans,
   useSeatUsage,
   useInvoices,
+  useCreditPackConfig,
   useCreateCheckout,
+  useCreateCreditPackCheckout,
   useCancelSubscription,
   useReactivateSubscription,
   formatPriceINR,
@@ -62,21 +64,34 @@ export default function OrgBillingPage() {
   const { data: seatUsage } = useSeatUsage();
   const { data: invoices } = useInvoices();
   const { data: credits } = useAiCredits();
+  const { data: creditPackConfig } = useCreditPackConfig();
   const createCheckout = useCreateCheckout();
+  const createCreditPackCheckout = useCreateCreditPackCheckout();
   const cancelSubscription = useCancelSubscription();
   const reactivateSubscription = useReactivateSubscription();
   const { toast } = useToast();
 
   const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
+  const [creditPackDialogOpen, setCreditPackDialogOpen] = useState(false);
   const [selectedPlan, setSelectedPlan] = useState<number | null>(null);
   const [seats, setSeats] = useState(1);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
+  const [creditPackQuantity, setCreditPackQuantity] = useState("1");
 
   const isOwner = orgData?.membership?.role === 'owner';
   const freePlan = plans?.find(p => p.name === 'free') as any;
   const proPlan = plans?.find(p => p.name === 'pro') as any;
   const currentPlanName = subscription?.plan?.displayName || 'Free';
   const isPro = subscription?.plan?.name === 'pro';
+  const creditPackQuantityNumber = Math.min(
+    creditPackConfig?.maxQuantity || 10,
+    Math.max(1, parseInt(creditPackQuantity || "1", 10) || 1),
+  );
+  const creditPackTotalCredits = creditPackConfig ? creditPackConfig.creditsPerPack * creditPackQuantityNumber : 0;
+  const creditPackTotalPrice = creditPackConfig ? creditPackConfig.pricePerPack * creditPackQuantityNumber : 0;
+  const creditPackLabel = creditPackConfig
+    ? `Add ${creditPackConfig.creditsPerPack}-credit top-ups from ${formatPriceINR(creditPackConfig.pricePerPack)}`
+    : "Extra credit packs available";
   const formatMetric = (value?: number | null) => {
     if (typeof value !== "number" || value <= 0) {
       return "—";
@@ -148,7 +163,44 @@ export default function OrgBillingPage() {
     }
   };
 
-  const creditUsagePercent = credits ? Math.min(100, Math.round((credits.used / credits.allocated) * 100)) : 0;
+  const handleCreditPackCheckout = async () => {
+    if (!creditPackConfig) return;
+
+    try {
+      const result = await createCreditPackCheckout.mutateAsync({
+        quantity: creditPackQuantityNumber,
+      });
+
+      if (result.sessionId) {
+        await initiateCashfreeCheckout(result.sessionId, result.paymentLink);
+      } else if (result.paymentLink) {
+        window.location.href = result.paymentLink;
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to create credit pack checkout session",
+          variant: "destructive",
+        });
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to start credit pack checkout",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const formatInvoiceType = (type: string) => {
+    if (type === 'subscription') return 'Subscription';
+    if (type === 'seat_addition') return 'Seat addition';
+    if (type === 'credit_pack') return 'Credit pack';
+    return type;
+  };
+
+  const creditUsagePercent = credits && credits.allocated > 0
+    ? Math.min(100, Math.round((credits.used / credits.allocated) * 100))
+    : 0;
 
   return (
     <Layout>
@@ -273,7 +325,7 @@ export default function OrgBillingPage() {
               <Progress value={creditUsagePercent} className="h-2" />
             </div>
             <div className="flex justify-between text-sm text-muted-foreground">
-              <span>Monthly allocation: {credits.allocated} credits</span>
+              <span>Current cycle credit pool: {credits.allocated} credits</span>
               {credits.rollover > 0 && (
                 <span>+{credits.rollover} rolled over</span>
               )}
@@ -281,6 +333,19 @@ export default function OrgBillingPage() {
             {credits.purchasedCredits && credits.purchasedCredits > 0 && (
               <div className="text-sm text-muted-foreground">
                 Purchased credits available: {credits.purchasedCredits}
+              </div>
+            )}
+            {isOwner && isPro && creditPackConfig && (
+              <div className="flex items-center justify-between gap-4 rounded-lg border p-4">
+                <div>
+                  <p className="font-medium">Need more AI credits?</p>
+                  <p className="text-sm text-muted-foreground">
+                    Buy extra packs of {creditPackConfig.creditsPerPack} credits for {formatPriceINR(creditPackConfig.pricePerPack)} each.
+                  </p>
+                </div>
+                <Button onClick={() => setCreditPackDialogOpen(true)}>
+                  Buy More Credits
+                </Button>
               </div>
             )}
           </CardContent>
@@ -337,6 +402,10 @@ export default function OrgBillingPage() {
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
+                    {creditPackLabel}
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <Check className="h-4 w-4 text-green-500" />
                     {formatMetric(proPlan?.rateLimits?.dailyRateLimit)} AI analyses/day
                   </li>
                   <li className="flex items-center gap-2">
@@ -372,6 +441,7 @@ export default function OrgBillingPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Invoice</TableHead>
+                  <TableHead>Type</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Amount</TableHead>
                   <TableHead>Status</TableHead>
@@ -384,6 +454,7 @@ export default function OrgBillingPage() {
                     <TableCell className="font-medium">
                       {invoice.invoiceNumber || `INV-${invoice.id}`}
                     </TableCell>
+                    <TableCell>{formatInvoiceType(invoice.type)}</TableCell>
                     <TableCell>
                       {format(new Date(invoice.createdAt), 'MMM d, yyyy')}
                     </TableCell>
@@ -430,7 +501,7 @@ export default function OrgBillingPage() {
                 onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
               />
               <p className="text-sm text-muted-foreground">
-                Growth includes {formatMetric(proPlan?.rateLimits?.monthlyCredits)} AI credits per month per organization. Seats are billed separately.
+                Growth includes {formatMetric(proPlan?.rateLimits?.monthlyCredits)} AI credits per month per organization. Seats are billed separately, and {creditPackConfig ? `extra ${creditPackConfig.creditsPerPack}-credit packs can be added anytime` : 'extra credit packs can be added anytime'}.
               </p>
             </div>
             <div className="space-y-2">
@@ -472,6 +543,63 @@ export default function OrgBillingPage() {
             </Button>
             <Button onClick={handleUpgrade} disabled={createCheckout.isPending}>
               {createCheckout.isPending ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              Continue to Payment
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={creditPackDialogOpen} onOpenChange={setCreditPackDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Buy More Credits</DialogTitle>
+            <DialogDescription>
+              Purchase extra AI credits for your organization. Included monthly credits are used first, then purchased credits.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Pack Quantity</Label>
+              <Input
+                type="number"
+                min={1}
+                max={creditPackConfig?.maxQuantity || 10}
+                value={creditPackQuantity}
+                onChange={(e) => setCreditPackQuantity(e.target.value)}
+              />
+              <p className="text-sm text-muted-foreground">
+                {creditPackConfig
+                  ? `1 pack = ${creditPackConfig.creditsPerPack} credits = ${formatPriceINR(creditPackConfig.pricePerPack)}`
+                  : 'Pack pricing will be shown at checkout'}
+              </p>
+            </div>
+
+            <div className="rounded-lg bg-slate-50 p-4 space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Credits to add</span>
+                <span className="font-medium">{creditPackTotalCredits}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span>Pack quantity</span>
+                <span className="font-medium">{creditPackQuantityNumber}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Total</span>
+                <span className="font-bold">{formatPriceINR(creditPackTotalPrice)}</span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                + 18% GST applicable
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreditPackDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreditPackCheckout} disabled={createCreditPackCheckout.isPending}>
+              {createCreditPackCheckout.isPending ? (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               ) : null}
               Continue to Payment

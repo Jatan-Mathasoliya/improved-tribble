@@ -4,7 +4,7 @@ import Layout from "@/components/Layout";
 import { Helmet } from "react-helmet-async";
 import { useAuth } from "@/hooks/use-auth";
 import { useOrganization } from "@/hooks/use-organization";
-import { usePlans, useSubscription, useCreateCheckout, formatPriceINR } from "@/hooks/use-subscription";
+import { usePlans, useSubscription, useCreateCheckout, useCreditPackConfig, formatPriceINR } from "@/hooks/use-subscription";
 import { initiateCashfreeCheckout } from "@/lib/cashfree";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -82,6 +82,7 @@ export default function PricingPage() {
   const { data: organization } = useOrganization();
   const { data: plans } = usePlans();
   const { data: subscription } = useSubscription();
+  const { data: creditPackConfig } = useCreditPackConfig();
   const createCheckout = useCreateCheckout();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -106,6 +107,9 @@ export default function PricingPage() {
   const isOwner = organization?.membership?.role === 'owner';
   const currentPlan = subscription?.plan?.name || 'free';
   const isPro = currentPlan === 'pro';
+  const creditPackLabel = creditPackConfig
+    ? `Add extra ${creditPackConfig.creditsPerPack}-credit packs at ${formatPriceINR(creditPackConfig.pricePerPack)}`
+    : 'Extra credit packs available';
 
   const formatMetric = (value?: number | null) => {
     if (typeof value !== "number" || value <= 0) {
@@ -422,6 +426,10 @@ export default function PricingPage() {
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  {creditPackLabel}
+                </li>
+                <li className="flex items-center gap-2 text-white/80 text-sm">
+                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
                   WhatsApp outreach (Cloud API)
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
@@ -659,7 +667,7 @@ export default function PricingPage() {
                     onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
                   />
                   <p className="text-sm text-muted-foreground">
-                    Growth includes {formatMetric(proCredits)} AI credits per month per organization. Seats are billed separately.
+                    Growth includes {formatMetric(proCredits)} AI credits per month per organization. Seats are billed separately, and {creditPackConfig ? `extra ${creditPackConfig.creditsPerPack}-credit packs are available at ${formatPriceINR(creditPackConfig.pricePerPack)}` : 'extra credit packs are available'}.
                   </p>
                 </div>
 

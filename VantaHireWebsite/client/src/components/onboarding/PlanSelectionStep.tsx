@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { usePlans, useCreateCheckout, formatPriceINR } from "@/hooks/use-subscription";
+import { usePlans, useCreateCheckout, useCreditPackConfig, formatPriceINR } from "@/hooks/use-subscription";
 import { useOnboardingStatus } from "@/hooks/use-onboarding-status";
 import { useToast } from "@/hooks/use-toast";
 import { initiateCashfreeCheckout } from "@/lib/cashfree";
@@ -38,6 +38,7 @@ interface PlanSelectionStepProps {
 
 export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps) {
   const { data: plans, isLoading: plansLoading } = usePlans();
+  const { data: creditPackConfig } = useCreditPackConfig();
   const { completeOnboardingAsync, isCompleting } = useOnboardingStatus();
   const createCheckout = useCreateCheckout();
   const { toast } = useToast();
@@ -48,6 +49,9 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
 
   const freePlan = plans?.find(p => p.name === 'free') as any;
   const proPlan = plans?.find(p => p.name === 'pro') as any;
+  const creditPackLabel = creditPackConfig
+    ? `Add ${creditPackConfig.creditsPerPack}-credit top-ups at ${formatPriceINR(creditPackConfig.pricePerPack)}`
+    : 'Extra credit packs available';
   const formatMetric = (value?: number | null) => {
     if (typeof value !== "number" || value <= 0) {
       return "—";
@@ -218,6 +222,10 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="h-3.5 w-3.5 text-green-500" />
+                  {creditPackLabel}
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 text-green-500" />
                   Unlimited active jobs
                 </li>
                 <li className="flex items-center gap-2">
@@ -310,7 +318,7 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
                 onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
               />
               <p className="text-sm text-muted-foreground">
-                Growth includes {formatMetric(proCredits)} AI credits per month per organization. Seats are billed separately.
+                Growth includes {formatMetric(proCredits)} AI credits per month per organization. Seats are billed separately, and {creditPackConfig ? `extra ${creditPackConfig.creditsPerPack}-credit packs are available at ${formatPriceINR(creditPackConfig.pricePerPack)}` : 'extra credit packs are available'}.
               </p>
             </div>
 

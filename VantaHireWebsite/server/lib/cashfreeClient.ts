@@ -502,6 +502,73 @@ export async function createSeatAddCheckout(
   };
 }
 
+// Create checkout order for AI credit packs
+export async function createCreditPackCheckout(
+  organization: Organization,
+  quantity: number,
+  credits: number,
+  amount: number, // in paise
+  customerEmail: string,
+  customerPhone?: string,
+  returnUrl?: string
+): Promise<{
+  orderId: string;
+  sessionId: string;
+  paymentLink: string;
+  amount: number;
+  taxAmount: number;
+  totalAmount: number;
+}> {
+  const hasGSTIN = !!organization.gstin;
+  const pricing = calculatePriceWithGST(amount, hasGSTIN);
+
+  const orderId = `CREDIT_${organization.id}_${Date.now()}`;
+
+  const orderRequest = {
+    order_id: orderId,
+    order_amount: pricing.totalAmount / 100,
+    order_currency: 'INR',
+    customer_details: {
+      customer_id: `ORG_${organization.id}`,
+      customer_email: customerEmail,
+      customer_phone: customerPhone || '9999999999',
+      customer_name: organization.billingName || organization.name,
+    },
+    order_meta: {
+      return_url: returnUrl || `${process.env.APP_URL}/settings/billing?order_id={order_id}`,
+      notify_url: `${process.env.APP_URL}/api/webhooks/cashfree`,
+    },
+    order_note: `Extra AI credits - ${quantity} pack(s) - ${credits} credits`,
+    order_tags: {
+      organization_id: String(organization.id),
+      type: 'credit_pack',
+      credit_pack_quantity: String(quantity),
+      credits: String(credits),
+    },
+  };
+
+  const response = await cashfreeRequest<{
+    cf_order_id: string;
+    order_id: string;
+    order_status: string;
+    payment_session_id: string;
+  }>('/pg/orders', 'POST', orderRequest);
+
+  const sanitizedSessionId = sanitizePaymentSessionId(response.payment_session_id);
+  const paymentLink = CASHFREE_ENV === 'PRODUCTION'
+    ? `https://payments.cashfree.com/pg/orders/pay?payment_session_id=${sanitizedSessionId}`
+    : `https://sandbox.cashfree.com/pg/orders/pay?payment_session_id=${sanitizedSessionId}`;
+
+  return {
+    orderId: response.order_id,
+    sessionId: sanitizedSessionId,
+    paymentLink,
+    amount: pricing.baseAmount,
+    taxAmount: pricing.gstAmount,
+    totalAmount: pricing.totalAmount,
+  };
+}
+
 // Check if Cashfree is configured
 export function isCashfreeConfigured(): boolean {
   return !!(CASHFREE_APP_ID && CASHFREE_SECRET_KEY);

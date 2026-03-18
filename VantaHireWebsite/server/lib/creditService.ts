@@ -650,6 +650,34 @@ export async function grantBonusCredits(
   };
 }
 
+export async function addPurchasedCredits(
+  orgId: number,
+  amount: number,
+  reason: string,
+  addedBy?: number
+): Promise<{ purchasedCredits: number; remaining: number }> {
+  if (amount <= 0) {
+    throw new Error("Purchased credits amount must be greater than 0");
+  }
+
+  const balance = await ensureOrgCreditBalanceInitialized(orgId);
+
+  const [updated] = await db.update(organizationCreditBalances)
+    .set({
+      purchasedCredits: balance.purchasedCredits + amount,
+      updatedAt: new Date(),
+    })
+    .where(eq(organizationCreditBalances.organizationId, orgId))
+    .returning();
+
+  await recordCreditTransaction(orgId, "credit_pack_purchase", amount, addedBy, { reason });
+
+  return {
+    purchasedCredits: updated.purchasedCredits,
+    remaining: getBalanceTotalRemaining(updated),
+  };
+}
+
 // Set custom credit limit for an organization
 export async function setCustomCreditLimit(
   orgId: number,

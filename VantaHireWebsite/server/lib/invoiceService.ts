@@ -178,6 +178,8 @@ export async function generateInvoiceData(transactionId: number): Promise<Invoic
 
   // Determine line item description
   let description = 'Subscription';
+  let quantity = 1;
+  let unitPrice = transaction.amount;
   if (plan) {
     description = `${plan.displayName} Plan - ${subscription?.seats || 1} seat(s)`;
     if (subscription?.billingCycle === 'annual') {
@@ -188,14 +190,22 @@ export async function generateInvoiceData(transactionId: number): Promise<Invoic
   }
 
   if (transaction.type === 'seat_addition') {
-    const seats = (transaction.metadata as any)?.seats || 1;
+    const seats = (transaction.metadata as any)?.additionalSeats || 1;
     description = `Additional seats - ${seats} seat(s) (Prorated)`;
+  }
+
+  if (transaction.type === 'credit_pack') {
+    const packQuantity = (transaction.metadata as any)?.quantity || 1;
+    const credits = (transaction.metadata as any)?.credits || 0;
+    description = `Extra AI credit packs - ${packQuantity} pack(s) (${credits} credits)`;
+    quantity = packQuantity;
+    unitPrice = Math.round(transaction.amount / packQuantity);
   }
 
   const lineItems: InvoiceLineItem[] = [{
     description,
-    quantity: 1,
-    unitPrice: transaction.amount,
+    quantity,
+    unitPrice,
     amount: transaction.amount,
   }];
 

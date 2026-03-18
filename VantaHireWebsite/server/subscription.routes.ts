@@ -33,6 +33,7 @@ import {
 } from "./lib/creditService";
 import {
   createCheckoutOrder,
+  createCreditPackCheckout,
   createSeatAddCheckout,
   getOrderStatus,
   isCashfreeConfigured,
@@ -52,6 +53,7 @@ import { getEmailService } from "./simpleEmailService";
 import { db } from "./db";
 import { organizationMembers, users } from "@shared/schema";
 import { eq, inArray, and } from "drizzle-orm";
+import { getCreditPackConfig, PLAN_FREE } from "./lib/planConfig";
 
 // Input validation schemas
 const checkoutSchema = z.object({
@@ -71,6 +73,10 @@ const reduceSeatsSchema = z.object({
 
 const seatAssignSchema = z.object({
   memberId: z.number().int().positive(),
+});
+
+const creditPackCheckoutSchema = z.object({
+  quantity: z.number().int().min(1),
 });
 
 // Public checkout schema (no auth required)
@@ -174,6 +180,15 @@ export function registerSubscriptionRoutes(
 
   // ===== Checkout =====
 
+  app.get("/api/subscription/credit-packs/config", async (req, res) => {
+    try {
+      res.json(getCreditPackConfig());
+    } catch (error: any) {
+      console.error("Error getting credit pack config:", error);
+      res.status(500).json({ error: "Failed to get credit pack config" });
+    }
+  });
+
   // Create checkout session
   app.post("/api/subscription/checkout", requireAuth, csrfProtection, async (req, res) => {
     try {
@@ -243,6 +258,88 @@ export function registerSubscriptionRoutes(
         return;
       }
       res.status(500).json({ error: error.message || "Failed to create checkout" });
+    }
+  });
+
+  app.post("/api/subscription/credit-packs/checkout", requireAuth, csrfProtection, async (req, res) => {
+    try {
+      const user = req.user!;
+      const orgResult = await getUserOrganization(user.id);
+
+      if (!orgResult) {
+        res.status(404).json({ error: "Not a member of any organization" });
+        return;
+      }
+
+      if (!canManageBilling(orgResult.membership.role as any)) {
+        res.status(403).json({ error: "Only organization owner can manage billing" });
+        return;
+      }
+
+      if (!isCashfreeConfigured()) {
+        res.status(500).json({ error: "Payment system not configured" });
+        return;
+      }
+
+      const subscription = await getOrganizationSubscription(orgResult.organization.id);
+      if (!subscription || subscription.plan.name === PLAN_FREE || subscription.status === 'cancelled') {
+        res.status(400).json({ error: "Credit packs are available only for active paid organizations" });
+        return;
+      }
+
+      const { quantity } = creditPackCheckoutSchema.parse(req.body);
+      const packConfig = getCreditPackConfig();
+
+      if (quantity > packConfig.maxQuantity) {
+        res.status(400).json({ error: `You can buy up to ${packConfig.maxQuantity} packs at a time` });
+        return;
+      }
+
+      const credits = packConfig.creditsPerPack * quantity;
+      const baseAmount = packConfig.pricePerPack * quantity;
+      const returnUrl = `${process.env.APP_URL || 'http://localhost:5001'}/org/billing?order_id={order_id}&type=credit_pack`;
+
+      const checkout = await createCreditPackCheckout(
+        orgResult.organization,
+        quantity,
+        credits,
+        baseAmount,
+        orgResult.organization.billingContactEmail || user.username,
+        undefined,
+        returnUrl
+      );
+
+      await createPaymentTransaction(
+        orgResult.organization.id,
+        subscription.id,
+        'credit_pack',
+        checkout.amount,
+        checkout.taxAmount,
+        checkout.totalAmount,
+        'pending',
+        checkout.orderId,
+        { quantity, credits, pricePerPack: packConfig.pricePerPack }
+      );
+
+      res.json({
+        orderId: checkout.orderId,
+        sessionId: checkout.sessionId,
+        paymentLink: checkout.paymentLink,
+        amount: checkout.amount,
+        taxAmount: checkout.taxAmount,
+        totalAmount: checkout.totalAmount,
+        quantity,
+        credits,
+        creditsPerPack: packConfig.creditsPerPack,
+        pricePerPack: packConfig.pricePerPack,
+      });
+    } catch (error: any) {
+      console.error("Error creating credit pack checkout:", error);
+      if (error.name === "ZodError") {
+        res.status(400).json({ error: "Invalid input", details: error.errors });
+        return;
+      }
+      res.status(500).json({ error: error.message || "Failed to create credit pack checkout" });
     }
   });
 

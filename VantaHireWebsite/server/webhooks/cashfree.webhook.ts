@@ -25,7 +25,7 @@ import {
   getOrganizationSubscription,
   updateSubscriptionSeats,
 } from "../lib/subscriptionService";
-import { bulkAllocateCreditsForUpgrade } from "../lib/creditService";
+import { addPurchasedCredits, bulkAllocateCreditsForUpgrade } from "../lib/creditService";
 import { executeAutoDowngrade } from "../lib/seatService";
 import { getEmailService } from "../simpleEmailService";
 
@@ -254,6 +254,47 @@ async function handlePaymentSuccess(
             <p>Manage billing here: <a href="${baseUrl}/org/billing">${baseUrl}/org/billing</a></p>
           `;
         const text = `Seats added for ${contact.organizationName}.\nAdded seats: ${metadata.additionalSeats}\nNew total seats: ${newSeats}\nAmount paid: ₹${(paymentAmount / 100).toFixed(2)}\n\nManage billing: ${baseUrl}/org/billing`;
+        await emailService.sendEmail({
+          to: contact.billingEmail,
+          subject,
+          html,
+          text,
+        });
+      }
+    }
+  }
+
+  if (transaction.type === 'credit_pack') {
+    const metadata = transaction.metadata as { quantity?: number; credits?: number } | null;
+
+    if (!metadata?.quantity || !metadata?.credits) {
+      throw new Error('Missing credit pack metadata for payment');
+    }
+
+    await addPurchasedCredits(
+      transaction.organizationId,
+      metadata.credits,
+      `credit_pack:${metadata.quantity}`,
+    );
+
+    const emailService = await getEmailService();
+    if (emailService) {
+      const contact = await getOrganizationBillingContact(transaction.organizationId);
+      if (contact?.billingEmail) {
+        const baseUrl = process.env.BASE_URL || 'http://localhost:5000';
+        const subject = `Extra AI credits added - ${contact.organizationName}`;
+        const html = `
+          <h2>Extra AI Credits Added</h2>
+          <p>Hello${contact.billingName ? ` ${contact.billingName}` : ''},</p>
+          <p>Your organization now has <strong>${metadata.credits}</strong> additional AI credits available.</p>
+          <ul>
+            <li><strong>Packs purchased:</strong> ${metadata.quantity}</li>
+            <li><strong>Credits added:</strong> ${metadata.credits}</li>
+            <li><strong>Amount Paid:</strong> ₹${(paymentAmount / 100).toFixed(2)}</li>
+          </ul>
+          <p>Manage billing here: <a href="${baseUrl}/org/billing">${baseUrl}/org/billing</a></p>
+        `;
+        const text = `Extra AI credits added for ${contact.organizationName}.\nPacks purchased: ${metadata.quantity}\nCredits added: ${metadata.credits}\nAmount paid: ₹${(paymentAmount / 100).toFixed(2)}\n\nManage billing: ${baseUrl}/org/billing`;
         await emailService.sendEmail({
           to: contact.billingEmail,
           subject,
