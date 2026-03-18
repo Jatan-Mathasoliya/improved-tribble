@@ -23,6 +23,7 @@ import { ArrowLeft, Save, Eye, Loader2, Sparkles, X } from "lucide-react";
 import Layout from "@/components/Layout";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { useAiCreditExhaustionToast } from "@/hooks/use-ai-credit-exhaustion";
 import { formsApi, formsQueryKeys, type FormTemplateDTO, type CreateTemplateRequest, type InvitationQuotaResponse } from "@/lib/formsApi";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { FieldPalette } from "@/components/forms/FieldPalette";
@@ -42,6 +43,7 @@ export interface FieldData {
 export default function FormEditorPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const { showAiCreditExhaustionToast } = useAiCreditExhaustionToast();
   const [, navigate] = useLocation();
   const [, params] = useRoute("/admin/forms/editor/:id?");
 
@@ -129,6 +131,9 @@ export default function FormEditorPage() {
       });
     },
     onError: (error: Error) => {
+      if (showAiCreditExhaustionToast(error)) {
+        return;
+      }
       const is429 = error.message.includes("429");
       toast({
         title: is429 ? "AI limit reached" : "AI generation failed",

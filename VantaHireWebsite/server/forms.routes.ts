@@ -19,7 +19,7 @@ import { aiAnalysisRateLimit } from "./rateLimit";
 import { getUserOrganization } from './lib/organizationService';
 import { updateMemberActivity } from './lib/membershipService';
 import { requireFeatureAccess, FEATURES } from './lib/featureGating';
-import { hasEnoughCredits, useCredits } from './lib/creditService';
+import { getAiCreditExhaustionPayload, hasEnoughCredits, useCredits } from './lib/creditService';
 
 // Environment configuration
 const isTestEnv = process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development';
@@ -200,7 +200,7 @@ export function registerFormsRoutes(app: Express, csrfProtection?: (req: Request
         if (req.user!.role === 'recruiter') {
           const creditCheck = await hasEnoughCredits(req.user!.id, 1);
           if (!creditCheck) {
-            return res.status(403).json({ error: 'Insufficient AI credits' });
+            return res.status(403).json(await getAiCreditExhaustionPayload(req.user!.id, 1));
           }
         }
 

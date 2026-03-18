@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import Layout from "@/components/Layout";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { useAiCreditExhaustionToast } from "@/hooks/use-ai-credit-exhaustion";
 import { apiRequest } from "@/lib/queryClient";
 import { Mail, Send, Loader2 } from "lucide-react";
 import { RecruiterKpiRibbon } from "@/components/recruiter/RecruiterKpiRibbon";
@@ -93,7 +94,9 @@ const RANGE_PRESETS: Record<string, number> = {
 
 export default function RecruiterDashboard() {
   const { toast } = useToast();
+  const { showAiCreditExhaustionToast } = useAiCreditExhaustionToast();
   const [, setLocation] = useLocation();
+  const aiInsightsErrorKeyRef = useRef<string | null>(null);
   const [rangePreset, setRangePreset] = useState<keyof typeof RANGE_PRESETS>("30d");
   const [selectedJobId, setSelectedJobId] = useState<number | "all">("all");
 
@@ -697,23 +700,40 @@ type HmFeedbackResponse = {
     };
   }, [pipelineHealthScore, rangePreset, timeSeriesData, funnelData, dropoffSteps, hiringMetrics, jobsNeedingAttention]);
 
-  const { data: aiInsights, isLoading: aiLoading } = useQuery<DashboardAiInsights>({
+  const { data: aiInsights, isLoading: aiLoading, error: aiInsightsError } = useQuery<DashboardAiInsights>({
     queryKey: ["/api/ai/dashboard-insights", aiPayload],
     queryFn: async () => {
       if (!aiPayload) throw new Error("No payload");
-      const res = await fetch("/api/ai/dashboard-insights", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "include",
-        body: JSON.stringify(aiPayload),
-      });
-      if (!res.ok) throw new Error("AI insights failed");
+      const res = await apiRequest("POST", "/api/ai/dashboard-insights", aiPayload);
       return res.json();
     },
     enabled: !!aiPayload,
     staleTime: 1000 * 60 * 60 * 24, // 24 hours client-side
     retry: false,
   });
+
+  useEffect(() => {
+    if (!aiInsightsError) {
+      aiInsightsErrorKeyRef.current = null;
+      return;
+    }
+
+    const errorKey = aiInsightsError.message;
+    if (aiInsightsErrorKeyRef.current === errorKey) {
+      return;
+    }
+    aiInsightsErrorKeyRef.current = errorKey;
+
+    if (showAiCreditExhaustionToast(aiInsightsError)) {
+      return;
+    }
+
+    toast({
+      title: "AI insights unavailable",
+      description: aiInsightsError.message,
+      variant: "destructive",
+    });
+  }, [aiInsightsError, showAiCreditExhaustionToast, toast]);
 
   const handleStageClick = (stage: { stageId?: number; name: string }) => {
     const params = new URLSearchParams();

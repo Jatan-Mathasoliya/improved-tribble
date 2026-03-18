@@ -14,6 +14,7 @@ import {
   FREE_CREDITS_CAP,
   FREE_CREDITS_PER_MONTH,
   FREE_DAILY_RATE_LIMIT,
+  PLAN_FREE,
   getPlanCreditSettings,
   getPlanRateLimitInfo,
   PRO_DAILY_RATE_LIMIT,
@@ -56,6 +57,19 @@ export interface OrgCreditDetails {
     used: number;
     seatAssigned: boolean;
   }[];
+}
+
+export interface AiCreditExhaustionPayload {
+  error: string;
+  message: string;
+  code: "AI_CREDITS_EXHAUSTED";
+  action: "upgrade_to_growth" | "buy_more_credits";
+  remainingCredits: number;
+  requiredCredits: number;
+  planName: string;
+  planDisplayName: string;
+  billingUrl: string;
+  pricingUrl: string;
 }
 
 export { FREE_DAILY_RATE_LIMIT as FREE_AI_DAILY_RATE_LIMIT };
@@ -240,6 +254,39 @@ export async function getMemberCreditBalance(userId: number): Promise<CreditBala
   }
 
   return buildCreditBalance(context.balance);
+}
+
+export async function getAiCreditExhaustionPayload(
+  userId: number,
+  requiredCredits: number = 1
+): Promise<AiCreditExhaustionPayload> {
+  const context = await getCreditContextForUser(userId);
+  const subscription = context
+    ? await getOrganizationSubscription(context.member.organizationId)
+    : null;
+  const remainingCredits = context ? buildCreditBalance(context.balance).remaining : 0;
+  const planName = subscription?.plan.name ?? PLAN_FREE;
+  const planDisplayName = subscription?.plan.displayName ?? "Free";
+  const action = planName === PLAN_FREE ? "upgrade_to_growth" : "buy_more_credits";
+
+  const message = action === "upgrade_to_growth"
+    ? "Your Free plan AI credits are exhausted. Upgrade to Growth to continue using AI features."
+    : requiredCredits > 1
+      ? `You need ${requiredCredits} AI credits, but only have ${remainingCredits} remaining. Buy more credits to continue.`
+      : "Your organization has run out of AI credits for this billing period. Buy more credits to continue.";
+
+  return {
+    error: "Insufficient AI credits",
+    message,
+    code: "AI_CREDITS_EXHAUSTED",
+    action,
+    remainingCredits,
+    requiredCredits,
+    planName,
+    planDisplayName,
+    billingUrl: "/org/billing",
+    pricingUrl: "/pricing",
+  };
 }
 
 // Get organization's total credit summary

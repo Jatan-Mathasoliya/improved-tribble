@@ -59,6 +59,14 @@ export interface ApiErrorPayload {
   error?: string;
   message?: string;
   code?: string;
+  errorCode?: string;
+  action?: string;
+  remainingCredits?: number;
+  requiredCredits?: number;
+  billingUrl?: string;
+  pricingUrl?: string;
+  planName?: string;
+  planDisplayName?: string;
   [key: string]: unknown;
 }
 
@@ -71,7 +79,11 @@ export class ApiError extends Error {
     super(message);
     this.name = 'ApiError';
     this.status = status;
-    this.code = typeof payload?.code === 'string' ? payload.code : undefined;
+    this.code = typeof payload?.code === 'string'
+      ? payload.code
+      : typeof payload?.errorCode === 'string'
+        ? payload.errorCode
+        : undefined;
     this.payload = payload;
   }
 }

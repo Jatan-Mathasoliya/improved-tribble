@@ -13,6 +13,7 @@ import { Sparkles, RefreshCw, CheckCircle, AlertCircle, XCircle, Zap, DollarSign
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { useAiCreditExhaustionToast } from "@/hooks/use-ai-credit-exhaustion";
 import { PipelineStage } from "@shared/schema";
 import { apiRequest, isRateLimitError, RateLimitError } from "@/lib/queryClient";
 
@@ -60,6 +61,7 @@ export function AISummaryPanel({
   onUpdateStatus,
 }: AISummaryPanelProps) {
   const { toast } = useToast();
+  const { showAiCreditExhaustionToast } = useAiCreditExhaustionToast();
   const queryClient = useQueryClient();
   const [expandedSummary, setExpandedSummary] = useState<AISummaryResult['summary'] | null>(null);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -82,6 +84,9 @@ export function AISummaryPanel({
       });
     },
     onError: (error: Error) => {
+      if (showAiCreditExhaustionToast(error)) {
+        return;
+      }
       const is429 = isRateLimitError(error);
       const rateLimitErr = error as RateLimitError;
       const remainingInfo = is429 && rateLimitErr.formattedRemaining ? ` (${rateLimitErr.formattedRemaining})` : '';

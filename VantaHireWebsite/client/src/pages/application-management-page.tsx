@@ -43,8 +43,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
+import { useAiCreditExhaustionToast } from "@/hooks/use-ai-credit-exhaustion";
 import { Job, Application, PipelineStage, EmailTemplate } from "@shared/schema";
-import { apiRequest, queryClient } from "@/lib/queryClient";
+import { apiRequest, isApiError, queryClient } from "@/lib/queryClient";
 import { formsApi, formsQueryKeys, type FormTemplateDTO, type InvitationQuotaResponse } from "@/lib/formsApi";
 import Layout from "@/components/Layout";
 import { CandidateIntakeForm } from "@/components/candidate-intake";
@@ -71,6 +72,7 @@ export default function ApplicationManagementPage() {
   const [match, params] = useRoute("/jobs/:id/applications");
   const { user } = useAuth();
   const { toast } = useToast();
+  const { showAiCreditExhaustionToast } = useAiCreditExhaustionToast();
   const [location, setLocation] = useLocation();
   const [selectedApplications, setSelectedApplications] = useState<number[]>([]);
   const [stageFilter, setStageFilter] = useState("all");
@@ -314,8 +316,12 @@ export default function ApplicationManagementPage() {
       }
     },
     onError: (error: any) => {
-      const errorData = error.response?.data || {};
-      let msg = errorData.error || error.message || 'Failed to start AI summary generation';
+      if (showAiCreditExhaustionToast(error)) {
+        return;
+      }
+
+      const errorData = isApiError(error) ? error.payload || {} : {};
+      let msg = (typeof errorData.error === 'string' && errorData.error) || error.message || 'Failed to start AI summary generation';
 
       // Handle specific error codes with clear messaging
       if (errorData.errorCode === 'MAX_EXCEEDED') {

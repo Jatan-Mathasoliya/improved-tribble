@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Layout from "@/components/Layout";
 import { initiateCashfreeCheckout } from "@/lib/cashfree";
 import {
@@ -201,6 +201,30 @@ export default function OrgBillingPage() {
   const creditUsagePercent = credits && credits.allocated > 0
     ? Math.min(100, Math.round((credits.used / credits.allocated) * 100))
     : 0;
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    let changed = false;
+
+    if (params.get("buy_credits") === "1" && isOwner && isPro && creditPackConfig) {
+      setCreditPackDialogOpen(true);
+      params.delete("buy_credits");
+      changed = true;
+    }
+
+    if (params.get("upgrade") === "growth" && isOwner && !isPro && proPlan?.id) {
+      setSelectedPlan(proPlan.id);
+      setUpgradeDialogOpen(true);
+      params.delete("upgrade");
+      changed = true;
+    }
+
+    if (changed) {
+      const nextSearch = params.toString();
+      const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
+      window.history.replaceState({}, "", nextUrl);
+    }
+  }, [creditPackConfig, isOwner, isPro, proPlan?.id]);
 
   return (
     <Layout>

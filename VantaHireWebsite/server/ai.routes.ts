@@ -30,7 +30,7 @@ import { getGroqClient } from './lib/groqClient';
 import { getDashboardAiInsights, DashboardAiPayload } from "./lib/aiDashboard";
 import { randomUUID } from 'crypto';
 import { getUserOrganization } from './lib/organizationService';
-import { getMemberCreditBalance, useCredits, hasEnoughCredits } from './lib/creditService';
+import { getAiCreditExhaustionPayload, getMemberCreditBalance, useCredits, hasEnoughCredits } from './lib/creditService';
 import { requireFeatureAccess, FEATURES } from './lib/featureGating';
 
 const AI_MATCH_ENABLED = process.env.AI_MATCH_ENABLED === 'true';
@@ -196,10 +196,7 @@ export function registerAIRoutes(app: Express): void {
         if (req.user!.role === 'recruiter') {
           const creditCheck = await hasEnoughCredits(req.user!.id, 1);
           if (!creditCheck) {
-            res.status(403).json({
-              error: 'Insufficient AI credits',
-              message: 'You have run out of AI credits for this billing period.',
-            });
+            res.status(403).json(await getAiCreditExhaustionPayload(req.user!.id, 1));
             return;
           }
           // Deduct 1 credit for AI generation
@@ -248,10 +245,7 @@ export function registerAIRoutes(app: Express): void {
         if (req.user!.role === 'recruiter') {
           const creditCheck = await hasEnoughCredits(req.user!.id, 1);
           if (!creditCheck) {
-            res.status(403).json({
-              error: 'Insufficient AI credits',
-              message: 'You have run out of AI credits for this billing period.',
-            });
+            res.status(403).json(await getAiCreditExhaustionPayload(req.user!.id, 1));
             return;
           }
           // Deduct 1 credit for dashboard insights

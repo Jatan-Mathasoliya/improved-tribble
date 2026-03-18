@@ -15,7 +15,7 @@ import { storage } from './storage';
 import { requireRole, requireSeat } from './auth';
 import { getUserOrganization } from './lib/organizationService';
 import { requireFeatureAccess, FEATURES } from './lib/featureGating';
-import { hasEnoughCredits, useCredits } from './lib/creditService';
+import { getAiCreditExhaustionPayload, hasEnoughCredits, useCredits } from './lib/creditService';
 import {
   insertEmailTemplateSchema,
   type InsertEmailTemplate,
@@ -204,10 +204,7 @@ export function registerCommunicationsRoutes(
       if (req.user!.role === 'recruiter') {
         const creditCheck = await hasEnoughCredits(req.user!.id, 1);
         if (!creditCheck) {
-          res.status(403).json({
-            error: 'Insufficient AI credits',
-            message: 'You have run out of AI credits for this billing period.',
-          });
+          res.status(403).json(await getAiCreditExhaustionPayload(req.user!.id, 1));
           return;
         }
       }

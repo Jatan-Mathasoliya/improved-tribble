@@ -22,7 +22,7 @@ import { getUserOrganization } from './lib/organizationService';
 import { calculateAiCost } from './lib/aiMatchingEngine';
 import { syncProfileCompletionStatus } from './lib/profileCompletion';
 import { requireFeatureAccess, FEATURES } from './lib/featureGating';
-import { hasEnoughCredits, useCredits, getCreditCostForOperation, getUserDailyRateLimit, getPlanRateLimitInfo } from './lib/creditService';
+import { getAiCreditExhaustionPayload, hasEnoughCredits, useCredits, getCreditCostForOperation, getUserDailyRateLimit, getPlanRateLimitInfo } from './lib/creditService';
 import {
   insertApplicationSchema,
   recruiterAddApplicationSchema,
@@ -1407,10 +1407,7 @@ export function registerApplicationsRoutes(
       if (req.user!.role === 'recruiter') {
         const creditCheck = await hasEnoughCredits(req.user!.id, 1);
         if (!creditCheck) {
-          res.status(403).json({
-            error: 'Insufficient AI credits',
-            message: 'You have run out of AI credits for this billing period.',
-          });
+          res.status(403).json(await getAiCreditExhaustionPayload(req.user!.id, 1));
           return;
         }
       }
@@ -1785,11 +1782,7 @@ export function registerApplicationsRoutes(
           const requiredCredits = appsNeedingSummary.length * creditsPerSummary;
           const creditCheck = await hasEnoughCredits(userId, requiredCredits);
           if (!creditCheck) {
-            res.status(403).json({
-              error: 'Insufficient AI credits',
-              message: 'You do not have enough AI credits to process this batch.',
-              requiredCredits,
-            });
+            res.status(403).json(await getAiCreditExhaustionPayload(userId, requiredCredits));
             return;
           }
         }

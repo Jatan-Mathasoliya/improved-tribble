@@ -15,6 +15,7 @@ import { FeedbackPanel } from "@/components/FeedbackPanel";
 import { ClientFeedbackList } from "@/components/ClientFeedbackList";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { useAiCreditExhaustionToast } from "@/hooks/use-ai-credit-exhaustion";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
 
@@ -65,6 +66,7 @@ export function ApplicationDetailPanel({
   onUpdateStatus,
 }: ApplicationDetailPanelProps) {
   const { toast } = useToast();
+  const { showAiCreditExhaustionToast } = useAiCreditExhaustionToast();
 
   // Fetch email history for this application
   const { data: emailHistory = [], isLoading: emailHistoryLoading } = useQuery<EmailHistoryEntry[]>({
@@ -144,6 +146,9 @@ export function ApplicationDetailPanel({
       });
     },
     onError: (error: Error) => {
+      if (showAiCreditExhaustionToast(error)) {
+        return;
+      }
       const is429 = error.message.includes("429");
       toast({
         title: is429 ? "AI limit reached" : "AI draft failed",
