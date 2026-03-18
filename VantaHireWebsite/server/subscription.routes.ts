@@ -1460,9 +1460,10 @@ export function registerSubscriptionRoutes(
       if (subscription) {
         const creditsPerSeat = subscription.plan.aiCreditsPerSeatMonthly;
         const maxRollover = subscription.plan.maxCreditRolloverMonths || 3;
-        const cap = creditsPerSeat * maxRollover;
+        const includedCredits = creditsPerSeat * Math.max(1, subscription.seats || 1);
+        const cap = includedCredits * maxRollover;
 
-        await bulkAllocateCreditsForUpgrade(org.id, creditsPerSeat, cap);
+        await bulkAllocateCreditsForUpgrade(org.id, includedCredits, cap);
       }
 
       // Update checkout intent as claimed

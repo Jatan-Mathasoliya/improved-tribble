@@ -96,6 +96,11 @@ export default function OrgBillingPage() {
   const orderStatus = useOrderStatus(returnedOrderId);
   const currentPlanName = subscription?.plan?.displayName || 'Free';
   const isPro = subscription?.plan?.name === 'pro';
+  const proCreditsPerSeat = proPlan?.rateLimits?.monthlyCredits || 0;
+  const currentIncludedCredits = isPro
+    ? proCreditsPerSeat * Math.max(1, subscription?.seats || 1)
+    : (freePlan?.rateLimits?.monthlyCredits || 0);
+  const selectedPlanIncludedCredits = proCreditsPerSeat * Math.max(1, seats);
   const creditPackQuantityNumber = Math.min(
     creditPackConfig?.maxQuantity || 10,
     Math.max(1, parseInt(creditPackQuantity || "1", 10) || 1),
@@ -467,11 +472,11 @@ export default function OrgBillingPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {creditUsagePercent >= 75 && (
+            {creditUsagePercent >= 50 && (
               <div className={`flex items-start justify-between gap-4 rounded-lg border p-4 ${
                 creditUsagePercent >= 100
                   ? "border-red-200 bg-red-50"
-                  : creditUsagePercent >= 90
+                  : creditUsagePercent >= 75
                     ? "border-amber-200 bg-amber-50"
                     : "border-yellow-200 bg-yellow-50"
               }`}>
@@ -523,6 +528,10 @@ export default function OrgBillingPage() {
               {credits.rollover > 0 && (
                 <span>+{credits.rollover} rolled over</span>
               )}
+            </div>
+            <div className="text-sm text-muted-foreground">
+              Included credits this term: {currentIncludedCredits}
+              {isPro ? ` (${proCreditsPerSeat} per seat × ${subscription?.seats || 1} seat${(subscription?.seats || 1) === 1 ? '' : 's'})` : ""}
             </div>
             {credits.purchasedCredits && credits.purchasedCredits > 0 && (
               <div className="text-sm text-muted-foreground">
@@ -592,7 +601,7 @@ export default function OrgBillingPage() {
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
-                    {formatMetric(proPlan?.rateLimits?.monthlyCredits)} included AI credits/month
+                    {formatMetric(proCreditsPerSeat)} AI credits per seat/month
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
@@ -695,7 +704,7 @@ export default function OrgBillingPage() {
                 onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
               />
               <p className="text-sm text-muted-foreground">
-                Growth includes {formatMetric(proPlan?.rateLimits?.monthlyCredits)} AI credits per month per organization. Seats are billed separately, and {creditPackConfig ? `extra ${creditPackConfig.creditsPerPack}-credit packs can be added anytime` : 'extra credit packs can be added anytime'}.
+                Growth includes {formatMetric(proCreditsPerSeat)} AI credits per seat per month, pooled across your organization. With {seats} seat{seats === 1 ? "" : "s"}, that is {selectedPlanIncludedCredits} included credits per month. {creditPackConfig ? `Extra ${creditPackConfig.creditsPerPack}-credit packs can be added anytime.` : 'Extra credit packs can be added anytime.'}
               </p>
             </div>
             <div className="space-y-2">

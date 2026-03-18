@@ -79,7 +79,7 @@ export interface AiCreditExhaustionPayload {
 export { FREE_DAILY_RATE_LIMIT as FREE_AI_DAILY_RATE_LIMIT };
 export { PRO_DAILY_RATE_LIMIT as PRO_AI_DAILY_RATE_LIMIT };
 export { getPlanRateLimitInfo } from "./planConfig";
-export const CREDIT_USAGE_WARNING_THRESHOLDS = [75, 90, 100] as const;
+export const CREDIT_USAGE_WARNING_THRESHOLDS = [50, 75, 100] as const;
 
 function getCreditPeriodWindow(now: Date = new Date()): { periodStart: Date; periodEnd: Date } {
   const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
@@ -132,14 +132,18 @@ export function getCrossedCreditUsageThresholds(
   );
 }
 
+export function getIncludedCreditsForSeats(creditsPerSeat: number, seats: number): number {
+  return creditsPerSeat * Math.max(1, seats || 1);
+}
+
 function getCreditWarningAlertType(threshold: number): string {
   return `credit_usage_${threshold}`;
 }
 
-async function getOrganizationBillingContact(orgId: number): Promise<{
+async function getOrganizationOwnerContact(orgId: number): Promise<{
   organizationName: string;
-  billingEmail: string | null;
-  billingName: string | null;
+  ownerEmail: string | null;
+  ownerName: string | null;
 } | null> {
   const org = await db.query.organizations.findFirst({
     where: eq(organizations.id, orgId),
@@ -149,35 +153,33 @@ async function getOrganizationBillingContact(orgId: number): Promise<{
     return null;
   }
 
-  let billingEmail = org.billingContactEmail || null;
-  let billingName = org.billingContactName || null;
+  const owner = await db
+    .select({
+      email: users.username,
+      firstName: users.firstName,
+    })
+    .from(organizationMembers)
+    .innerJoin(users, eq(organizationMembers.userId, users.id))
+    .where(
+      and(
+        eq(organizationMembers.organizationId, orgId),
+        eq(organizationMembers.role, "owner"),
+      ),
+    )
+    .limit(1);
 
-  if (!billingEmail) {
-    const owner = await db
-      .select({
-        email: users.username,
-        firstName: users.firstName,
-      })
-      .from(organizationMembers)
-      .innerJoin(users, eq(organizationMembers.userId, users.id))
-      .where(
-        and(
-          eq(organizationMembers.organizationId, orgId),
-          eq(organizationMembers.role, "owner"),
-        ),
-      )
-      .limit(1);
-
-    if (owner.length > 0) {
-      billingEmail = owner[0].email;
-      billingName = billingName || owner[0].firstName || null;
-    }
+  if (owner.length === 0) {
+    return {
+      organizationName: org.name,
+      ownerEmail: null,
+      ownerName: null,
+    };
   }
 
   return {
     organizationName: org.name,
-    billingEmail,
-    billingName,
+    ownerEmail: owner[0].email,
+    ownerName: owner[0].firstName || null,
   };
 }
 
@@ -206,9 +208,9 @@ async function maybeSendCreditUsageWarning(params: {
     return;
   }
 
-  const contact = await getOrganizationBillingContact(params.orgId);
+  const contact = await getOrganizationOwnerContact(params.orgId);
   const emailService = await getEmailService();
-  if (!contact?.billingEmail || !emailService) {
+  if (!contact?.ownerEmail || !emailService) {
     return;
   }
 
@@ -220,7 +222,7 @@ async function maybeSendCreditUsageWarning(params: {
   const subject = `${params.threshold}% of AI credits used - ${contact.organizationName}`;
   const html = `
     <h2>AI Credit Usage Alert</h2>
-    <p>Hello${contact.billingName ? ` ${contact.billingName}` : ""},</p>
+    <p>Hello${contact.ownerName ? ` ${contact.ownerName}` : ""},</p>
     <p><strong>${contact.organizationName}</strong> has used <strong>${params.threshold}%</strong> of its AI credits for the current billing term.</p>
     <ul>
       <li><strong>Plan:</strong> ${subscription.plan.displayName}</li>
@@ -234,7 +236,7 @@ async function maybeSendCreditUsageWarning(params: {
   const text = `${contact.organizationName} has used ${params.threshold}% of its AI credits for the current billing term.\nPlan: ${subscription.plan.displayName}\nCredits remaining: ${params.remainingCredits}\nCurrent credit pool: ${params.totalAllocated}\nTerm end: ${periodEndLabel}\n\n${actionLabel}: ${actionUrl}`;
 
   const sent = await emailService.sendEmail({
-    to: contact.billingEmail,
+    to: contact.ownerEmail,
     subject,
     html,
     text,
@@ -247,7 +249,7 @@ async function maybeSendCreditUsageWarning(params: {
   await db.insert(subscriptionAlerts).values({
     subscriptionId: subscription.id,
     alertType: getCreditWarningAlertType(params.threshold),
-    recipientEmail: contact.billingEmail,
+    recipientEmail: contact.ownerEmail,
     emailStatus: "sent",
   });
 }
@@ -263,8 +265,9 @@ async function getEffectiveRecurringLimit(
 
   const { creditsPerSeat } = getPlanCreditSettings(resolvedSubscription.plan);
   const bonusCredits = resolvedSubscription.bonusCredits || 0;
+  const includedCredits = getIncludedCreditsForSeats(creditsPerSeat, resolvedSubscription.seats);
 
-  return resolvedSubscription.customCreditLimit ?? (creditsPerSeat + bonusCredits);
+  return resolvedSubscription.customCreditLimit ?? (includedCredits + bonusCredits);
 }
 
 async function recordCreditTransaction(
@@ -762,7 +765,7 @@ export async function getOrgCreditDetails(orgId: number): Promise<OrgCreditDetai
   const usageMap = new Map(usageByUser.map((entry: typeof usageByUser[number]) => [entry.userId, Number(entry.used)]));
 
   return {
-    planAllocation: creditsPerSeat,
+    planAllocation: getIncludedCreditsForSeats(creditsPerSeat, subscription.seats),
     bonusCredits: subscription.bonusCredits || 0,
     customLimit: subscription.customCreditLimit,
     effectiveLimit: await getEffectiveRecurringLimit(orgId, subscription),

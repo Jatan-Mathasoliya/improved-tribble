@@ -178,11 +178,12 @@ async function handlePaymentSuccess(
       if (subscription) {
         const creditsPerSeat = subscription.plan.aiCreditsPerSeatMonthly;
         const maxRollover = subscription.plan.maxCreditRolloverMonths || 3;
-        const cap = creditsPerSeat * maxRollover;
+        const includedCredits = creditsPerSeat * Math.max(1, subscription.seats || 1);
+        const cap = includedCredits * maxRollover;
 
         await bulkAllocateCreditsForUpgrade(
           transaction.organizationId,
-          creditsPerSeat,
+          includedCredits,
           cap
         );
 
@@ -368,11 +369,12 @@ async function handleCheckoutIntentPayment(
     if (subscription) {
       const creditsPerSeat = subscription.plan.aiCreditsPerSeatMonthly;
       const maxRollover = subscription.plan.maxCreditRolloverMonths || 3;
-      const cap = creditsPerSeat * maxRollover;
+      const includedCredits = creditsPerSeat * Math.max(1, subscription.seats || 1);
+      const cap = includedCredits * maxRollover;
 
       await bulkAllocateCreditsForUpgrade(
         intent.organizationId,
-        creditsPerSeat,
+        includedCredits,
         cap
       );
     }

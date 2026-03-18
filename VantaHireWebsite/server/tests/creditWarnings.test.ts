@@ -16,24 +16,32 @@ vi.mock('../lib/subscriptionService', () => ({
 
 describe('credit warning thresholds', () => {
   it('returns no thresholds when allocation is zero', async () => {
-    const { getCrossedCreditUsageThresholds } = await import('../lib/creditService');
+    const { getCrossedCreditUsageThresholds, getIncludedCreditsForSeats } = await import('../lib/creditService');
 
     expect(getCrossedCreditUsageThresholds(0, 0, 10)).toEqual([]);
+    expect(getIncludedCreditsForSeats(600, 0)).toBe(600);
   });
 
   it('returns the thresholds crossed by new usage', async () => {
     const { getCrossedCreditUsageThresholds } = await import('../lib/creditService');
 
-    expect(getCrossedCreditUsageThresholds(100, 50, 74)).toEqual([]);
-    expect(getCrossedCreditUsageThresholds(100, 50, 75)).toEqual([75]);
-    expect(getCrossedCreditUsageThresholds(100, 74, 91)).toEqual([75, 90]);
-    expect(getCrossedCreditUsageThresholds(100, 89, 100)).toEqual([90, 100]);
+    expect(getCrossedCreditUsageThresholds(100, 40, 49)).toEqual([]);
+    expect(getCrossedCreditUsageThresholds(100, 40, 50)).toEqual([50]);
+    expect(getCrossedCreditUsageThresholds(100, 49, 76)).toEqual([50, 75]);
+    expect(getCrossedCreditUsageThresholds(100, 74, 100)).toEqual([75, 100]);
   });
 
   it('does not repeat a threshold once already crossed', async () => {
     const { getCrossedCreditUsageThresholds } = await import('../lib/creditService');
 
-    expect(getCrossedCreditUsageThresholds(100, 90, 95)).toEqual([]);
+    expect(getCrossedCreditUsageThresholds(100, 75, 95)).toEqual([]);
     expect(getCrossedCreditUsageThresholds(100, 100, 100)).toEqual([]);
+  });
+
+  it('multiplies included credits by seat count for pooled org balances', async () => {
+    const { getIncludedCreditsForSeats } = await import('../lib/creditService');
+
+    expect(getIncludedCreditsForSeats(600, 1)).toBe(600);
+    expect(getIncludedCreditsForSeats(600, 3)).toBe(1800);
   });
 });

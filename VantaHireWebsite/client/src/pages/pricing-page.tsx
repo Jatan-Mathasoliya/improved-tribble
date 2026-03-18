@@ -441,7 +441,7 @@ export default function PricingPage() {
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  {formatMetric(proCredits)} included AI credits/month
+                  {formatMetric(proCredits)} AI credits per seat/month
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
@@ -686,7 +686,7 @@ export default function PricingPage() {
                     onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
                   />
                   <p className="text-sm text-muted-foreground">
-                    Growth includes {formatMetric(proCredits)} AI credits per month per organization. Seats are billed separately, and {creditPackConfig ? `extra ${creditPackConfig.creditsPerPack}-credit packs are available at ${formatPriceINR(creditPackConfig.pricePerPack)}` : 'extra credit packs are available'}.
+                    Growth includes {formatMetric(proCredits)} AI credits per seat per month, pooled across the organization. With {seats} seat{seats === 1 ? "" : "s"}, that is {proCredits * seats} included credits per month. {creditPackConfig ? `Extra ${creditPackConfig.creditsPerPack}-credit packs are available at ${formatPriceINR(creditPackConfig.pricePerPack)}.` : 'Extra credit packs are available.'}
                   </p>
                 </div>
 
