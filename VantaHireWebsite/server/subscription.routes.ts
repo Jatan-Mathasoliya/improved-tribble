@@ -13,6 +13,7 @@ import {
   reactivateSubscription,
   getSubscriptionInvoices,
   calculateProratedAmount,
+  calculateProratedCredits,
 } from "./lib/subscriptionService";
 import type { BillingCycle } from "@shared/schema";
 import { organizationSubscriptions, checkoutIntents, organizations } from "@shared/schema";
@@ -30,6 +31,8 @@ import {
   getCreditUsageHistory,
   getUserDailyRateLimit,
   getPlanRateLimitInfo,
+  getCurrentOrgCreditCycle,
+  addProratedSeatCredits,
 } from "./lib/creditService";
 import {
   createCheckoutOrder,
@@ -54,7 +57,7 @@ import { getEmailService } from "./simpleEmailService";
 import { db } from "./db";
 import { organizationMembers, users } from "@shared/schema";
 import { eq, inArray, and } from "drizzle-orm";
-import { getCreditPackConfig, PLAN_FREE } from "./lib/planConfig";
+import { getCommercialCatalog, getCreditPackConfig, PLAN_FREE } from "./lib/planConfig";
 
 // Input validation schemas
 const checkoutSchema = z.object({
@@ -123,6 +126,19 @@ export function registerSubscriptionRoutes(
     } catch (error: any) {
       console.error("Error listing plans:", error);
       res.status(500).json({ error: "Failed to list plans" });
+    }
+  });
+
+  app.get("/api/subscription/commercial-config", async (req, res) => {
+    try {
+      const plans = await getActivePlans();
+      res.json({
+        ...getCommercialCatalog(plans),
+        billing: getBillingTaxConfig(),
+      });
+    } catch (error: any) {
+      console.error("Error getting commercial config:", error);
+      res.status(500).json({ error: "Failed to get commercial config" });
     }
   });
 
@@ -641,6 +657,13 @@ export function registerSubscriptionRoutes(
         subscription.currentPeriodEnd,
         subscription.billingCycle as BillingCycle
       );
+      const currentCreditCycle = await getCurrentOrgCreditCycle(orgResult.organization.id);
+      const proratedCredits = calculateProratedCredits(
+        subscription.plan.aiCreditsPerSeatMonthly,
+        additionalSeats,
+        currentCreditCycle.periodStart,
+        currentCreditCycle.periodEnd,
+      );
 
       // If amount is 0 or very small, just add seats directly
       if (proratedAmount < 100) { // Less than ₹1
@@ -649,11 +672,23 @@ export function registerSubscriptionRoutes(
           subscription.seats + additionalSeats,
           user.id
         );
+        await addProratedSeatCredits(
+          orgResult.organization.id,
+          proratedCredits,
+          {
+            reason: "seat_add_proration",
+            additionalSeats,
+            periodStart: currentCreditCycle.periodStart.toISOString(),
+            periodEnd: currentCreditCycle.periodEnd.toISOString(),
+          },
+          user.id,
+        );
 
         res.json({
           success: true,
           newSeats: subscription.seats + additionalSeats,
           charged: 0,
+          proratedCredits,
         });
         return;
       }
@@ -686,7 +721,13 @@ export function registerSubscriptionRoutes(
         checkout.totalAmount,
         'pending',
         checkout.orderId,
-        { additionalSeats, proratedAmount }
+        {
+          additionalSeats,
+          proratedAmount,
+          proratedCredits,
+          creditPeriodStart: currentCreditCycle.periodStart.toISOString(),
+          creditPeriodEnd: currentCreditCycle.periodEnd.toISOString(),
+        }
       );
 
       res.json({
@@ -697,6 +738,7 @@ export function registerSubscriptionRoutes(
         taxAmount: checkout.taxAmount,
         totalAmount: checkout.totalAmount,
         additionalSeats,
+        proratedCredits,
         requiresPayment: true,
       });
     } catch (error: any) {

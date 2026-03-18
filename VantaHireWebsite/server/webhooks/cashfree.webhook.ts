@@ -25,7 +25,7 @@ import {
   getOrganizationSubscription,
   updateSubscriptionSeats,
 } from "../lib/subscriptionService";
-import { addPurchasedCredits, bulkAllocateCreditsForUpgrade } from "../lib/creditService";
+import { addProratedSeatCredits, addPurchasedCredits, bulkAllocateCreditsForUpgrade } from "../lib/creditService";
 import { executeAutoDowngrade } from "../lib/seatService";
 import { getEmailService } from "../simpleEmailService";
 
@@ -221,7 +221,13 @@ async function handlePaymentSuccess(
 
   // If seat addition, update seats
   if (transaction.type === 'seat_addition') {
-    const metadata = transaction.metadata as { additionalSeats?: number; proratedAmount?: number } | null;
+    const metadata = transaction.metadata as {
+      additionalSeats?: number;
+      proratedAmount?: number;
+      proratedCredits?: number;
+      creditPeriodStart?: string;
+      creditPeriodEnd?: string;
+    } | null;
     const subscription = await getOrganizationSubscription(transaction.organizationId);
 
     if (!subscription) {
@@ -235,6 +241,19 @@ async function handlePaymentSuccess(
     // Calculate new seat count and update subscription
     const newSeats = subscription.seats + metadata.additionalSeats;
     await updateSubscriptionSeats(subscription.id, newSeats);
+    if (metadata.proratedCredits && metadata.proratedCredits > 0) {
+      await addProratedSeatCredits(
+        transaction.organizationId,
+        metadata.proratedCredits,
+        {
+          reason: "seat_add_proration",
+          additionalSeats: metadata.additionalSeats,
+          cashfreeOrderId: transaction.cashfreeOrderId,
+          creditPeriodStart: metadata.creditPeriodStart,
+          creditPeriodEnd: metadata.creditPeriodEnd,
+        },
+      );
+    }
 
     console.log(`Seat addition completed: org ${transaction.organizationId} now has ${newSeats} seats (+${metadata.additionalSeats})`);
 
@@ -250,11 +269,12 @@ async function handlePaymentSuccess(
             <p>${metadata.additionalSeats} seat(s) were added to your subscription.</p>
             <ul>
               <li><strong>New total seats:</strong> ${newSeats}</li>
+              <li><strong>Included AI credits added now:</strong> ${metadata.proratedCredits || 0}</li>
               <li><strong>Amount Paid:</strong> ₹${(paymentAmount / 100).toFixed(2)}</li>
             </ul>
             <p>Manage billing here: <a href="${baseUrl}/org/billing">${baseUrl}/org/billing</a></p>
           `;
-        const text = `Seats added for ${contact.organizationName}.\nAdded seats: ${metadata.additionalSeats}\nNew total seats: ${newSeats}\nAmount paid: ₹${(paymentAmount / 100).toFixed(2)}\n\nManage billing: ${baseUrl}/org/billing`;
+        const text = `Seats added for ${contact.organizationName}.\nAdded seats: ${metadata.additionalSeats}\nNew total seats: ${newSeats}\nIncluded AI credits added now: ${metadata.proratedCredits || 0}\nAmount paid: ₹${(paymentAmount / 100).toFixed(2)}\n\nManage billing: ${baseUrl}/org/billing`;
         await emailService.sendEmail({
           to: contact.billingEmail,
           subject,

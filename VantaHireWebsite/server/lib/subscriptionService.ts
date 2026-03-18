@@ -17,14 +17,23 @@ import { eq, and, desc, sql, gte, lte } from "drizzle-orm";
 import {
   BUSINESS_CREDITS_PER_SEAT_PER_MONTH,
   BUSINESS_CREDITS_ROLLOVER_MONTHS,
+  BUSINESS_PLAN_DESCRIPTION,
+  BUSINESS_PRICE_PER_SEAT_ANNUAL,
+  BUSINESS_PRICE_PER_SEAT_MONTHLY,
   FREE_CREDITS_PER_MONTH,
   FREE_CREDITS_ROLLOVER_MONTHS,
+  FREE_PLAN_DESCRIPTION,
+  FREE_PRICE_PER_SEAT_ANNUAL,
+  FREE_PRICE_PER_SEAT_MONTHLY,
   normalizePlan,
   PLAN_BUSINESS,
   PLAN_FREE,
   PLAN_PRO,
+  PRO_PLAN_DESCRIPTION,
   PRO_CREDITS_PER_SEAT_PER_MONTH,
   PRO_CREDITS_ROLLOVER_MONTHS,
+  PRO_PRICE_PER_SEAT_ANNUAL,
+  PRO_PRICE_PER_SEAT_MONTHLY,
 } from "./planConfig";
 
 export { PLAN_FREE, PLAN_PRO, PLAN_BUSINESS } from "./planConfig";
@@ -552,6 +561,24 @@ export function calculateProratedAmount(
   return Math.round(pricePerSeat * additionalSeats * ratio);
 }
 
+export function calculateProratedCredits(
+  creditsPerSeat: number,
+  additionalSeats: number,
+  periodStart: Date,
+  periodEnd: Date,
+  now: Date = new Date(),
+): number {
+  const totalMs = periodEnd.getTime() - periodStart.getTime();
+  const remainingMs = Math.max(0, periodEnd.getTime() - now.getTime());
+
+  if (totalMs <= 0 || remainingMs <= 0 || creditsPerSeat <= 0 || additionalSeats <= 0) {
+    return 0;
+  }
+
+  const ratio = remainingMs / totalMs;
+  return Math.round(creditsPerSeat * additionalSeats * ratio);
+}
+
 // Check if plan has feature
 export function planHasFeature(plan: SubscriptionPlan, featureName: string): boolean {
   const features = plan.features as Record<string, boolean>;
@@ -585,9 +612,9 @@ export async function seedDefaultPlans(): Promise<void> {
     {
       name: PLAN_FREE,
       displayName: 'Free',
-      description: 'Basic ATS for individuals',
-      pricePerSeatMonthly: 0,
-      pricePerSeatAnnual: 0,
+      description: FREE_PLAN_DESCRIPTION,
+      pricePerSeatMonthly: FREE_PRICE_PER_SEAT_MONTHLY,
+      pricePerSeatAnnual: FREE_PRICE_PER_SEAT_ANNUAL,
       aiCreditsPerSeatMonthly: FREE_CREDITS_PER_MONTH,
       maxCreditRolloverMonths: FREE_CREDITS_ROLLOVER_MONTHS,
       features: {
@@ -607,9 +634,9 @@ export async function seedDefaultPlans(): Promise<void> {
     {
       name: PLAN_PRO,
       displayName: 'Growth',
-      description: 'Scale your hiring output',
-      pricePerSeatMonthly: 199900, // ₹1,999 in paise
-      pricePerSeatAnnual: 1999000, // ₹19,990 in paise (2 months free)
+      description: PRO_PLAN_DESCRIPTION,
+      pricePerSeatMonthly: PRO_PRICE_PER_SEAT_MONTHLY,
+      pricePerSeatAnnual: PRO_PRICE_PER_SEAT_ANNUAL,
       aiCreditsPerSeatMonthly: PRO_CREDITS_PER_SEAT_PER_MONTH,
       maxCreditRolloverMonths: PRO_CREDITS_ROLLOVER_MONTHS,
       features: {
@@ -629,9 +656,9 @@ export async function seedDefaultPlans(): Promise<void> {
     {
       name: PLAN_BUSINESS,
       displayName: 'Enterprise',
-      description: 'Custom fit for large teams',
-      pricePerSeatMonthly: 0, // Contact sales
-      pricePerSeatAnnual: 0,
+      description: BUSINESS_PLAN_DESCRIPTION,
+      pricePerSeatMonthly: BUSINESS_PRICE_PER_SEAT_MONTHLY,
+      pricePerSeatAnnual: BUSINESS_PRICE_PER_SEAT_ANNUAL,
       aiCreditsPerSeatMonthly: BUSINESS_CREDITS_PER_SEAT_PER_MONTH,
       maxCreditRolloverMonths: BUSINESS_CREDITS_ROLLOVER_MONTHS,
       features: {

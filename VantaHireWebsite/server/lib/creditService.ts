@@ -76,6 +76,17 @@ export interface AiCreditExhaustionPayload {
   pricingUrl: string;
 }
 
+export interface CreditUsageSplit {
+  recurringToUse: number;
+  purchasedToUse: number;
+}
+
+export interface CycleResetValues {
+  recurringAllocated: number;
+  rolloverCredits: number;
+  purchasedUsed: number;
+}
+
 export { FREE_DAILY_RATE_LIMIT as FREE_AI_DAILY_RATE_LIMIT };
 export { PRO_DAILY_RATE_LIMIT as PRO_AI_DAILY_RATE_LIMIT };
 export { getPlanRateLimitInfo } from "./planConfig";
@@ -134,6 +145,62 @@ export function getCrossedCreditUsageThresholds(
 
 export function getIncludedCreditsForSeats(creditsPerSeat: number, seats: number): number {
   return creditsPerSeat * Math.max(1, seats || 1);
+}
+
+export function calculateEffectiveRecurringLimit(
+  creditsPerSeat: number,
+  seats: number,
+  bonusCredits: number,
+  customCreditLimit: number | null,
+): number {
+  if (customCreditLimit !== null) {
+    return customCreditLimit;
+  }
+
+  return getIncludedCreditsForSeats(creditsPerSeat, seats) + bonusCredits;
+}
+
+export function splitCreditUsage(
+  recurringRemaining: number,
+  purchasedRemaining: number,
+  amount: number,
+): CreditUsageSplit {
+  if (amount <= 0) {
+    return {
+      recurringToUse: 0,
+      purchasedToUse: 0,
+    };
+  }
+
+  const cappedRecurringRemaining = Math.max(0, recurringRemaining);
+  const cappedPurchasedRemaining = Math.max(0, purchasedRemaining);
+  const totalRemaining = cappedRecurringRemaining + cappedPurchasedRemaining;
+  if (amount > totalRemaining) {
+    throw new Error("Insufficient credits");
+  }
+
+  const recurringToUse = Math.min(cappedRecurringRemaining, amount);
+  return {
+    recurringToUse,
+    purchasedToUse: amount - recurringToUse,
+  };
+}
+
+export function calculateCycleResetValues(params: {
+  effectiveLimit: number;
+  maxRolloverMonths: number;
+  recurringAllocated: number;
+  recurringUsed: number;
+}): CycleResetValues {
+  const recurringRemaining = Math.max(0, params.recurringAllocated - params.recurringUsed);
+  const maxRollover = Math.max(0, params.effectiveLimit * params.maxRolloverMonths - params.effectiveLimit);
+  const rolloverCredits = Math.min(recurringRemaining, maxRollover);
+
+  return {
+    recurringAllocated: params.effectiveLimit + rolloverCredits,
+    rolloverCredits,
+    purchasedUsed: 0,
+  };
 }
 
 export function getUniqueCreditWarningRecipients(
@@ -276,9 +343,12 @@ async function getEffectiveRecurringLimit(
 
   const { creditsPerSeat } = getPlanCreditSettings(resolvedSubscription.plan);
   const bonusCredits = resolvedSubscription.bonusCredits || 0;
-  const includedCredits = getIncludedCreditsForSeats(creditsPerSeat, resolvedSubscription.seats);
-
-  return resolvedSubscription.customCreditLimit ?? (includedCredits + bonusCredits);
+  return calculateEffectiveRecurringLimit(
+    creditsPerSeat,
+    resolvedSubscription.seats,
+    bonusCredits,
+    resolvedSubscription.customCreditLimit,
+  );
 }
 
 async function recordCreditTransaction(
@@ -402,6 +472,19 @@ async function getCreditContextForUser(userId: number) {
   return { member, balance };
 }
 
+export async function getCurrentOrgCreditCycle(orgId: number): Promise<{
+  periodStart: Date;
+  periodEnd: Date;
+}> {
+  const balance = await ensureOrgCreditBalanceInitialized(orgId);
+  const fallback = getCreditPeriodWindow();
+
+  return {
+    periodStart: balance.periodStart || fallback.periodStart,
+    periodEnd: balance.periodEnd || fallback.periodEnd,
+  };
+}
+
 // Get member's credit balance (org-shared balance for the seated member)
 export async function getMemberCreditBalance(userId: number): Promise<CreditBalance | null> {
   const context = await getCreditContextForUser(userId);
@@ -514,8 +597,11 @@ export async function useCredits(userId: number, amount: number): Promise<{
       };
     }
 
-    const recurringToUse = Math.min(recurringRemaining, amount);
-    const purchasedToUse = amount - recurringToUse;
+    const { recurringToUse, purchasedToUse } = splitCreditUsage(
+      recurringRemaining,
+      current.purchasedCredits,
+      amount,
+    );
 
     await tx.update(organizationCreditBalances)
       .set({
@@ -607,17 +693,20 @@ export async function resetOrgCredits(orgId: number): Promise<number> {
   const balance = await ensureOrgCreditBalanceInitialized(orgId);
   const effectiveLimit = await getEffectiveRecurringLimit(orgId, subscription);
   const { maxRolloverMonths } = getPlanCreditSettings(subscription.plan);
-  const recurringRemaining = getBalanceRecurringRemaining(balance);
-  const maxRollover = Math.max(0, effectiveLimit * maxRolloverMonths - effectiveLimit);
-  const rolloverCredits = Math.min(recurringRemaining, maxRollover);
+  const resetValues = calculateCycleResetValues({
+    effectiveLimit,
+    maxRolloverMonths,
+    recurringAllocated: balance.recurringAllocated,
+    recurringUsed: balance.recurringUsed,
+  });
   const { periodStart, periodEnd } = getCreditPeriodWindow();
 
   await db.update(organizationCreditBalances)
     .set({
-      recurringAllocated: effectiveLimit + rolloverCredits,
+      recurringAllocated: resetValues.recurringAllocated,
       recurringUsed: 0,
-      rolloverCredits,
-      purchasedUsed: 0,
+      rolloverCredits: resetValues.rolloverCredits,
+      purchasedUsed: resetValues.purchasedUsed,
       periodStart,
       periodEnd,
       updatedAt: new Date(),
@@ -625,7 +714,7 @@ export async function resetOrgCredits(orgId: number): Promise<number> {
     .where(eq(organizationCreditBalances.organizationId, orgId));
 
   await recordCreditTransaction(orgId, "cycle_reset", effectiveLimit, undefined, {
-    rolloverCredits,
+    rolloverCredits: resetValues.rolloverCredits,
   });
 
   return 1;
@@ -908,6 +997,38 @@ export async function addPurchasedCredits(
 
   return {
     purchasedCredits: updated.purchasedCredits,
+    remaining: getBalanceTotalRemaining(updated),
+  };
+}
+
+export async function addProratedSeatCredits(
+  orgId: number,
+  amount: number,
+  metadata?: Record<string, unknown>,
+  addedBy?: number,
+): Promise<{ recurringAllocated: number; remaining: number }> {
+  if (amount <= 0) {
+    const balance = await ensureOrgCreditBalanceInitialized(orgId);
+    return {
+      recurringAllocated: balance.recurringAllocated,
+      remaining: getBalanceTotalRemaining(balance),
+    };
+  }
+
+  const balance = await ensureOrgCreditBalanceInitialized(orgId);
+
+  const [updated] = await db.update(organizationCreditBalances)
+    .set({
+      recurringAllocated: balance.recurringAllocated + amount,
+      updatedAt: new Date(),
+    })
+    .where(eq(organizationCreditBalances.organizationId, orgId))
+    .returning();
+
+  await recordCreditTransaction(orgId, "seat_add_proration", amount, addedBy, metadata);
+
+  return {
+    recurringAllocated: updated.recurringAllocated,
     remaining: getBalanceTotalRemaining(updated),
   };
 }

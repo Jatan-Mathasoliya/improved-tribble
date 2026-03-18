@@ -3,11 +3,9 @@ import Layout from "@/components/Layout";
 import { initiateCashfreeCheckout } from "@/lib/cashfree";
 import {
   useSubscription,
-  usePlans,
+  useCommercialConfig,
   useSeatUsage,
   useInvoices,
-  useBillingConfig,
-  useCreditPackConfig,
   useOrderStatus,
   useCreateCheckout,
   useCreateCreditPackCheckout,
@@ -66,12 +64,10 @@ export default function OrgBillingPage() {
   const queryClient = useQueryClient();
   const { data: orgData } = useOrganization();
   const { data: subscription, isLoading: subLoading } = useSubscription();
-  const { data: plans } = usePlans();
+  const { data: commercialConfig } = useCommercialConfig();
   const { data: seatUsage } = useSeatUsage();
   const { data: invoices } = useInvoices();
   const { data: credits } = useAiCredits();
-  const { data: billingConfig } = useBillingConfig();
-  const { data: creditPackConfig } = useCreditPackConfig();
   const createCheckout = useCreateCheckout();
   const createCreditPackCheckout = useCreateCreditPackCheckout();
   const cancelSubscription = useCancelSubscription();
@@ -90,9 +86,14 @@ export default function OrgBillingPage() {
   });
   const [hasRefreshedForOrder, setHasRefreshedForOrder] = useState(false);
 
+  const plans = commercialConfig?.plans;
+  const billingConfig = commercialConfig?.billing;
+  const creditPackConfig = commercialConfig?.creditPack;
   const isOwner = orgData?.membership?.role === 'owner';
   const freePlan = plans?.find(p => p.name === 'free') as any;
   const proPlan = plans?.find(p => p.name === 'pro') as any;
+  const freePlanCard = commercialConfig?.planCards?.free;
+  const proPlanCard = commercialConfig?.planCards?.pro;
   const orderStatus = useOrderStatus(returnedOrderId);
   const currentPlanName = subscription?.plan?.displayName || 'Free';
   const isPro = subscription?.plan?.name === 'pro';
@@ -569,22 +570,17 @@ export default function OrgBillingPage() {
               <div className="p-4 border rounded-lg">
                 <h3 className="font-semibold mb-3">Free</h3>
                 <ul className="space-y-2 text-sm">
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    1 seat (fixed)
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    {formatMetric(freePlan?.rateLimits?.monthlyCredits)} AI credits/month
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    {formatMetric(freePlan?.rateLimits?.dailyRateLimit)} AI analyses/day
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    Basic ATS features
-                  </li>
+                  {(freePlanCard?.highlights ?? [
+                    "1 seat (fixed)",
+                    `${formatMetric(freePlan?.rateLimits?.monthlyCredits)} AI credits/month`,
+                    `${formatMetric(freePlan?.rateLimits?.dailyRateLimit)} AI analyses/day`,
+                    "Basic ATS features",
+                  ]).slice(0, 4).map((highlight) => (
+                    <li key={highlight} className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-green-500" />
+                      {highlight}
+                    </li>
+                  ))}
                 </ul>
               </div>
               <div className="p-4 border-2 border-primary rounded-lg relative">
@@ -595,26 +591,16 @@ export default function OrgBillingPage() {
                   <span className="text-sm font-normal text-muted-foreground">/seat/month</span>
                 </p>
                 <ul className="space-y-2 text-sm">
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    Unlimited seats
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    {formatMetric(proCreditsPerSeat)} AI credits per seat/month
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    {creditPackLabel}
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    {formatMetric(proPlan?.rateLimits?.dailyRateLimit)} AI analyses/day
-                  </li>
-                  <li className="flex items-center gap-2">
-                    <Check className="h-4 w-4 text-green-500" />
-                    All features included
-                  </li>
+                  {([
+                    ...(proPlanCard?.highlights ?? []),
+                    `${formatMetric(proPlan?.rateLimits?.dailyRateLimit)} AI analyses/day`,
+                    "All features included",
+                  ]).slice(0, 5).map((highlight) => (
+                    <li key={highlight} className="flex items-center gap-2">
+                      <Check className="h-4 w-4 text-green-500" />
+                      {highlight.includes("top-ups") ? creditPackLabel : highlight}
+                    </li>
+                  ))}
                 </ul>
                 {isOwner && (
                   <Button
@@ -704,7 +690,7 @@ export default function OrgBillingPage() {
                 onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
               />
               <p className="text-sm text-muted-foreground">
-                Growth includes {formatMetric(proCreditsPerSeat)} AI credits per seat per month, pooled across your organization. With {seats} seat{seats === 1 ? "" : "s"}, that is {selectedPlanIncludedCredits} included credits per month. {creditPackConfig ? `Extra ${creditPackConfig.creditsPerPack}-credit packs can be added anytime.` : 'Extra credit packs can be added anytime.'}
+                Growth includes {formatMetric(proCreditsPerSeat)} AI credits per seat per month, pooled across your organization. With {seats} seat{seats === 1 ? "" : "s"}, that is {selectedPlanIncludedCredits} included credits per month. {commercialConfig?.seatPolicies?.seatAddCredits.summary} {creditPackConfig ? `Extra ${creditPackConfig.creditsPerPack}-credit packs can be added anytime.` : 'Extra credit packs can be added anytime.'}
               </p>
             </div>
             <div className="space-y-2">

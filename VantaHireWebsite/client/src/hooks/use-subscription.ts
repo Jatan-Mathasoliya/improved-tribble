@@ -12,6 +12,13 @@ export interface SubscriptionPlan {
   maxCreditRolloverMonths: number;
   features: Record<string, any>;
   isActive: boolean;
+  rateLimits?: {
+    planName: string;
+    dailyRateLimit: number;
+    monthlyCredits: number;
+    rolloverMonths: number;
+    maxCredits: number;
+  };
 }
 
 export interface Subscription {
@@ -61,6 +68,42 @@ export interface BillingConfig {
   taxEnabled: boolean;
 }
 
+export interface CommercialComparisonRow {
+  name: string;
+  free: boolean | string;
+  pro: boolean | string;
+  business: boolean | string;
+}
+
+export interface CommercialFaqItem {
+  question: string;
+  answer: string;
+}
+
+export interface CommercialPlanCard {
+  summary: string;
+  highlights: string[];
+}
+
+export interface CommercialPolicy {
+  mode: 'prorated_immediate' | 'next_term_only';
+  summary: string;
+  detail: string;
+}
+
+export interface CommercialConfig {
+  plans: SubscriptionPlan[];
+  creditPack: CreditPackConfig;
+  billing: BillingConfig;
+  comparisonRows: CommercialComparisonRow[];
+  faqs: CommercialFaqItem[];
+  planCards: Record<string, CommercialPlanCard>;
+  seatPolicies: {
+    seatAddCredits: CommercialPolicy;
+    seatReduceCredits: CommercialPolicy;
+  };
+}
+
 export interface OrderStatus {
   orderId: string;
   status: 'pending' | 'completed' | 'failed' | 'refunded';
@@ -73,12 +116,12 @@ export interface OrderStatus {
 }
 
 // API functions
-async function fetchPlans() {
-  const res = await fetch('/api/subscription/plans', {
+async function fetchCommercialConfig() {
+  const res = await fetch('/api/subscription/commercial-config', {
     credentials: 'include',
   });
   if (!res.ok) {
-    throw new Error('Failed to fetch plans');
+    throw new Error('Failed to fetch commercial config');
   }
   return res.json();
 }
@@ -116,26 +159,6 @@ async function fetchInvoices() {
   return res.json();
 }
 
-async function fetchCreditPackConfig() {
-  const res = await fetch('/api/subscription/credit-packs/config', {
-    credentials: 'include',
-  });
-  if (!res.ok) {
-    throw new Error('Failed to fetch credit pack config');
-  }
-  return res.json();
-}
-
-async function fetchBillingConfig() {
-  const res = await fetch('/api/subscription/billing-config', {
-    credentials: 'include',
-  });
-  if (!res.ok) {
-    throw new Error('Failed to fetch billing config');
-  }
-  return res.json();
-}
-
 async function fetchOrderStatus(orderId: string) {
   const res = await fetch(`/api/subscription/order/${encodeURIComponent(orderId)}/status`, {
     credentials: 'include',
@@ -149,10 +172,19 @@ async function fetchOrderStatus(orderId: string) {
 
 // Hooks
 export function usePlans() {
-  return useQuery<SubscriptionPlan[]>({
-    queryKey: ['subscription', 'plans'],
-    queryFn: fetchPlans,
+  return useQuery<CommercialConfig, Error, SubscriptionPlan[]>({
+    queryKey: ['subscription', 'commercial-config'],
+    queryFn: fetchCommercialConfig,
+    select: (config) => config.plans,
     staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+}
+
+export function useCommercialConfig() {
+  return useQuery<CommercialConfig>({
+    queryKey: ['subscription', 'commercial-config'],
+    queryFn: fetchCommercialConfig,
+    staleTime: 1000 * 60 * 5,
   });
 }
 
@@ -181,17 +213,19 @@ export function useInvoices() {
 }
 
 export function useCreditPackConfig() {
-  return useQuery<CreditPackConfig>({
-    queryKey: ['subscription', 'credit-packs', 'config'],
-    queryFn: fetchCreditPackConfig,
+  return useQuery<CommercialConfig, Error, CreditPackConfig>({
+    queryKey: ['subscription', 'commercial-config'],
+    queryFn: fetchCommercialConfig,
+    select: (config) => config.creditPack,
     staleTime: 1000 * 60 * 5,
   });
 }
 
 export function useBillingConfig() {
-  return useQuery<BillingConfig>({
-    queryKey: ['subscription', 'billing-config'],
-    queryFn: fetchBillingConfig,
+  return useQuery<CommercialConfig, Error, BillingConfig>({
+    queryKey: ['subscription', 'commercial-config'],
+    queryFn: fetchCommercialConfig,
+    select: (config) => config.billing,
     staleTime: 1000 * 60 * 5,
   });
 }

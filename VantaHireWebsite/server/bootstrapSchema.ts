@@ -3,10 +3,19 @@ import { sql } from 'drizzle-orm';
 import {
   BUSINESS_CREDITS_PER_SEAT_PER_MONTH,
   BUSINESS_CREDITS_ROLLOVER_MONTHS,
+  BUSINESS_PLAN_DESCRIPTION,
+  BUSINESS_PRICE_PER_SEAT_ANNUAL,
+  BUSINESS_PRICE_PER_SEAT_MONTHLY,
   FREE_CREDITS_PER_MONTH,
   FREE_CREDITS_ROLLOVER_MONTHS,
+  FREE_PLAN_DESCRIPTION,
+  FREE_PRICE_PER_SEAT_ANNUAL,
+  FREE_PRICE_PER_SEAT_MONTHLY,
   PRO_CREDITS_PER_SEAT_PER_MONTH,
   PRO_CREDITS_ROLLOVER_MONTHS,
+  PRO_PLAN_DESCRIPTION,
+  PRO_PRICE_PER_SEAT_ANNUAL,
+  PRO_PRICE_PER_SEAT_MONTHLY,
 } from './lib/planConfig';
 
 export async function ensureAtsSchema(): Promise<void> {
@@ -1369,9 +1378,9 @@ export async function ensureAtsSchema(): Promise<void> {
       sort_order
     )
     VALUES
-      ('free', 'Free', 'Basic ATS features for small teams', 0, 0, ${FREE_CREDITS_PER_MONTH}, ${FREE_CREDITS_ROLLOVER_MONTHS}, ${freePlanFeatures}::jsonb, 0),
-      ('pro', 'Growth', 'Scale your hiring output', 199900, 1999000, ${PRO_CREDITS_PER_SEAT_PER_MONTH}, ${PRO_CREDITS_ROLLOVER_MONTHS}, ${growthPlanFeatures}::jsonb, 1),
-      ('business', 'Enterprise', 'Custom fit for large teams', 0, 0, ${BUSINESS_CREDITS_PER_SEAT_PER_MONTH}, ${BUSINESS_CREDITS_ROLLOVER_MONTHS}, ${businessPlanFeatures}::jsonb, 2)
+      ('free', 'Free', ${FREE_PLAN_DESCRIPTION}, ${FREE_PRICE_PER_SEAT_MONTHLY}, ${FREE_PRICE_PER_SEAT_ANNUAL}, ${FREE_CREDITS_PER_MONTH}, ${FREE_CREDITS_ROLLOVER_MONTHS}, ${freePlanFeatures}::jsonb, 0),
+      ('pro', 'Growth', ${PRO_PLAN_DESCRIPTION}, ${PRO_PRICE_PER_SEAT_MONTHLY}, ${PRO_PRICE_PER_SEAT_ANNUAL}, ${PRO_CREDITS_PER_SEAT_PER_MONTH}, ${PRO_CREDITS_ROLLOVER_MONTHS}, ${growthPlanFeatures}::jsonb, 1),
+      ('business', 'Enterprise', ${BUSINESS_PLAN_DESCRIPTION}, ${BUSINESS_PRICE_PER_SEAT_MONTHLY}, ${BUSINESS_PRICE_PER_SEAT_ANNUAL}, ${BUSINESS_CREDITS_PER_SEAT_PER_MONTH}, ${BUSINESS_CREDITS_ROLLOVER_MONTHS}, ${businessPlanFeatures}::jsonb, 2)
     ON CONFLICT (name) DO UPDATE SET
       display_name = EXCLUDED.display_name,
       description = EXCLUDED.description,

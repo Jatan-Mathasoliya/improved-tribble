@@ -1,9 +1,7 @@
 import { useState } from "react";
 import {
-  usePlans,
+  useCommercialConfig,
   useCreateCheckout,
-  useCreditPackConfig,
-  useBillingConfig,
   calculateTaxAmount,
   calculateTotalWithTax,
   formatPriceINR,
@@ -45,9 +43,7 @@ interface PlanSelectionStepProps {
 }
 
 export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps) {
-  const { data: plans, isLoading: plansLoading } = usePlans();
-  const { data: creditPackConfig } = useCreditPackConfig();
-  const { data: billingConfig } = useBillingConfig();
+  const { data: commercialConfig, isLoading: plansLoading } = useCommercialConfig();
   const { completeOnboardingAsync, isCompleting } = useOnboardingStatus();
   const createCheckout = useCreateCheckout();
   const { toast } = useToast();
@@ -56,8 +52,14 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
   const [seats, setSeats] = useState(1);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
 
+  const plans = commercialConfig?.plans;
+  const creditPackConfig = commercialConfig?.creditPack;
+  const billingConfig = commercialConfig?.billing;
   const freePlan = plans?.find(p => p.name === 'free') as any;
   const proPlan = plans?.find(p => p.name === 'pro') as any;
+  const freePlanCard = commercialConfig?.planCards?.free;
+  const proPlanCard = commercialConfig?.planCards?.pro;
+  const businessPlanCard = commercialConfig?.planCards?.business;
   const creditPackLabel = creditPackConfig
     ? `Add ${creditPackConfig.creditsPerPack}-credit top-ups at ${formatPriceINR(creditPackConfig.pricePerPack)}`
     : 'Extra credit packs available';
@@ -179,21 +181,19 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
                 <h3 className="font-semibold text-foreground">Free</h3>
               </div>
               <p className="text-sm text-muted-foreground mb-3">
-                Perfect for getting started
+                {freePlanCard?.summary || "Perfect for getting started"}
               </p>
               <ul className="space-y-1.5 text-sm text-muted-foreground">
-                <li className="flex items-center gap-2">
-                  <Check className="h-3.5 w-3.5 text-green-500" />
-                  {formatMetric(freeCredits)} AI credits per month
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-3.5 w-3.5 text-green-500" />
-                  Up to 5 active jobs
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-3.5 w-3.5 text-green-500" />
-                  Basic ATS features
-                </li>
+                {(freePlanCard?.highlights ?? [
+                  `${formatMetric(freeCredits)} AI credits per month`,
+                  "Up to 5 active jobs",
+                  "Basic ATS features",
+                ]).slice(0, 3).map((highlight) => (
+                  <li key={highlight} className="flex items-center gap-2">
+                    <Check className="h-3.5 w-3.5 text-green-500" />
+                    {highlight}
+                  </li>
+                ))}
               </ul>
             </div>
             <div className="text-right ml-4">
@@ -229,29 +229,15 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
                 <h3 className="font-semibold text-foreground">Growth</h3>
               </div>
               <p className="text-sm text-muted-foreground mb-3">
-                For growing teams
+                {proPlanCard?.summary || "For growing teams"}
               </p>
               <ul className="space-y-1.5 text-sm text-muted-foreground">
-                <li className="flex items-center gap-2">
-                  <Check className="h-3.5 w-3.5 text-green-500" />
-                  {formatMetric(proCredits)} AI credits per seat/month
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-3.5 w-3.5 text-green-500" />
-                  {creditPackLabel}
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-3.5 w-3.5 text-green-500" />
-                  Unlimited active jobs
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-3.5 w-3.5 text-green-500" />
-                  Team collaboration
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check className="h-3.5 w-3.5 text-green-500" />
-                  Advanced analytics
-                </li>
+                {(proPlanCard?.highlights ?? []).slice(0, 5).map((highlight) => (
+                  <li key={highlight} className="flex items-center gap-2">
+                    <Check className="h-3.5 w-3.5 text-green-500" />
+                    {highlight.includes("top-ups") ? creditPackLabel : highlight}
+                  </li>
+                ))}
               </ul>
             </div>
             <div className="text-right ml-4">
@@ -279,7 +265,7 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
                 <h3 className="font-semibold text-foreground">Business</h3>
               </div>
               <p className="text-sm text-muted-foreground mb-3">
-                For large organizations
+                {businessPlanCard?.summary || "For large organizations"}
               </p>
               <ul className="space-y-1.5 text-sm text-muted-foreground">
                 <li className="flex items-center gap-2">
@@ -334,7 +320,7 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
                 onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
               />
               <p className="text-sm text-muted-foreground">
-                Growth includes {formatMetric(proCredits)} AI credits per seat per month, pooled across your organization. With {seats} seat{seats === 1 ? "" : "s"}, that is {proCredits * seats} included credits per month. {creditPackConfig ? `Extra ${creditPackConfig.creditsPerPack}-credit packs are available at ${formatPriceINR(creditPackConfig.pricePerPack)}.` : 'Extra credit packs are available.'}
+                Growth includes {formatMetric(proCredits)} AI credits per seat per month, pooled across your organization. With {seats} seat{seats === 1 ? "" : "s"}, that is {proCredits * seats} included credits per month. {commercialConfig?.seatPolicies?.seatAddCredits.summary} {creditPackConfig ? `Extra ${creditPackConfig.creditsPerPack}-credit packs are available at ${formatPriceINR(creditPackConfig.pricePerPack)}.` : 'Extra credit packs are available.'}
               </p>
             </div>
 

@@ -5,11 +5,9 @@ import { Helmet } from "react-helmet-async";
 import { useAuth } from "@/hooks/use-auth";
 import { useOrganization } from "@/hooks/use-organization";
 import {
-  usePlans,
+  useCommercialConfig,
   useSubscription,
   useCreateCheckout,
-  useCreditPackConfig,
-  useBillingConfig,
   calculateTaxAmount,
   calculateTotalWithTax,
   formatPriceINR,
@@ -48,51 +46,11 @@ import {
   AlertCircle,
 } from "lucide-react";
 
-interface PlanFeature {
-  name: string;
-  free: boolean | string;
-  pro: boolean | string;
-  business: boolean | string;
-}
-
-// Static features organized by capability area (per PRICING.md)
-const staticFeatures: PlanFeature[] = [
-  // Jobs & Sourcing
-  { name: "Talent Search (natural language)", free: true, pro: true, business: true },
-  { name: "Fit scoring + skill breakdowns", free: true, pro: true, business: true },
-  { name: "Identity confidence badges", free: true, pro: true, business: true },
-  // Pipeline
-  { name: "Kanban pipeline per job", free: true, pro: true, business: true },
-  { name: "AI application screening", free: true, pro: true, business: true },
-  { name: "Bulk pipeline actions", free: false, pro: true, business: true },
-  { name: "Stage-based automation", free: false, pro: true, business: true },
-  { name: "Stale candidate alerts", free: false, pro: true, business: true },
-  // Outreach
-  { name: "Email outreach + templates", free: true, pro: true, business: true },
-  { name: "WhatsApp outreach (Cloud API)", free: false, pro: true, business: true },
-  { name: "Automated stage triggers", free: false, pro: true, business: true },
-  { name: "Message audit trail", free: false, pro: true, business: true },
-  // Collaboration
-  { name: "Client Feedback Portal", free: false, pro: true, business: true },
-  { name: "Shareable shortlist links", free: false, pro: true, business: true },
-  // Analytics
-  { name: "Basic job analytics", free: true, pro: true, business: true },
-  { name: "Pipeline velocity + conversion", free: false, pro: true, business: true },
-  { name: "Source performance tracking", free: false, pro: true, business: true },
-  // Admin & Security
-  { name: "Priority support", free: false, pro: true, business: true },
-  { name: "SSO / SAML", free: false, pro: false, business: true },
-  { name: "API access", free: false, pro: false, business: true },
-  { name: "SLA guarantee", free: false, pro: false, business: true },
-];
-
 export default function PricingPage() {
   const { user } = useAuth();
   const { data: organization } = useOrganization();
-  const { data: plans } = usePlans();
+  const { data: commercialConfig } = useCommercialConfig();
   const { data: subscription } = useSubscription();
-  const { data: creditPackConfig } = useCreditPackConfig();
-  const { data: billingConfig } = useBillingConfig();
   const createCheckout = useCreateCheckout();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -110,8 +68,14 @@ export default function PricingPage() {
   const [checkoutMode, setCheckoutMode] = useState<'public' | 'create-org' | 'existing'>('public');
   const [requiresLogin, setRequiresLogin] = useState(false);
 
+  const plans = commercialConfig?.plans;
+  const creditPackConfig = commercialConfig?.creditPack;
+  const billingConfig = commercialConfig?.billing;
   const freePlan = plans?.find(p => p.name === 'free') as any;
   const proPlan = plans?.find(p => p.name === 'pro') as any;
+  const freePlanCard = commercialConfig?.planCards?.free;
+  const proPlanCard = commercialConfig?.planCards?.pro;
+  const businessPlanCard = commercialConfig?.planCards?.business;
   const isLoggedIn = !!user;
   const hasOrg = !!organization;
   const isOwner = organization?.membership?.role === 'owner';
@@ -138,14 +102,8 @@ export default function PricingPage() {
   // Dynamic plan values from API
   const freeCredits = freePlan?.rateLimits?.monthlyCredits;
   const proCredits = proPlan?.rateLimits?.monthlyCredits;
-
-  // Build features array with dynamic values
-  const features: PlanFeature[] = [
-    { name: "Active jobs", free: "5", pro: "Unlimited", business: "Unlimited" },
-    { name: "Included AI credits / month", free: formatMetric(freeCredits), pro: formatMetric(proCredits), business: "Custom" },
-    { name: "Team members", free: "1", pro: "Unlimited", business: "Unlimited" },
-    ...staticFeatures,
-  ];
+  const comparisonRows = commercialConfig?.comparisonRows ?? [];
+  const faqs = commercialConfig?.faqs ?? [];
 
   // Mutation for public checkout
   const publicCheckout = useMutation({
@@ -371,7 +329,7 @@ export default function PricingPage() {
                   <Users className="h-5 w-5 text-white/70" />
                   <h3 className="text-xl font-bold text-white">Free</h3>
                 </div>
-                <p className="text-white/60 text-sm">Get started in minutes</p>
+                <p className="text-white/60 text-sm">{freePlanCard?.summary || "Get started in minutes"}</p>
               </div>
               <div className="mb-6">
                 <div className="text-4xl font-bold text-white">
@@ -380,26 +338,12 @@ export default function PricingPage() {
                 </div>
               </div>
               <ul className="space-y-3 mb-6">
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Up to 5 active jobs
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  AI sourcing with fit scoring
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Talent Search (natural language)
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Kanban pipeline per job
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Email outreach with templates
-                </li>
+                {(freePlanCard?.highlights ?? []).map((highlight) => (
+                  <li key={highlight} className="flex items-center gap-2 text-white/80 text-sm">
+                    <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    {highlight}
+                  </li>
+                ))}
               </ul>
               {currentPlan === 'free' && isLoggedIn ? (
                 <Button variant="outline" className="w-full border-white/20 text-white hover:bg-white/10" disabled>
@@ -422,7 +366,7 @@ export default function PricingPage() {
                   <Zap className="h-5 w-5 text-primary" />
                   <h3 className="text-xl font-bold text-white">Growth</h3>
                 </div>
-                <p className="text-white/60 text-sm">Scale your hiring output</p>
+                <p className="text-white/60 text-sm">{proPlanCard?.summary || "Scale your hiring output"}</p>
               </div>
               <div className="mb-6">
                 <div className="text-4xl font-bold text-white">
@@ -435,38 +379,12 @@ export default function PricingPage() {
               </div>
               <p className="text-xs text-white/50 mb-4">Everything in Free, plus:</p>
               <ul className="space-y-3 mb-6">
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Unlimited active jobs
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  {formatMetric(proCredits)} AI credits per seat/month
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  {creditPackLabel}
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  WhatsApp outreach (Cloud API)
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Client Feedback Portal
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Stage-based automation triggers
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Pipeline velocity + analytics
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Unlimited team members
-                </li>
+                {(proPlanCard?.highlights ?? []).map((highlight) => (
+                  <li key={highlight} className="flex items-center gap-2 text-white/80 text-sm">
+                    <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    {highlight.includes("top-ups") ? creditPackLabel : highlight}
+                  </li>
+                ))}
               </ul>
               {isPro ? (
                 <Button className="w-full" disabled>
@@ -487,7 +405,7 @@ export default function PricingPage() {
                   <Building2 className="h-5 w-5 text-white/70" />
                   <h3 className="text-xl font-bold text-white">Enterprise</h3>
                 </div>
-                <p className="text-white/60 text-sm">Custom fit for large teams</p>
+                <p className="text-white/60 text-sm">{businessPlanCard?.summary || "Custom fit for large teams"}</p>
               </div>
               <div className="mb-6">
                 <div className="text-4xl font-bold text-white">Custom</div>
@@ -495,26 +413,12 @@ export default function PricingPage() {
               </div>
               <p className="text-xs text-white/50 mb-4">Everything in Growth, plus:</p>
               <ul className="space-y-3 mb-6">
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Dedicated account manager
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  SSO / SAML authentication
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  API access + custom integrations
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  SLA guarantee
-                </li>
-                <li className="flex items-center gap-2 text-white/80 text-sm">
-                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Invoice billing (GST-compliant)
-                </li>
+                {(businessPlanCard?.highlights ?? []).slice(1).map((highlight) => (
+                  <li key={highlight} className="flex items-center gap-2 text-white/80 text-sm">
+                    <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                    {highlight}
+                  </li>
+                ))}
               </ul>
               <Button variant="outlinePurple" className="w-full" onClick={handleContactSales}>
                 Contact Sales
@@ -536,7 +440,7 @@ export default function PricingPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {features.map((feature, index) => (
+                  {comparisonRows.map((feature, index) => (
                     <tr key={feature.name} className={`border-b border-white/5 ${index % 2 === 0 ? 'bg-white/[0.02]' : ''}`}>
                       <td className="py-3 px-4 text-white/80">{feature.name}</td>
                       <td className="py-3 px-4 text-center">{renderFeatureValue(feature.free)}</td>
@@ -553,19 +457,10 @@ export default function PricingPage() {
           <div className="max-w-3xl mx-auto mb-16">
             <h2 className="text-2xl md:text-3xl font-bold text-center text-white mb-8">Pricing questions, answered.</h2>
             <div className="space-y-6">
-              {[
-                { q: "Is there really a free plan?", a: "Yes. No credit card required. No time limit. Start using VantaHire today and upgrade when you need more capacity." },
-                { q: "Can I switch plans anytime?", a: "Yes. Upgrade or downgrade from billing at any time. Paid access is purchased for the selected monthly or annual term." },
-                { q: "How does seat-based pricing work?", a: "You pay per recruiter who actively uses the platform. Team members who only view reports or dashboards do not count as seats." },
-                { q: "Do you offer annual discounts?", a: "Yes. Annual billing saves compared to monthly. Toggle between monthly and annual above to see the difference." },
-                { q: "What payment methods do you accept?", a: "Credit card and UPI for Growth via Cashfree. Enterprise customers can pay by invoice. GST-compliant invoicing is available for India." },
-                { q: "What happens when I hit my Free plan limits?", a: "You will be notified before you reach your limit. No disruption to active jobs or candidates. Upgrade to Growth to remove limits." },
-                { q: "Is my data safe?", a: "VantaHire enforces a three-tier privacy model. Your uploaded resumes and candidate data stay private to your organization. Only candidates who opt in are discoverable by other customers." },
-                { q: "Can I cancel anytime?", a: "Yes. Cancel from your account settings. No cancellation fees. Your data remains accessible for 30 days after cancellation." },
-              ].map((faq, i) => (
+              {faqs.map((faq, i) => (
                 <div key={i} className="bg-gradient-to-br from-[hsl(var(--vanta-dark))]/90 to-[hsl(var(--vanta-dark))]/70 p-6 rounded-xl border border-white/10">
-                  <h3 className="font-semibold text-white mb-2">{faq.q}</h3>
-                  <p className="text-white/70">{faq.a}</p>
+                  <h3 className="font-semibold text-white mb-2">{faq.question}</h3>
+                  <p className="text-white/70">{faq.answer}</p>
                 </div>
               ))}
             </div>
@@ -686,7 +581,7 @@ export default function PricingPage() {
                     onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
                   />
                   <p className="text-sm text-muted-foreground">
-                    Growth includes {formatMetric(proCredits)} AI credits per seat per month, pooled across the organization. With {seats} seat{seats === 1 ? "" : "s"}, that is {proCredits * seats} included credits per month. {creditPackConfig ? `Extra ${creditPackConfig.creditsPerPack}-credit packs are available at ${formatPriceINR(creditPackConfig.pricePerPack)}.` : 'Extra credit packs are available.'}
+                    Growth includes {formatMetric(proCredits)} AI credits per seat per month, pooled across the organization. With {seats} seat{seats === 1 ? "" : "s"}, that is {proCredits * seats} included credits per month. {commercialConfig?.seatPolicies?.seatAddCredits.summary} {creditPackConfig ? `Extra ${creditPackConfig.creditsPerPack}-credit packs are available at ${formatPriceINR(creditPackConfig.pricePerPack)}.` : 'Extra credit packs are available.'}
                   </p>
                 </div>
 
