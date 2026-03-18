@@ -263,7 +263,7 @@ export default function PricingPage() {
 
       if (sessionId) {
         // Use Cashfree SDK for checkout (required for production)
-        await initiateCashfreeCheckout(sessionId);
+        await initiateCashfreeCheckout(sessionId, paymentLink);
       } else if (paymentLink) {
         // Fallback to direct redirect (works in sandbox)
         window.location.href = paymentLink;
