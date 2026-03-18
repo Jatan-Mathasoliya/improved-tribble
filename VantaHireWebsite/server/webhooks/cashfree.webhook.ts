@@ -457,11 +457,11 @@ async function handlePaymentFailure(
           <p>Hello${contact.billingName ? ` ${contact.billingName}` : ''},</p>
           <p>We couldn't process your subscription payment for <strong>${contact.organizationName}</strong>.</p>
           <p>Your grace period ends on <strong>${graceEnd}</strong>.</p>
-          <p>Please update your payment method to avoid a downgrade.</p>
+          <p>Please complete a new payment from billing to avoid a downgrade.</p>
           <p>Manage billing here: <a href="${baseUrl}/org/billing">${baseUrl}/org/billing</a></p>
           ${failureReason ? `<p>Reason: ${failureReason}</p>` : ''}
         `;
-        const text = `Payment failed for ${contact.organizationName}. Grace period ends on ${graceEnd}. Update payment to avoid downgrade.\n\nManage billing: ${baseUrl}/org/billing${failureReason ? `\nReason: ${failureReason}` : ''}`;
+        const text = `Payment failed for ${contact.organizationName}. Grace period ends on ${graceEnd}. Complete a new payment from billing to avoid downgrade.\n\nManage billing: ${baseUrl}/org/billing${failureReason ? `\nReason: ${failureReason}` : ''}`;
         await emailService.sendEmail({
           to: contact.billingEmail,
           subject,
@@ -536,12 +536,12 @@ async function handleSubscriptionRenewal(
         const html = `
           <h2>Payment Issue</h2>
           <p>Hello${contact.billingName ? ` ${contact.billingName}` : ''},</p>
-          <p>We couldn't process your subscription renewal for <strong>${contact.organizationName}</strong>.</p>
+          <p>We couldn't process the next paid term for <strong>${contact.organizationName}</strong>.</p>
           <p>Your grace period ends on <strong>${graceEnd}</strong>.</p>
-          <p>Please update your payment method to avoid a downgrade.</p>
+          <p>Please complete a new payment from billing to avoid a downgrade.</p>
           <p>Manage billing here: <a href="${baseUrl}/org/billing">${baseUrl}/org/billing</a></p>
         `;
-        const text = `Payment issue for ${contact.organizationName}. Grace period ends on ${graceEnd}. Update payment to avoid downgrade.\n\nManage billing: ${baseUrl}/org/billing`;
+        const text = `Payment issue for ${contact.organizationName}. Grace period ends on ${graceEnd}. Complete a new payment from billing to avoid downgrade.\n\nManage billing: ${baseUrl}/org/billing`;
         await emailService.sendEmail({
           to: contact.billingEmail,
           subject,

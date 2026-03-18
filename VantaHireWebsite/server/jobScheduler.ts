@@ -525,22 +525,22 @@ export async function sendSubscriptionRenewalReminders(): Promise<void> {
 
       await emailService.sendEmail({
         to: billingEmail,
-        subject: `Subscription renewal in 7 days - ${organization.name}`,
+        subject: `Paid term ends in 7 days - ${organization.name}`,
         html: `
-          <h2>Subscription Renewal Reminder</h2>
+          <h2>Paid Term Reminder</h2>
           <p>Hello,</p>
-          <p>Your subscription for <strong>${organization.name}</strong> will renew in 7 days.</p>
+          <p>Your current paid term for <strong>${organization.name}</strong> ends in 7 days.</p>
 
-          <h3>Subscription Details:</h3>
+          <h3>Billing Details:</h3>
           <ul>
             <li><strong>Plan:</strong> ${plan.displayName}</li>
             <li><strong>Seats:</strong> ${subscription.seats}</li>
             <li><strong>Billing Cycle:</strong> ${subscription.billingCycle}</li>
-            <li><strong>Renewal Date:</strong> ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}</li>
+            <li><strong>Term End Date:</strong> ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}</li>
           </ul>
 
-          <p>No action is needed. Your subscription will automatically renew.</p>
-          <p>If you need to make changes, please log in to your account settings.</p>
+          <p>If you want uninterrupted paid access, please visit billing before the term ends.</p>
+          <p>You can review seats and billing from your account settings.</p>
 
           <p>Thank you for using VantaHire!</p>
         `
@@ -595,20 +595,20 @@ export async function sendSubscriptionRenewalReminders(): Promise<void> {
 
       await emailService.sendEmail({
         to: billingEmail,
-        subject: `Subscription renewal in 3 days - ${organization.name}`,
+        subject: `Paid term ends in 3 days - ${organization.name}`,
         html: `
-          <h2>Subscription Renewal Reminder</h2>
+          <h2>Paid Term Reminder</h2>
           <p>Hello,</p>
-          <p>Your subscription for <strong>${organization.name}</strong> will renew in 3 days.</p>
+          <p>Your current paid term for <strong>${organization.name}</strong> ends in 3 days.</p>
 
-          <h3>Subscription Details:</h3>
+          <h3>Billing Details:</h3>
           <ul>
             <li><strong>Plan:</strong> ${plan.displayName}</li>
             <li><strong>Seats:</strong> ${subscription.seats}</li>
-            <li><strong>Renewal Date:</strong> ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}</li>
+            <li><strong>Term End Date:</strong> ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}</li>
           </ul>
 
-          <p>Please ensure your payment method is up to date.</p>
+          <p>If you want uninterrupted paid access, please complete your next payment from billing.</p>
           <p>Thank you for using VantaHire!</p>
         `
       });
@@ -661,20 +661,20 @@ export async function sendSubscriptionRenewalReminders(): Promise<void> {
 
       await emailService.sendEmail({
         to: billingEmail,
-        subject: `Subscription renewal tomorrow - ${organization.name}`,
+        subject: `Paid term ends tomorrow - ${organization.name}`,
         html: `
-          <h2>Subscription Renewal Tomorrow</h2>
+          <h2>Paid Term Ends Tomorrow</h2>
           <p>Hello,</p>
-          <p>Your subscription for <strong>${organization.name}</strong> will renew <strong>tomorrow</strong>.</p>
+          <p>Your current paid term for <strong>${organization.name}</strong> ends <strong>tomorrow</strong>.</p>
 
-          <h3>Subscription Details:</h3>
+          <h3>Billing Details:</h3>
           <ul>
             <li><strong>Plan:</strong> ${plan.displayName}</li>
             <li><strong>Seats:</strong> ${subscription.seats}</li>
-            <li><strong>Renewal Date:</strong> ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}</li>
+            <li><strong>Term End Date:</strong> ${new Date(subscription.currentPeriodEnd).toLocaleDateString()}</li>
           </ul>
 
-          <p>Please ensure your payment method is up to date to avoid any service interruption.</p>
+          <p>Please complete your next payment from billing today to avoid any service interruption.</p>
           <p>Thank you for using VantaHire!</p>
         `
       });
@@ -818,7 +818,7 @@ export async function processGracePeriodExpirations(): Promise<void> {
             <p>Hello,</p>
             <p>Your subscription for <strong>${organization.name}</strong> has been cancelled due to payment failure.</p>
             <p>Your organization has been downgraded to the Free plan with 1 seat.</p>
-            <p>To restore your subscription, please update your payment method and resubscribe.</p>
+            <p>To restore paid access, please start a new payment from billing.</p>
           `
         });
       }

@@ -953,7 +953,7 @@ export function registerSubscriptionRoutes(
 
   // ===== Billing Cycle Change =====
 
-  // Schedule billing cycle change (takes effect at next renewal)
+  // Schedule billing cycle change (takes effect at next billing term)
   app.patch("/api/subscription/billing-cycle", requireAuth, csrfProtection, async (req, res) => {
     try {
       const user = req.user!;
@@ -998,7 +998,7 @@ export function registerSubscriptionRoutes(
 
       res.json({
         success: true,
-        message: `Billing cycle will change to ${billingCycle} at next renewal`,
+        message: `Billing cycle will change to ${billingCycle} at the next billing term`,
         currentCycle: subscription.billingCycle,
         pendingCycle: billingCycle,
         effectiveAt: subscription.currentPeriodEnd,
@@ -1293,8 +1293,12 @@ export function registerSubscriptionRoutes(
       res.json({
         orderId,
         status: transaction.status,
+        type: transaction.type,
         cashfreeStatus: orderStatus.status,
         paymentMethod: orderStatus.paymentMethod,
+        invoiceUrl: transaction.invoiceUrl,
+        failureReason: transaction.failureReason,
+        totalAmount: transaction.totalAmount,
       });
     } catch (error: any) {
       console.error("Error getting order status:", error);

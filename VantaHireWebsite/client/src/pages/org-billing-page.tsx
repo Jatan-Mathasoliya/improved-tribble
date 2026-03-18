@@ -8,6 +8,7 @@ import {
   useInvoices,
   useBillingConfig,
   useCreditPackConfig,
+  useOrderStatus,
   useCreateCheckout,
   useCreateCreditPackCheckout,
   useCancelSubscription,
@@ -59,8 +60,10 @@ import {
   Calendar,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
+import { useQueryClient } from "@tanstack/react-query";
 
 export default function OrgBillingPage() {
+  const queryClient = useQueryClient();
   const { data: orgData } = useOrganization();
   const { data: subscription, isLoading: subLoading } = useSubscription();
   const { data: plans } = usePlans();
@@ -81,10 +84,16 @@ export default function OrgBillingPage() {
   const [seats, setSeats] = useState(1);
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('monthly');
   const [creditPackQuantity, setCreditPackQuantity] = useState("1");
+  const [returnedOrderId, setReturnedOrderId] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return new URLSearchParams(window.location.search).get("order_id");
+  });
+  const [hasRefreshedForOrder, setHasRefreshedForOrder] = useState(false);
 
   const isOwner = orgData?.membership?.role === 'owner';
   const freePlan = plans?.find(p => p.name === 'free') as any;
   const proPlan = plans?.find(p => p.name === 'pro') as any;
+  const orderStatus = useOrderStatus(returnedOrderId);
   const currentPlanName = subscription?.plan?.displayName || 'Free';
   const isPro = subscription?.plan?.name === 'pro';
   const creditPackQuantityNumber = Math.min(
@@ -211,6 +220,29 @@ export default function OrgBillingPage() {
     return type;
   };
 
+  const clearReturnedOrder = () => {
+    setReturnedOrderId(null);
+    setHasRefreshedForOrder(false);
+    const params = new URLSearchParams(window.location.search);
+    params.delete("order_id");
+    params.delete("type");
+    const nextSearch = params.toString();
+    const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
+    window.history.replaceState({}, "", nextUrl);
+  };
+
+  const reopenOrderFlow = () => {
+    const type = orderStatus.data?.type;
+    if (type === 'credit_pack' && isOwner && isPro && creditPackConfig) {
+      setCreditPackDialogOpen(true);
+      return;
+    }
+    if (type === 'subscription' && isOwner && proPlan?.id) {
+      setSelectedPlan(proPlan.id);
+      setUpgradeDialogOpen(true);
+    }
+  };
+
   const creditUsagePercent = credits && credits.allocated > 0
     ? Math.min(100, Math.round((credits.used / credits.allocated) * 100))
     : 0;
@@ -218,6 +250,12 @@ export default function OrgBillingPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     let changed = false;
+    const orderId = params.get("order_id");
+
+    if (orderId !== returnedOrderId) {
+      setReturnedOrderId(orderId);
+      setHasRefreshedForOrder(false);
+    }
 
     if (params.get("buy_credits") === "1" && isOwner && isPro && creditPackConfig) {
       setCreditPackDialogOpen(true);
@@ -237,17 +275,92 @@ export default function OrgBillingPage() {
       const nextUrl = `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ""}${window.location.hash}`;
       window.history.replaceState({}, "", nextUrl);
     }
-  }, [creditPackConfig, isOwner, isPro, proPlan?.id]);
+  }, [creditPackConfig, isOwner, isPro, proPlan?.id, returnedOrderId]);
+
+  useEffect(() => {
+    if (orderStatus.data?.status !== 'completed' || hasRefreshedForOrder) {
+      return;
+    }
+
+    setHasRefreshedForOrder(true);
+    queryClient.invalidateQueries({ queryKey: ['subscription'] });
+    queryClient.invalidateQueries({ queryKey: ['ai', 'credits'] });
+    queryClient.invalidateQueries({ queryKey: ['subscription', 'invoices'] });
+  }, [hasRefreshedForOrder, orderStatus.data?.status, queryClient]);
 
   return (
     <Layout>
       <div className="max-w-7xl mx-auto p-6 space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold">Billing & Subscription</h1>
+      <div>
+        <h1 className="text-2xl font-bold">Billing & Subscription</h1>
         <p className="text-muted-foreground">
           Manage your subscription, seats, and billing
         </p>
       </div>
+
+      {returnedOrderId && (
+        <Card className={
+          orderStatus.data?.status === 'completed'
+            ? 'border-green-200 bg-green-50'
+            : orderStatus.data?.status === 'failed'
+              ? 'border-red-200 bg-red-50'
+              : 'border-amber-200 bg-amber-50'
+        }>
+          <CardContent className="pt-6">
+            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+              <div className="flex items-start gap-3">
+                {orderStatus.isLoading || orderStatus.data?.status === 'pending' ? (
+                  <Loader2 className="mt-0.5 h-5 w-5 animate-spin text-amber-600" />
+                ) : (
+                  <AlertCircle
+                    className={`mt-0.5 h-5 w-5 ${
+                      orderStatus.data?.status === 'completed' ? 'text-green-600' : 'text-red-600'
+                    }`}
+                  />
+                )}
+                <div className="space-y-1">
+                  <p className="font-medium">
+                    {orderStatus.isLoading || orderStatus.data?.status === 'pending'
+                      ? 'Payment is being processed'
+                      : orderStatus.data?.status === 'completed'
+                        ? 'Payment completed'
+                        : 'Payment did not complete'}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {orderStatus.isLoading || orderStatus.data?.status === 'pending'
+                      ? 'We are checking the latest payment status. This page refreshes automatically while the order is pending.'
+                      : orderStatus.data?.status === 'completed'
+                        ? `${formatInvoiceType(orderStatus.data?.type || 'subscription')} payment received${orderStatus.data?.paymentMethod ? ` via ${orderStatus.data.paymentMethod}` : ''}.`
+                        : orderStatus.data?.failureReason || 'Please start a new payment from billing if you still want to continue.'}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Order ID: {returnedOrderId}
+                    {typeof orderStatus.data?.totalAmount === 'number' ? ` • ${formatPriceINR(orderStatus.data.totalAmount)}` : ''}
+                  </p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {orderStatus.data?.invoiceUrl && orderStatus.data.status === 'completed' && (
+                  <Button variant="outline" asChild>
+                    <a href={orderStatus.data.invoiceUrl} target="_blank" rel="noopener noreferrer">
+                      <Download className="mr-2 h-4 w-4" />
+                      Download Invoice
+                    </a>
+                  </Button>
+                )}
+                {orderStatus.data?.status === 'failed' && (orderStatus.data.type === 'subscription' || orderStatus.data.type === 'credit_pack') && (
+                  <Button variant="outline" onClick={reopenOrderFlow}>
+                    Try Again
+                  </Button>
+                )}
+                <Button variant="ghost" onClick={clearReturnedOrder}>
+                  Dismiss
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Current Plan */}
       <Card>
@@ -284,7 +397,7 @@ export default function OrgBillingPage() {
               <div className="p-4 bg-slate-50 rounded-lg">
                 <div className="flex items-center gap-2 text-muted-foreground mb-1">
                   <CreditCard className="h-4 w-4" />
-                  <span className="text-sm">Next Billing</span>
+                  <span className="text-sm">{isPro ? "Current Paid Term Ends" : "Free Plan Active"}</span>
                 </div>
                 <p className="text-lg font-bold">
                   {format(new Date(subscription.currentPeriodEnd), 'MMM d, yyyy')}
@@ -299,7 +412,7 @@ export default function OrgBillingPage() {
               <div>
                 <p className="font-medium text-amber-800">Payment Failed</p>
                 <p className="text-sm text-amber-700">
-                  Please update your payment method to avoid service interruption.
+                  Start a new payment from billing before your paid term ends to avoid service interruption.
                 </p>
               </div>
             </div>
@@ -311,7 +424,7 @@ export default function OrgBillingPage() {
               <div className="flex-1">
                 <p className="font-medium">Cancellation Scheduled</p>
                 <p className="text-sm text-muted-foreground">
-                  Your subscription will end on {format(new Date(subscription.currentPeriodEnd), 'MMM d, yyyy')}
+                  Your paid Growth access will end on {format(new Date(subscription.currentPeriodEnd), 'MMM d, yyyy')}
                 </p>
               </div>
               {isOwner && (

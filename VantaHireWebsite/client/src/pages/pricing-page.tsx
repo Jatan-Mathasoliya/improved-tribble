@@ -555,7 +555,7 @@ export default function PricingPage() {
             <div className="space-y-6">
               {[
                 { q: "Is there really a free plan?", a: "Yes. No credit card required. No time limit. Start using VantaHire today and upgrade when you need more capacity." },
-                { q: "Can I switch plans anytime?", a: "Yes. Upgrade or downgrade at any time. No long-term contracts. Month-to-month billing on all plans." },
+                { q: "Can I switch plans anytime?", a: "Yes. Upgrade or downgrade from billing at any time. Paid access is purchased for the selected monthly or annual term." },
                 { q: "How does seat-based pricing work?", a: "You pay per recruiter who actively uses the platform. Team members who only view reports or dashboards do not count as seats." },
                 { q: "Do you offer annual discounts?", a: "Yes. Annual billing saves compared to monthly. Toggle between monthly and annual above to see the difference." },
                 { q: "What payment methods do you accept?", a: "Credit card and UPI for Growth via Cashfree. Enterprise customers can pay by invoice. GST-compliant invoicing is available for India." },

@@ -189,9 +189,9 @@ export default function TermsOfServicePage() {
               </p>
               <ul className="list-disc list-inside space-y-1 ml-4">
                 <li>Fees are non-refundable except as required by law</li>
-                <li>Subscriptions auto-renew unless cancelled</li>
+                <li>Paid access lasts for the billing term you purchase at checkout</li>
                 <li>We may change pricing with advance notice</li>
-                <li>You are responsible for maintaining valid payment information</li>
+                <li>You are responsible for completing payment for any future billing term you purchase</li>
               </ul>
             </CardContent>
           </Card>

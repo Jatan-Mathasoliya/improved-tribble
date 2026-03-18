@@ -61,6 +61,17 @@ export interface BillingConfig {
   taxEnabled: boolean;
 }
 
+export interface OrderStatus {
+  orderId: string;
+  status: 'pending' | 'completed' | 'failed' | 'refunded';
+  cashfreeStatus?: string | null;
+  paymentMethod?: string | null;
+  type?: 'subscription' | 'seat_addition' | 'credit_pack' | 'refund';
+  invoiceUrl?: string | null;
+  failureReason?: string | null;
+  totalAmount?: number;
+}
+
 // API functions
 async function fetchPlans() {
   const res = await fetch('/api/subscription/plans', {
@@ -125,6 +136,17 @@ async function fetchBillingConfig() {
   return res.json();
 }
 
+async function fetchOrderStatus(orderId: string) {
+  const res = await fetch(`/api/subscription/order/${encodeURIComponent(orderId)}/status`, {
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({}));
+    throw new Error(error.error || 'Failed to fetch order status');
+  }
+  return res.json();
+}
+
 // Hooks
 export function usePlans() {
   return useQuery<SubscriptionPlan[]>({
@@ -171,6 +193,20 @@ export function useBillingConfig() {
     queryKey: ['subscription', 'billing-config'],
     queryFn: fetchBillingConfig,
     staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function useOrderStatus(orderId?: string | null) {
+  return useQuery<OrderStatus>({
+    queryKey: ['subscription', 'order-status', orderId],
+    queryFn: () => fetchOrderStatus(orderId!),
+    enabled: !!orderId,
+    staleTime: 0,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === 'pending' || !status ? 3000 : false;
+    },
+    refetchIntervalInBackground: true,
   });
 }
 
@@ -345,7 +381,7 @@ export function useReactivateSubscription() {
 }
 
 /**
- * Change billing cycle (takes effect at next renewal)
+ * Change billing cycle (takes effect at the next billing term)
  */
 export function useChangeBillingCycle() {
   const queryClient = useQueryClient();

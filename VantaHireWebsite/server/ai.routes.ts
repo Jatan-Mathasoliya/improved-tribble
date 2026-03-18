@@ -192,6 +192,12 @@ export function registerAIRoutes(app: Express): void {
           return;
         }
 
+        const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt : '';
+        if (!prompt) {
+          res.status(400).json({ error: 'Prompt is required' });
+          return;
+        }
+
         // Check AI credits for recruiters (super_admin bypasses credit check)
         if (req.user!.role === 'recruiter') {
           const creditCheck = await hasEnoughCredits(req.user!.id, 1);
@@ -199,15 +205,8 @@ export function registerAIRoutes(app: Express): void {
             res.status(403).json(await getAiCreditExhaustionPayload(req.user!.id, 1));
             return;
           }
-          // Deduct 1 credit for AI generation
-          await useCredits(req.user!.id, 1);
         }
 
-        const prompt = typeof req.body?.prompt === 'string' ? req.body.prompt : '';
-        if (!prompt) {
-          res.status(400).json({ error: 'Prompt is required' });
-          return;
-        }
         const client = getGroqClient();
         const response = await client.chat.completions.create({
           model: "llama-3.3-70b-versatile",
@@ -219,6 +218,15 @@ export function registerAIRoutes(app: Express): void {
           temperature: 0.4,
         });
         const text = response.choices[0]?.message?.content?.trim() || "";
+
+        if (req.user!.role === 'recruiter') {
+          const creditUsage = await useCredits(req.user!.id, 1);
+          if (!creditUsage.success) {
+            res.status(403).json(await getAiCreditExhaustionPayload(req.user!.id, 1));
+            return;
+          }
+        }
+
         res.json({ text });
         return;
       } catch (error) {
@@ -241,6 +249,12 @@ export function registerAIRoutes(app: Express): void {
     genericGenerationLimiter,
     async (req: Request, res: Response): Promise<void> => {
       try {
+        const payload = req.body as DashboardAiPayload;
+        if (!payload || !payload.pipelineHealthScore || !Array.isArray(payload.jobsNeedingAttention)) {
+          res.status(400).json({ error: "Invalid payload" });
+          return;
+        }
+
         // Check AI credits for recruiters (super_admin bypasses credit check)
         if (req.user!.role === 'recruiter') {
           const creditCheck = await hasEnoughCredits(req.user!.id, 1);
@@ -248,16 +262,18 @@ export function registerAIRoutes(app: Express): void {
             res.status(403).json(await getAiCreditExhaustionPayload(req.user!.id, 1));
             return;
           }
-          // Deduct 1 credit for dashboard insights
-          await useCredits(req.user!.id, 1);
         }
 
-        const payload = req.body as DashboardAiPayload;
-        if (!payload || !payload.pipelineHealthScore || !Array.isArray(payload.jobsNeedingAttention)) {
-          res.status(400).json({ error: "Invalid payload" });
-          return;
-        }
         const insights = await getDashboardAiInsights(req.user!.id, payload);
+
+        if (req.user!.role === 'recruiter') {
+          const creditUsage = await useCredits(req.user!.id, 1);
+          if (!creditUsage.success) {
+            res.status(403).json(await getAiCreditExhaustionPayload(req.user!.id, 1));
+            return;
+          }
+        }
+
         res.json(insights);
         return;
       } catch (error) {
