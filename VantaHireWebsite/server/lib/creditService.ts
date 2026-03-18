@@ -136,14 +136,25 @@ export function getIncludedCreditsForSeats(creditsPerSeat: number, seats: number
   return creditsPerSeat * Math.max(1, seats || 1);
 }
 
+export function getUniqueCreditWarningRecipients(
+  billingContactEmail: string | null | undefined,
+  ownerEmail: string | null | undefined,
+): string[] {
+  const recipients = [billingContactEmail, ownerEmail]
+    .filter((value): value is string => !!value)
+    .map((value) => value.trim().toLowerCase())
+    .filter((value) => value.length > 0);
+
+  return Array.from(new Set(recipients));
+}
+
 function getCreditWarningAlertType(threshold: number): string {
   return `credit_usage_${threshold}`;
 }
 
-async function getOrganizationOwnerContact(orgId: number): Promise<{
+async function getOrganizationCreditWarningRecipients(orgId: number): Promise<{
   organizationName: string;
-  ownerEmail: string | null;
-  ownerName: string | null;
+  recipients: string[];
 } | null> {
   const org = await db.query.organizations.findFirst({
     where: eq(organizations.id, orgId),
@@ -171,15 +182,13 @@ async function getOrganizationOwnerContact(orgId: number): Promise<{
   if (owner.length === 0) {
     return {
       organizationName: org.name,
-      ownerEmail: null,
-      ownerName: null,
+      recipients: getUniqueCreditWarningRecipients(org.billingContactEmail, null),
     };
   }
 
   return {
     organizationName: org.name,
-    ownerEmail: owner[0].email,
-    ownerName: owner[0].firstName || null,
+    recipients: getUniqueCreditWarningRecipients(org.billingContactEmail, owner[0].email),
   };
 }
 
@@ -208,9 +217,9 @@ async function maybeSendCreditUsageWarning(params: {
     return;
   }
 
-  const contact = await getOrganizationOwnerContact(params.orgId);
+  const contact = await getOrganizationCreditWarningRecipients(params.orgId);
   const emailService = await getEmailService();
-  if (!contact?.ownerEmail || !emailService) {
+  if (!contact || contact.recipients.length === 0 || !emailService) {
     return;
   }
 
@@ -222,7 +231,7 @@ async function maybeSendCreditUsageWarning(params: {
   const subject = `${params.threshold}% of AI credits used - ${contact.organizationName}`;
   const html = `
     <h2>AI Credit Usage Alert</h2>
-    <p>Hello${contact.ownerName ? ` ${contact.ownerName}` : ""},</p>
+    <p>Hello,</p>
     <p><strong>${contact.organizationName}</strong> has used <strong>${params.threshold}%</strong> of its AI credits for the current billing term.</p>
     <ul>
       <li><strong>Plan:</strong> ${subscription.plan.displayName}</li>
@@ -235,23 +244,25 @@ async function maybeSendCreditUsageWarning(params: {
   `;
   const text = `${contact.organizationName} has used ${params.threshold}% of its AI credits for the current billing term.\nPlan: ${subscription.plan.displayName}\nCredits remaining: ${params.remainingCredits}\nCurrent credit pool: ${params.totalAllocated}\nTerm end: ${periodEndLabel}\n\n${actionLabel}: ${actionUrl}`;
 
-  const sent = await emailService.sendEmail({
-    to: contact.ownerEmail,
-    subject,
-    html,
-    text,
-  });
+  for (const recipient of contact.recipients) {
+    const sent = await emailService.sendEmail({
+      to: recipient,
+      subject,
+      html,
+      text,
+    });
 
-  if (!sent) {
-    return;
+    if (!sent) {
+      continue;
+    }
+
+    await db.insert(subscriptionAlerts).values({
+      subscriptionId: subscription.id,
+      alertType: getCreditWarningAlertType(params.threshold),
+      recipientEmail: recipient,
+      emailStatus: "sent",
+    });
   }
-
-  await db.insert(subscriptionAlerts).values({
-    subscriptionId: subscription.id,
-    alertType: getCreditWarningAlertType(params.threshold),
-    recipientEmail: contact.ownerEmail,
-    emailStatus: "sent",
-  });
 }
 
 async function getEffectiveRecurringLimit(

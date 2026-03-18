@@ -44,4 +44,16 @@ describe('credit warning thresholds', () => {
     expect(getIncludedCreditsForSeats(600, 1)).toBe(600);
     expect(getIncludedCreditsForSeats(600, 3)).toBe(1800);
   });
+
+  it('sends warnings to billing contact and owner without duplicates', async () => {
+    const { getUniqueCreditWarningRecipients } = await import('../lib/creditService');
+
+    expect(getUniqueCreditWarningRecipients('billing@acme.com', 'owner@acme.com')).toEqual([
+      'billing@acme.com',
+      'owner@acme.com',
+    ]);
+    expect(getUniqueCreditWarningRecipients('owner@acme.com', 'owner@acme.com')).toEqual([
+      'owner@acme.com',
+    ]);
+  });
 });
