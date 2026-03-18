@@ -15,36 +15,7 @@ import {
 } from '@shared/schema';
 import { lt, eq, and, sql, or, gte, lte, isNull } from 'drizzle-orm';
 import { getEmailService } from './simpleEmailService';
-
-function getEnvInt(name: string, fallback: number): number {
-  const value = Number.parseInt(process.env[name] ?? "", 10);
-  return Number.isFinite(value) ? value : fallback;
-}
-
-const FREE_AI_CREDITS_PER_MONTH = getEnvInt('FREE_AI_CREDITS_PER_MONTH', 5);
-const FREE_AI_CREDITS_ROLLOVER_MONTHS = getEnvInt('FREE_AI_CREDITS_ROLLOVER_MONTHS', 3);
-const FREE_AI_CREDITS_CAP = getEnvInt(
-  'FREE_AI_CREDITS_CAP',
-  FREE_AI_CREDITS_PER_MONTH * FREE_AI_CREDITS_ROLLOVER_MONTHS
-);
-
-function getPlanCreditSettings(plan: { name: string; aiCreditsPerSeatMonthly: number; maxCreditRolloverMonths: number | null }): {
-  creditsPerSeat: number;
-  maxRollover: number;
-} {
-  if (plan.name === 'free') {
-    return {
-      creditsPerSeat: FREE_AI_CREDITS_PER_MONTH,
-      maxRollover: FREE_AI_CREDITS_CAP,
-    };
-  }
-
-  const maxRolloverMonths = plan.maxCreditRolloverMonths || 3;
-  return {
-    creditsPerSeat: plan.aiCreditsPerSeatMonthly,
-    maxRollover: plan.aiCreditsPerSeatMonthly * maxRolloverMonths,
-  };
-}
+import { getPlanCreditSettings } from './lib/planConfig';
 
 // Job lifecycle scheduler with activity-based deactivation
 export function startJobScheduler() {
@@ -879,7 +850,7 @@ async function resetMonthlyAiCredits(): Promise<void> {
     console.log(`Processing credit reset for ${activeSubscriptions.length} active subscriptions`);
 
     for (const { subscription, plan } of activeSubscriptions) {
-      const { creditsPerSeat, maxRollover } = getPlanCreditSettings(plan);
+      const { creditsPerSeat, cap } = getPlanCreditSettings(plan);
 
       // Get all seated members of this organization
       const members = await db
@@ -897,18 +868,18 @@ async function resetMonthlyAiCredits(): Promise<void> {
       const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1); // First of next month
 
       for (const member of members) {
-        // Calculate rollover (unused credits, capped)
-        const unusedCredits = member.creditsAllocated - member.creditsUsed;
+        // unusedCredits already includes any previously rolled over credits
+        const unusedCredits = Math.max(0, member.creditsAllocated - member.creditsUsed);
         const newRollover = Math.min(
-          Math.max(0, unusedCredits + member.creditsRollover),
-          maxRollover
+          unusedCredits,
+          Math.max(0, cap - creditsPerSeat)
         );
 
         // Update member credits
         await db
           .update(organizationMembers)
           .set({
-            creditsAllocated: creditsPerSeat,
+            creditsAllocated: creditsPerSeat + newRollover,
             creditsUsed: 0,
             creditsRollover: newRollover,
             creditsPeriodStart: periodStart,

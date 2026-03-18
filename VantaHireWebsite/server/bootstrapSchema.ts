@@ -1,5 +1,13 @@
 import { db } from './db';
 import { sql } from 'drizzle-orm';
+import {
+  BUSINESS_CREDITS_PER_SEAT_PER_MONTH,
+  BUSINESS_CREDITS_ROLLOVER_MONTHS,
+  FREE_CREDITS_PER_MONTH,
+  FREE_CREDITS_ROLLOVER_MONTHS,
+  PRO_CREDITS_PER_SEAT_PER_MONTH,
+  PRO_CREDITS_ROLLOVER_MONTHS,
+} from './lib/planConfig';
 
 export async function ensureAtsSchema(): Promise<void> {
   console.log('🔧 Ensuring ATS schema exists...');
@@ -1279,18 +1287,62 @@ export async function ensureAtsSchema(): Promise<void> {
 
   // Seed default subscription plans
   console.log('  Seeding default subscription plans...');
+  const freePlanFeatures = JSON.stringify({
+    basicAts: true,
+    jobPosting: true,
+    applicationManagement: true,
+    aiMatching: true,
+    aiContent: true,
+    advancedAnalytics: false,
+    customBranding: false,
+    apiAccess: false,
+    prioritySupport: false,
+  });
+  const growthPlanFeatures = JSON.stringify({
+    basicAts: true,
+    jobPosting: true,
+    applicationManagement: true,
+    aiMatching: true,
+    aiContent: true,
+    advancedAnalytics: true,
+    customBranding: true,
+    apiAccess: false,
+    prioritySupport: true,
+  });
+  const businessPlanFeatures = JSON.stringify({
+    basicAts: true,
+    jobPosting: true,
+    applicationManagement: true,
+    aiMatching: true,
+    aiContent: true,
+    advancedAnalytics: true,
+    customBranding: true,
+    apiAccess: true,
+    prioritySupport: true,
+  });
   await db.execute(sql`
-    INSERT INTO subscription_plans (name, display_name, description, price_per_seat_monthly, price_per_seat_annual, ai_credits_per_seat_monthly, features, sort_order)
+    INSERT INTO subscription_plans (
+      name,
+      display_name,
+      description,
+      price_per_seat_monthly,
+      price_per_seat_annual,
+      ai_credits_per_seat_monthly,
+      max_credit_rollover_months,
+      features,
+      sort_order
+    )
     VALUES
-      ('free', 'Free', 'Basic ATS features for small teams', 0, 0, 5, '{"basicAts":true,"jobPosting":true,"applicationManagement":true,"aiMatching":false,"aiContent":false,"advancedAnalytics":false,"customBranding":false,"apiAccess":false,"prioritySupport":false}'::jsonb, 0),
-      ('pro', 'Growth', 'Scale your hiring output', 199900, 1999000, 600, '{"basicAts":true,"jobPosting":true,"applicationManagement":true,"aiMatching":true,"aiContent":true,"advancedAnalytics":true,"customBranding":true,"apiAccess":false,"prioritySupport":true}'::jsonb, 1),
-      ('business', 'Enterprise', 'Custom fit for large teams', 0, 0, 1000, '{"basicAts":true,"jobPosting":true,"applicationManagement":true,"aiMatching":true,"aiContent":true,"advancedAnalytics":true,"customBranding":true,"apiAccess":true,"prioritySupport":true}'::jsonb, 2)
+      ('free', 'Free', 'Basic ATS features for small teams', 0, 0, ${FREE_CREDITS_PER_MONTH}, ${FREE_CREDITS_ROLLOVER_MONTHS}, ${freePlanFeatures}::jsonb, 0),
+      ('pro', 'Growth', 'Scale your hiring output', 199900, 1999000, ${PRO_CREDITS_PER_SEAT_PER_MONTH}, ${PRO_CREDITS_ROLLOVER_MONTHS}, ${growthPlanFeatures}::jsonb, 1),
+      ('business', 'Enterprise', 'Custom fit for large teams', 0, 0, ${BUSINESS_CREDITS_PER_SEAT_PER_MONTH}, ${BUSINESS_CREDITS_ROLLOVER_MONTHS}, ${businessPlanFeatures}::jsonb, 2)
     ON CONFLICT (name) DO UPDATE SET
       display_name = EXCLUDED.display_name,
       description = EXCLUDED.description,
       price_per_seat_monthly = EXCLUDED.price_per_seat_monthly,
       price_per_seat_annual = EXCLUDED.price_per_seat_annual,
       ai_credits_per_seat_monthly = EXCLUDED.ai_credits_per_seat_monthly,
+      max_credit_rollover_months = EXCLUDED.max_credit_rollover_months,
       features = EXCLUDED.features,
       sort_order = EXCLUDED.sort_order;
   `);

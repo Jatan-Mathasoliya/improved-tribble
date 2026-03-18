@@ -77,6 +77,12 @@ export default function OrgBillingPage() {
   const proPlan = plans?.find(p => p.name === 'pro') as any;
   const currentPlanName = subscription?.plan?.displayName || 'Free';
   const isPro = subscription?.plan?.name === 'pro';
+  const formatMetric = (value?: number | null) => {
+    if (typeof value !== "number" || value <= 0) {
+      return "—";
+    }
+    return String(value);
+  };
 
   const handleUpgrade = async () => {
     if (!selectedPlan) return;
@@ -161,7 +167,7 @@ export default function OrgBillingPage() {
             <div>
               <CardTitle>Current Plan</CardTitle>
               <CardDescription>
-                {isPro ? "Pro subscription" : "Free plan"}
+                {isPro ? "Growth subscription" : "Free plan"}
               </CardDescription>
             </div>
             <Badge variant={isPro ? "default" : "secondary"} className="text-lg px-3 py-1">
@@ -233,7 +239,7 @@ export default function OrgBillingPage() {
               setSelectedPlan(proPlan?.id || null);
               setUpgradeDialogOpen(true);
             }}>
-              Upgrade to Pro
+              Upgrade to Growth
             </Button>
           </CardFooter>
         )}
@@ -280,7 +286,7 @@ export default function OrgBillingPage() {
       {!isPro && proPlan && (
         <Card>
           <CardHeader>
-            <CardTitle>Upgrade to Pro</CardTitle>
+            <CardTitle>Upgrade to Growth</CardTitle>
             <CardDescription>
               Unlock advanced features and more AI credits
             </CardDescription>
@@ -296,11 +302,11 @@ export default function OrgBillingPage() {
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
-                    {freePlan?.rateLimits?.monthlyCredits || 300} AI credits/month
+                    {formatMetric(freePlan?.rateLimits?.monthlyCredits)} AI credits/month
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
-                    {freePlan?.rateLimits?.dailyRateLimit || 20} AI analyses/day
+                    {formatMetric(freePlan?.rateLimits?.dailyRateLimit)} AI analyses/day
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
@@ -310,7 +316,7 @@ export default function OrgBillingPage() {
               </div>
               <div className="p-4 border-2 border-primary rounded-lg relative">
                 <Badge className="absolute -top-2 right-4">Popular</Badge>
-                <h3 className="font-semibold mb-3">Pro</h3>
+                <h3 className="font-semibold mb-3">Growth</h3>
                 <p className="text-2xl font-bold mb-3">
                   {formatPriceINR(proPlan.pricePerSeatMonthly)}
                   <span className="text-sm font-normal text-muted-foreground">/seat/month</span>
@@ -322,11 +328,11 @@ export default function OrgBillingPage() {
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
-                    {proPlan?.rateLimits?.monthlyCredits || 600} AI credits/seat/month
+                    {formatMetric(proPlan?.rateLimits?.monthlyCredits)} AI credits/seat/month
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
-                    {proPlan?.rateLimits?.dailyRateLimit || 100} AI analyses/day
+                    {formatMetric(proPlan?.rateLimits?.dailyRateLimit)} AI analyses/day
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
@@ -341,7 +347,7 @@ export default function OrgBillingPage() {
                       setUpgradeDialogOpen(true);
                     }}
                   >
-                    Upgrade to Pro
+                    Upgrade to Growth
                   </Button>
                 )}
               </div>
@@ -403,7 +409,7 @@ export default function OrgBillingPage() {
       <Dialog open={upgradeDialogOpen} onOpenChange={setUpgradeDialogOpen}>
         <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Upgrade to Pro</DialogTitle>
+            <DialogTitle>Upgrade to Growth</DialogTitle>
             <DialogDescription>
               Choose your seat count and billing cycle.
             </DialogDescription>

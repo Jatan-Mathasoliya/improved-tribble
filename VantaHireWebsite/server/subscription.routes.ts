@@ -110,7 +110,7 @@ export function registerSubscriptionRoutes(
       // Add rate limit info to each plan
       const plansWithLimits = plans.map(plan => ({
         ...plan,
-        rateLimits: getPlanRateLimitInfo(plan.name),
+        rateLimits: getPlanRateLimitInfo(plan),
       }));
       res.json(plansWithLimits);
     } catch (error: any) {
@@ -136,7 +136,12 @@ export function registerSubscriptionRoutes(
 
       if (!subscription) {
         res.json({
-          plan: { name: 'free', displayName: 'Free' },
+          plan: {
+            name: 'free',
+            displayName: 'Free',
+            aiCreditsPerSeatMonthly: getPlanRateLimitInfo('free').monthlyCredits,
+            rateLimits: getPlanRateLimitInfo('free'),
+          },
           seats: 1,
           status: 'active',
         });
@@ -152,6 +157,7 @@ export function registerSubscriptionRoutes(
           pricePerSeatMonthly: subscription.plan.pricePerSeatMonthly,
           pricePerSeatAnnual: subscription.plan.pricePerSeatAnnual,
           aiCreditsPerSeatMonthly: subscription.plan.aiCreditsPerSeatMonthly,
+          rateLimits: getPlanRateLimitInfo(subscription.plan),
         },
         seats: subscription.seats,
         billingCycle: subscription.billingCycle,
@@ -1097,10 +1103,10 @@ export function registerSubscriptionRoutes(
 
       // Get full plan rate limit info (includes monthly credits, rollover, etc.)
       const orgResult = await getUserOrganization(user.id);
-      const planName = orgResult ?
-        (await getOrganizationSubscription(orgResult.organization.id))?.plan.name || 'free'
-        : 'free';
-      const planLimits = getPlanRateLimitInfo(planName);
+      const subscription = orgResult
+        ? await getOrganizationSubscription(orgResult.organization.id)
+        : null;
+      const planLimits = getPlanRateLimitInfo(subscription?.plan ?? 'free');
 
       if (!balance) {
         res.json({
@@ -1231,7 +1237,7 @@ export function registerSubscriptionRoutes(
       res.json({
         email: intent.email,
         orgName: intent.orgName,
-        planName: intent.plan?.displayName || 'Pro',
+        planName: intent.plan?.displayName || 'Growth',
         seats: intent.seats,
         billingCycle: intent.billingCycle,
         hasExistingAccount: !!existingUser,

@@ -3,24 +3,16 @@ import {
   organizationSubscriptions,
   subscriptionPlans,
   organizationMembers,
-  type SubscriptionPlan,
-  type OrganizationSubscription,
 } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { getOrganizationSubscription } from "./subscriptionService";
+import { FREE_CREDITS_PER_MONTH } from "./planConfig";
 
 // Environment variables for instance configuration
 export const INSTANCE_TYPE = process.env.INSTANCE_TYPE || 'multi_tenant';
 export const DISABLE_SUPER_ADMIN = process.env.DISABLE_SUPER_ADMIN === 'true';
 export const DISABLE_MULTI_ORG_VIEW = process.env.DISABLE_MULTI_ORG_VIEW === 'true';
 export const DISABLE_PLATFORM_ANALYTICS = process.env.DISABLE_PLATFORM_ANALYTICS === 'true';
-
-function getEnvInt(name: string, fallback: number): number {
-  const value = Number.parseInt(process.env[name] ?? "", 10);
-  return Number.isFinite(value) ? value : fallback;
-}
-
-const FREE_AI_CREDITS_PER_MONTH = getEnvInt('FREE_AI_CREDITS_PER_MONTH', 5);
 
 // Feature names
 export const FEATURES = {
@@ -93,6 +85,11 @@ export async function getFeatureDefaultsByPlan(): Promise<Record<string, Record<
     const planResult = {} as Record<FeatureName, boolean>;
 
     for (const featureKey of Object.values(FEATURES)) {
+      if (plan.name === 'free' && (featureKey === FEATURES.AI_CONTENT || featureKey === FEATURES.AI_MATCHING)) {
+        planResult[featureKey] = true;
+        continue;
+      }
+
       // Match existing fallback logic: aiContent defaults true unless explicitly false
       if (featureKey === FEATURES.AI_CONTENT) {
         planResult[featureKey] = planFeatures[featureKey] !== false;
@@ -111,6 +108,7 @@ export async function getFeatureDefaultsByPlan(): Promise<Record<string, Record<
         featureKey === FEATURES.BASIC_ATS ||
         featureKey === FEATURES.JOB_POSTING ||
         featureKey === FEATURES.APPLICATION_MANAGEMENT ||
+        featureKey === FEATURES.AI_MATCHING ||
         featureKey === FEATURES.AI_CONTENT;
     }
     result['free'] = implicitFree;
@@ -131,6 +129,7 @@ export async function isFeatureEnabled(
     return featureName === FEATURES.BASIC_ATS ||
            featureName === FEATURES.JOB_POSTING ||
            featureName === FEATURES.APPLICATION_MANAGEMENT ||
+           featureName === FEATURES.AI_MATCHING ||
            featureName === FEATURES.AI_CONTENT;
   }
 
@@ -144,6 +143,9 @@ export async function isFeatureEnabled(
 
   // Check plan features
   const planFeatures = subscription.plan.features as Record<string, boolean>;
+  if (subscription.plan.name === 'free' && (featureName === FEATURES.AI_CONTENT || featureName === FEATURES.AI_MATCHING)) {
+    return true;
+  }
   if (featureName in planFeatures) {
     return planFeatures?.[featureName] === true;
   }
@@ -262,7 +264,7 @@ export async function getSubscriptionLimits(orgId: number): Promise<{
       maxSeats: 1,
       maxJobsActive: 5,
       maxApplicationsPerJob: 100,
-      maxAiCreditsPerMonth: FREE_AI_CREDITS_PER_MONTH,
+      maxAiCreditsPerMonth: FREE_CREDITS_PER_MONTH,
     };
   }
 
@@ -274,7 +276,7 @@ export async function getSubscriptionLimits(orgId: number): Promise<{
       maxSeats: 1,
       maxJobsActive: 5,
       maxApplicationsPerJob: 100,
-      maxAiCreditsPerMonth: FREE_AI_CREDITS_PER_MONTH,
+      maxAiCreditsPerMonth: FREE_CREDITS_PER_MONTH,
     };
   }
 
@@ -293,7 +295,7 @@ export async function getSubscriptionLimits(orgId: number): Promise<{
     maxSeats: null,
     maxJobsActive: null,
     maxApplicationsPerJob: null,
-    maxAiCreditsPerMonth: overrides?.aiCredits ?? 10000,
+    maxAiCreditsPerMonth: overrides?.aiCredits ?? plan.aiCreditsPerSeatMonthly,
   };
 }
 

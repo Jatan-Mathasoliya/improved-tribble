@@ -121,7 +121,7 @@ export default function AdminOrganizationsPage() {
     if (planName === 'Free') {
       return <Badge variant="outline">{planName}</Badge>;
     }
-    if (planName.includes('Pro')) {
+    if (planName.includes('Growth') || planName.includes('Pro')) {
       return <Badge variant="default" className="bg-purple-500">{planName}</Badge>;
     }
     return <Badge variant="secondary">{planName}</Badge>;

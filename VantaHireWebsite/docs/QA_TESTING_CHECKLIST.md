@@ -220,7 +220,7 @@ Before testing, ensure you have:
 |------|--------|-----------------|--------|-------|
 | 1 | Login as org owner on Free plan | Dashboard loaded | | |
 | 2 | Go to Settings → Billing | Billing page displayed | | |
-| 3 | Click "Upgrade to Pro" | Plan selection displayed | | |
+| 3 | Click "Upgrade to Growth" | Plan selection displayed | | |
 | 4 | Select seat count (e.g., 3) | Price calculated: ₹999 × 3 + GST | | |
 | 5 | Select "Monthly" billing | Monthly option selected | | |
 | 6 | Click "Proceed to Payment" | Redirected to Cashfree checkout | | |

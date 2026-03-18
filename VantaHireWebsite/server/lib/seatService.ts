@@ -9,7 +9,7 @@ import {
 import { eq, and, desc, sql, asc, ne } from "drizzle-orm";
 import { getSeatedMembersCount, getMembersByActivity } from "./membershipService";
 import { getOrganizationSubscription, updateSubscriptionSeats } from "./subscriptionService";
-import { initializeMemberCredits, forfeitMemberCredits } from "./creditService";
+import { initializeMemberCredits } from "./creditService";
 
 export interface SeatUsage {
   purchased: number;
@@ -76,8 +76,11 @@ export async function assignSeat(memberId: number): Promise<OrganizationMember> 
     .where(eq(organizationMembers.id, memberId))
     .returning();
 
-  // Allocate credits to the member based on their org's subscription plan
-  await initializeMemberCredits(memberId, member.organizationId);
+  const hasActiveCreditPeriod = !!member.creditsPeriodEnd && new Date(member.creditsPeriodEnd) > new Date();
+  const hasStoredCredits = member.creditsAllocated > 0 || member.creditsUsed > 0 || member.creditsRollover > 0;
+  if (!hasActiveCreditPeriod || !hasStoredCredits) {
+    await initializeMemberCredits(memberId, member.organizationId);
+  }
 
   return updated;
 }
@@ -104,10 +107,6 @@ export async function unassignSeat(memberId: number): Promise<OrganizationMember
   const [updated] = await db.update(organizationMembers)
     .set({
       seatAssigned: false,
-      // Forfeit credits on unseat
-      creditsAllocated: 0,
-      creditsUsed: 0,
-      creditsRollover: 0,
     })
     .where(eq(organizationMembers.id, memberId))
     .returning();
@@ -197,9 +196,6 @@ export async function reduceSeats(
     await db.update(organizationMembers)
       .set({
         seatAssigned: false,
-        creditsAllocated: 0,
-        creditsUsed: 0,
-        creditsRollover: 0,
       })
       .where(and(
         eq(organizationMembers.organizationId, orgId),
@@ -304,7 +300,11 @@ export async function reseatAllMembers(orgId: number): Promise<number> {
 
   // Allocate credits to each reseated member
   for (const member of toReseat) {
-    await initializeMemberCredits(member.id, orgId);
+    const hasActiveCreditPeriod = !!member.creditsPeriodEnd && new Date(member.creditsPeriodEnd) > new Date();
+    const hasStoredCredits = member.creditsAllocated > 0 || member.creditsUsed > 0 || member.creditsRollover > 0;
+    if (!hasActiveCreditPeriod || !hasStoredCredits) {
+      await initializeMemberCredits(member.id, orgId);
+    }
   }
 
   return toReseat.length;

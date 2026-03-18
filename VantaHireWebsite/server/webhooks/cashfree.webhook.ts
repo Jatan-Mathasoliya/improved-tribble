@@ -351,7 +351,7 @@ async function handleCheckoutIntentPayment(
       <p>Thank you for subscribing to VantaHire!</p>
       <p>Your payment of ₹${(paymentAmount / 100).toFixed(2)} has been received.</p>
       <p><strong>Organization Name:</strong> ${intent.orgName}</p>
-      <p><strong>Plan:</strong> ${intent.plan?.displayName || 'Pro'}</p>
+      <p><strong>Plan:</strong> ${intent.plan?.displayName || 'Growth'}</p>
       <p><strong>Seats:</strong> ${intent.seats}</p>
       <h3>Next Steps</h3>
       <p>Click the button below to set up your account and access your organization:</p>
@@ -363,7 +363,7 @@ async function handleCheckoutIntentPayment(
       <p>Or copy this link: ${claimUrl}</p>
       <p><em>This link will expire in 7 days.</em></p>
     `;
-    const text = `Payment Successful!\n\nThank you for subscribing to VantaHire.\nYour payment of ₹${(paymentAmount / 100).toFixed(2)} has been received.\n\nOrganization: ${intent.orgName}\nPlan: ${intent.plan?.displayName || 'Pro'}\nSeats: ${intent.seats}\n\nComplete your setup: ${claimUrl}\n\nThis link will expire in 7 days.`;
+    const text = `Payment Successful!\n\nThank you for subscribing to VantaHire.\nYour payment of ₹${(paymentAmount / 100).toFixed(2)} has been received.\n\nOrganization: ${intent.orgName}\nPlan: ${intent.plan?.displayName || 'Growth'}\nSeats: ${intent.seats}\n\nComplete your setup: ${claimUrl}\n\nThis link will expire in 7 days.`;
 
     await emailService.sendEmail({
       to: intent.email,

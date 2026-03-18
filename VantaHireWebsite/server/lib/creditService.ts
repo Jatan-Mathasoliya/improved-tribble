@@ -2,7 +2,6 @@ import { db } from "../db";
 import {
   organizationMembers,
   organizationSubscriptions,
-  subscriptionPlans,
   subscriptionAuditLog,
   userAiUsage,
   type OrganizationMember,
@@ -11,6 +10,14 @@ import {
 } from "@shared/schema";
 import { eq, and, sql, lte, desc } from "drizzle-orm";
 import { getOrganizationSubscription, logSubscriptionAction } from "./subscriptionService";
+import {
+  FREE_CREDITS_CAP,
+  FREE_CREDITS_PER_MONTH,
+  FREE_DAILY_RATE_LIMIT,
+  getPlanCreditSettings,
+  getPlanRateLimitInfo,
+  PRO_DAILY_RATE_LIMIT,
+} from "./planConfig";
 
 export interface CreditBalance {
   allocated: number;
@@ -29,62 +36,9 @@ export interface OrgCreditSummary {
   seatedMembers: number;
 }
 
-function getEnvInt(name: string, fallback: number): number {
-  const value = Number.parseInt(process.env[name] ?? "", 10);
-  return Number.isFinite(value) ? value : fallback;
-}
-
-// Free plan credits (configurable via env)
-const FREE_CREDITS_PER_MONTH = getEnvInt('FREE_AI_CREDITS_PER_MONTH', 5);
-const FREE_CREDITS_ROLLOVER_MONTHS = getEnvInt('FREE_AI_CREDITS_ROLLOVER_MONTHS', 3);
-const FREE_CREDITS_CAP = getEnvInt(
-  'FREE_AI_CREDITS_CAP',
-  FREE_CREDITS_PER_MONTH * FREE_CREDITS_ROLLOVER_MONTHS
-);
-
-// Pro plan credits (configurable via env)
-const PRO_CREDITS_PER_SEAT_PER_MONTH = getEnvInt('PRO_AI_CREDITS_PER_MONTH', 600);
-const PRO_CREDITS_ROLLOVER_MONTHS = getEnvInt('PRO_AI_CREDITS_ROLLOVER_MONTHS', 3);
-const PRO_CREDITS_CAP = getEnvInt(
-  'PRO_AI_CREDITS_CAP',
-  PRO_CREDITS_PER_SEAT_PER_MONTH * PRO_CREDITS_ROLLOVER_MONTHS
-);
-
-// Daily rate limits per plan (configurable via env)
-export const FREE_AI_DAILY_RATE_LIMIT = getEnvInt('FREE_AI_DAILY_RATE_LIMIT', 20);
-export const PRO_AI_DAILY_RATE_LIMIT = getEnvInt('PRO_AI_DAILY_RATE_LIMIT', 100);
-
-function getPlanCreditSettings(plan: SubscriptionPlan): {
-  creditsPerSeat: number;
-  maxRolloverMonths: number;
-  cap: number;
-} {
-  if (plan.name === 'free') {
-    return {
-      creditsPerSeat: FREE_CREDITS_PER_MONTH,
-      maxRolloverMonths: FREE_CREDITS_ROLLOVER_MONTHS,
-      cap: FREE_CREDITS_CAP,
-    };
-  }
-
-  // Pro plan uses env-configurable values
-  if (plan.name === 'pro') {
-    return {
-      creditsPerSeat: PRO_CREDITS_PER_SEAT_PER_MONTH,
-      maxRolloverMonths: PRO_CREDITS_ROLLOVER_MONTHS,
-      cap: PRO_CREDITS_CAP,
-    };
-  }
-
-  // Business/custom plans use DB values
-  const maxRolloverMonths = plan.maxCreditRolloverMonths || 3;
-  const creditsPerSeat = plan.aiCreditsPerSeatMonthly;
-  return {
-    creditsPerSeat,
-    maxRolloverMonths,
-    cap: creditsPerSeat * maxRolloverMonths,
-  };
-}
+export { FREE_DAILY_RATE_LIMIT as FREE_AI_DAILY_RATE_LIMIT };
+export { PRO_DAILY_RATE_LIMIT as PRO_AI_DAILY_RATE_LIMIT };
+export { getPlanRateLimitInfo } from "./planConfig";
 
 // Get member's credit balance
 export async function getMemberCreditBalance(userId: number): Promise<CreditBalance | null> {
@@ -651,46 +605,6 @@ export async function clearBonusCredits(
 
 // ===== Daily Rate Limit Functions =====
 
-export interface PlanRateLimitInfo {
-  planName: string;
-  dailyRateLimit: number;
-  monthlyCredits: number;
-  rolloverMonths: number;
-  maxCredits: number;
-}
-
-// Get rate limit info for a plan by name
-export function getPlanRateLimitInfo(planName: string): PlanRateLimitInfo {
-  if (planName === 'free') {
-    return {
-      planName: 'free',
-      dailyRateLimit: FREE_AI_DAILY_RATE_LIMIT,
-      monthlyCredits: FREE_CREDITS_PER_MONTH,
-      rolloverMonths: FREE_CREDITS_ROLLOVER_MONTHS,
-      maxCredits: FREE_CREDITS_CAP,
-    };
-  }
-
-  if (planName === 'pro') {
-    return {
-      planName: 'pro',
-      dailyRateLimit: PRO_AI_DAILY_RATE_LIMIT,
-      monthlyCredits: PRO_CREDITS_PER_SEAT_PER_MONTH,
-      rolloverMonths: PRO_CREDITS_ROLLOVER_MONTHS,
-      maxCredits: PRO_CREDITS_CAP,
-    };
-  }
-
-  // Business/custom plans - use Pro defaults (can be overridden)
-  return {
-    planName,
-    dailyRateLimit: PRO_AI_DAILY_RATE_LIMIT,
-    monthlyCredits: 0, // Custom
-    rolloverMonths: 3,
-    maxCredits: 0, // Custom
-  };
-}
-
 // Get daily rate limit for a user based on their organization's plan
 export async function getUserDailyRateLimit(userId: number): Promise<number> {
   const member = await db.query.organizationMembers.findFirst({
@@ -698,14 +612,14 @@ export async function getUserDailyRateLimit(userId: number): Promise<number> {
   });
 
   if (!member) {
-    return FREE_AI_DAILY_RATE_LIMIT;
+    return FREE_DAILY_RATE_LIMIT;
   }
 
   const subscription = await getOrganizationSubscription(member.organizationId);
   if (!subscription) {
-    return FREE_AI_DAILY_RATE_LIMIT;
+    return FREE_DAILY_RATE_LIMIT;
   }
 
-  const info = getPlanRateLimitInfo(subscription.plan.name);
+  const info = getPlanRateLimitInfo(subscription.plan);
   return info.dailyRateLimit;
 }

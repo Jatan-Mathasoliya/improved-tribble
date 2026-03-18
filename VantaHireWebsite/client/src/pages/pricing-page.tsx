@@ -107,18 +107,21 @@ export default function PricingPage() {
   const currentPlan = subscription?.plan?.name || 'free';
   const isPro = currentPlan === 'pro';
 
-  // Dynamic plan values from API (with fallbacks)
-  const freeCredits = freePlan?.rateLimits?.monthlyCredits || 300;
-  const freeRolloverMax = freePlan?.rateLimits?.maxCredits || 900;
-  const freeDailyLimit = freePlan?.rateLimits?.dailyRateLimit || 20;
-  const proCredits = proPlan?.rateLimits?.monthlyCredits || 600;
-  const proRolloverMax = proPlan?.rateLimits?.maxCredits || 1800;
-  const proDailyLimit = proPlan?.rateLimits?.dailyRateLimit || 100;
+  const formatMetric = (value?: number | null) => {
+    if (typeof value !== "number" || value <= 0) {
+      return "—";
+    }
+    return String(value);
+  };
+
+  // Dynamic plan values from API
+  const freeCredits = freePlan?.rateLimits?.monthlyCredits;
+  const proCredits = proPlan?.rateLimits?.monthlyCredits;
 
   // Build features array with dynamic values
   const features: PlanFeature[] = [
     { name: "Active jobs", free: "5", pro: "Unlimited", business: "Unlimited" },
-    { name: "AI sourcing runs / month", free: String(freeCredits), pro: "Unlimited", business: "Unlimited" },
+    { name: "AI credits / seat / month", free: formatMetric(freeCredits), pro: formatMetric(proCredits), business: "Custom" },
     { name: "Team members", free: "1", pro: "Unlimited", business: "Unlimited" },
     ...staticFeatures,
   ];
@@ -388,7 +391,7 @@ export default function PricingPage() {
               )}
             </div>
 
-            {/* Pro Plan */}
+            {/* Growth Plan */}
             <div className="bg-gradient-to-br from-primary/20 to-primary/5 p-6 rounded-xl border-2 border-primary relative">
               <Badge className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-white">
                 Most Popular
@@ -402,7 +405,7 @@ export default function PricingPage() {
               </div>
               <div className="mb-6">
                 <div className="text-4xl font-bold text-white">
-                  {proPlan ? formatPriceINR(proPlan.pricePerSeatMonthly) : '₹1,999'}
+                  {proPlan ? formatPriceINR(proPlan.pricePerSeatMonthly) : '...'}
                   <span className="text-base font-normal text-white/50">/seat/month</span>
                 </div>
                 <p className="text-xs text-white/50 mt-1">+ applicable taxes | Save with annual billing</p>
@@ -411,7 +414,11 @@ export default function PricingPage() {
               <ul className="space-y-3 mb-6">
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  Unlimited active jobs + AI sourcing
+                  Unlimited active jobs
+                </li>
+                <li className="flex items-center gap-2 text-white/80 text-sm">
+                  <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                  {formatMetric(proCredits)} AI credits per seat/month
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
@@ -524,7 +531,7 @@ export default function PricingPage() {
                 { q: "Can I switch plans anytime?", a: "Yes. Upgrade or downgrade at any time. No long-term contracts. Month-to-month billing on all plans." },
                 { q: "How does seat-based pricing work?", a: "You pay per recruiter who actively uses the platform. Team members who only view reports or dashboards do not count as seats." },
                 { q: "Do you offer annual discounts?", a: "Yes. Annual billing saves compared to monthly. Toggle between monthly and annual above to see the difference." },
-                { q: "What payment methods do you accept?", a: "Credit card and UPI for Free and Growth plans via Cashfree. Enterprise customers can pay by invoice. GST-compliant invoicing available for India." },
+                { q: "What payment methods do you accept?", a: "Credit card and UPI for Growth via Cashfree. Enterprise customers can pay by invoice. GST-compliant invoicing is available for India." },
                 { q: "What happens when I hit my Free plan limits?", a: "You will be notified before you reach your limit. No disruption to active jobs or candidates. Upgrade to Growth to remove limits." },
                 { q: "Is my data safe?", a: "VantaHire enforces a three-tier privacy model. Your uploaded resumes and candidate data stay private to your organization. Only candidates who opt in are discoverable by other customers." },
                 { q: "Can I cancel anytime?", a: "Yes. Cancel from your account settings. No cancellation fees. Your data remains accessible for 30 days after cancellation." },
@@ -652,7 +659,7 @@ export default function PricingPage() {
                     onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
                   />
                   <p className="text-sm text-muted-foreground">
-                    Each seat gets {proCredits} AI credits per month.
+                    Each seat gets {formatMetric(proCredits)} AI credits per month.
                   </p>
                 </div>
 

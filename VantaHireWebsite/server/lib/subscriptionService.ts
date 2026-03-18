@@ -14,19 +14,20 @@ import {
   type SubscriptionAuditAction,
 } from "@shared/schema";
 import { eq, and, desc, sql, gte, lte } from "drizzle-orm";
+import {
+  BUSINESS_CREDITS_PER_SEAT_PER_MONTH,
+  BUSINESS_CREDITS_ROLLOVER_MONTHS,
+  FREE_CREDITS_PER_MONTH,
+  FREE_CREDITS_ROLLOVER_MONTHS,
+  normalizePlan,
+  PLAN_BUSINESS,
+  PLAN_FREE,
+  PLAN_PRO,
+  PRO_CREDITS_PER_SEAT_PER_MONTH,
+  PRO_CREDITS_ROLLOVER_MONTHS,
+} from "./planConfig";
 
-// Plan names
-export const PLAN_FREE = 'free';
-export const PLAN_PRO = 'pro';
-export const PLAN_BUSINESS = 'business';
-
-function getEnvInt(name: string, fallback: number): number {
-  const value = Number.parseInt(process.env[name] ?? "", 10);
-  return Number.isFinite(value) ? value : fallback;
-}
-
-const FREE_AI_CREDITS_PER_MONTH = getEnvInt('FREE_AI_CREDITS_PER_MONTH', 5);
-const FREE_AI_CREDITS_ROLLOVER_MONTHS = getEnvInt('FREE_AI_CREDITS_ROLLOVER_MONTHS', 3);
+export { PLAN_FREE, PLAN_PRO, PLAN_BUSINESS } from "./planConfig";
 
 // Get all active plans
 export async function getActivePlans(): Promise<SubscriptionPlan[]> {
@@ -35,30 +36,23 @@ export async function getActivePlans(): Promise<SubscriptionPlan[]> {
     orderBy: subscriptionPlans.sortOrder,
   });
 
-  return plans.map((plan: SubscriptionPlan) => {
-    if (plan.name !== PLAN_FREE) {
-      return plan;
-    }
-    return {
-      ...plan,
-      aiCreditsPerSeatMonthly: FREE_AI_CREDITS_PER_MONTH,
-      maxCreditRolloverMonths: FREE_AI_CREDITS_ROLLOVER_MONTHS,
-    };
-  });
+  return plans.map((plan: SubscriptionPlan) => normalizePlan(plan));
 }
 
 // Get plan by name
 export async function getPlanByName(name: string): Promise<SubscriptionPlan | undefined> {
-  return db.query.subscriptionPlans.findFirst({
+  const plan = await db.query.subscriptionPlans.findFirst({
     where: eq(subscriptionPlans.name, name),
   });
+  return plan ? normalizePlan(plan) : undefined;
 }
 
 // Get plan by ID
 export async function getPlanById(id: number): Promise<SubscriptionPlan | undefined> {
-  return db.query.subscriptionPlans.findFirst({
+  const plan = await db.query.subscriptionPlans.findFirst({
     where: eq(subscriptionPlans.id, id),
   });
+  return plan ? normalizePlan(plan) : undefined;
 }
 
 // Get organization subscription
@@ -72,7 +66,14 @@ export async function getOrganizationSubscription(orgId: number): Promise<(Organ
     },
   });
 
-  return subscription as (OrganizationSubscription & { plan: SubscriptionPlan }) | null;
+  if (!subscription) {
+    return null;
+  }
+
+  return {
+    ...subscription,
+    plan: normalizePlan(subscription.plan),
+  } as OrganizationSubscription & { plan: SubscriptionPlan };
 }
 
 // Create free subscription for new organization
@@ -587,13 +588,13 @@ export async function seedDefaultPlans(): Promise<void> {
       description: 'Basic ATS for individuals',
       pricePerSeatMonthly: 0,
       pricePerSeatAnnual: 0,
-      aiCreditsPerSeatMonthly: FREE_AI_CREDITS_PER_MONTH,
-      maxCreditRolloverMonths: FREE_AI_CREDITS_ROLLOVER_MONTHS,
+      aiCreditsPerSeatMonthly: FREE_CREDITS_PER_MONTH,
+      maxCreditRolloverMonths: FREE_CREDITS_ROLLOVER_MONTHS,
       features: {
         basicAts: true,
         jobPosting: true,
         applicationManagement: true,
-        aiMatching: false,
+        aiMatching: true,
         aiContent: true,
         advancedAnalytics: false,
         customPipeline: false,
@@ -609,8 +610,8 @@ export async function seedDefaultPlans(): Promise<void> {
       description: 'Scale your hiring output',
       pricePerSeatMonthly: 199900, // ₹1,999 in paise
       pricePerSeatAnnual: 1999000, // ₹19,990 in paise (2 months free)
-      aiCreditsPerSeatMonthly: 600,
-      maxCreditRolloverMonths: 3,
+      aiCreditsPerSeatMonthly: PRO_CREDITS_PER_SEAT_PER_MONTH,
+      maxCreditRolloverMonths: PRO_CREDITS_ROLLOVER_MONTHS,
       features: {
         basicAts: true,
         jobPosting: true,
@@ -631,8 +632,8 @@ export async function seedDefaultPlans(): Promise<void> {
       description: 'Custom fit for large teams',
       pricePerSeatMonthly: 0, // Contact sales
       pricePerSeatAnnual: 0,
-      aiCreditsPerSeatMonthly: 0, // Custom
-      maxCreditRolloverMonths: 0,
+      aiCreditsPerSeatMonthly: BUSINESS_CREDITS_PER_SEAT_PER_MONTH,
+      maxCreditRolloverMonths: BUSINESS_CREDITS_ROLLOVER_MONTHS,
       features: {
         basicAts: true,
         jobPosting: true,

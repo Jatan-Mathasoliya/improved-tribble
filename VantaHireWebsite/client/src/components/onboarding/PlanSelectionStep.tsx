@@ -48,10 +48,16 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
 
   const freePlan = plans?.find(p => p.name === 'free') as any;
   const proPlan = plans?.find(p => p.name === 'pro') as any;
+  const formatMetric = (value?: number | null) => {
+    if (typeof value !== "number" || value <= 0) {
+      return "—";
+    }
+    return String(value);
+  };
 
   // Dynamic values from API
-  const freeCredits = freePlan?.rateLimits?.monthlyCredits || 300;
-  const proCredits = proPlan?.rateLimits?.monthlyCredits || 600;
+  const freeCredits = freePlan?.rateLimits?.monthlyCredits;
+  const proCredits = proPlan?.rateLimits?.monthlyCredits;
 
   const handleSelectFree = async () => {
     try {
@@ -138,7 +144,7 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
           Choose Your Plan
         </h2>
         <p className="text-muted-foreground mt-1">
-          Start free or unlock more with Pro
+          Start free or unlock more with Growth
         </p>
       </div>
 
@@ -158,7 +164,7 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
               <ul className="space-y-1.5 text-sm text-muted-foreground">
                 <li className="flex items-center gap-2">
                   <Check className="h-3.5 w-3.5 text-green-500" />
-                  {freeCredits} AI credits per month
+                  {formatMetric(freeCredits)} AI credits per month
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="h-3.5 w-3.5 text-green-500" />
@@ -191,7 +197,7 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
           </div>
         </div>
 
-        {/* Pro Plan - Highlighted */}
+        {/* Growth Plan - Highlighted */}
         <div className="p-5 rounded-xl border-2 border-primary bg-card relative">
           <Badge className="absolute -top-2.5 left-4 bg-primary text-primary-foreground">
             Recommended
@@ -200,7 +206,7 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
             <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
                 <Zap className="h-4 w-4 text-primary" />
-                <h3 className="font-semibold text-foreground">Pro</h3>
+                <h3 className="font-semibold text-foreground">Growth</h3>
               </div>
               <p className="text-sm text-muted-foreground mb-3">
                 For growing teams
@@ -208,7 +214,7 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
               <ul className="space-y-1.5 text-sm text-muted-foreground">
                 <li className="flex items-center gap-2">
                   <Check className="h-3.5 w-3.5 text-green-500" />
-                  {proCredits} AI credits per seat/month
+                  {formatMetric(proCredits)} AI credits per seat/month
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="h-3.5 w-3.5 text-green-500" />
@@ -287,7 +293,7 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
       <Dialog open={checkoutDialogOpen} onOpenChange={setCheckoutDialogOpen}>
         <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Upgrade to Pro</DialogTitle>
+            <DialogTitle>Upgrade to Growth</DialogTitle>
             <DialogDescription>
               Choose your seat count and billing cycle.
             </DialogDescription>
@@ -304,7 +310,7 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
                 onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
               />
               <p className="text-sm text-muted-foreground">
-                Each seat gets {proCredits} AI credits per month.
+                Each seat gets {formatMetric(proCredits)} AI credits per month.
               </p>
             </div>
 
