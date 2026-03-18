@@ -261,7 +261,7 @@ export default function OrgBillingPage() {
               AI Credits
             </CardTitle>
             <CardDescription>
-              Your monthly AI feature usage
+              Your organization's shared AI credit pool
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -278,6 +278,11 @@ export default function OrgBillingPage() {
                 <span>+{credits.rollover} rolled over</span>
               )}
             </div>
+            {credits.purchasedCredits && credits.purchasedCredits > 0 && (
+              <div className="text-sm text-muted-foreground">
+                Purchased credits available: {credits.purchasedCredits}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -328,7 +333,7 @@ export default function OrgBillingPage() {
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
-                    {formatMetric(proPlan?.rateLimits?.monthlyCredits)} AI credits/seat/month
+                    {formatMetric(proPlan?.rateLimits?.monthlyCredits)} included AI credits/month
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="h-4 w-4 text-green-500" />
@@ -425,7 +430,7 @@ export default function OrgBillingPage() {
                 onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
               />
               <p className="text-sm text-muted-foreground">
-                Minimum 1 seat. You can add more later.
+                Growth includes {formatMetric(proPlan?.rateLimits?.monthlyCredits)} AI credits per month per organization. Seats are billed separately.
               </p>
             </div>
             <div className="space-y-2">

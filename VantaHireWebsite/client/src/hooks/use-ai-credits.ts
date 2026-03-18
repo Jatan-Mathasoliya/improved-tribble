@@ -6,6 +6,7 @@ export interface CreditBalance {
   used: number;
   remaining: number;
   rollover: number;
+  purchasedCredits?: number;
   periodStart: string | null;
   periodEnd: string | null;
 }

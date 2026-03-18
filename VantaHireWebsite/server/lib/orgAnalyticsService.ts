@@ -2,6 +2,7 @@ import { db } from "../db";
 import {
   jobs,
   applications,
+  organizationCreditBalances,
   organizationMembers,
   userAiUsage,
   users,
@@ -97,11 +98,11 @@ export async function getOrgAnalyticsOverview(orgId: number): Promise<OrgAnalyti
   // AI Credits
   const [creditStats] = await db
     .select({
-      used: sql<number>`COALESCE(SUM(${organizationMembers.creditsUsed}), 0)`,
-      allocated: sql<number>`COALESCE(SUM(${organizationMembers.creditsAllocated}), 0)`,
+      used: sql<number>`COALESCE(${organizationCreditBalances.recurringUsed} + ${organizationCreditBalances.purchasedUsed}, 0)`,
+      allocated: sql<number>`COALESCE(${organizationCreditBalances.recurringAllocated} + ${organizationCreditBalances.purchasedCredits} + ${organizationCreditBalances.purchasedUsed}, 0)`,
     })
-    .from(organizationMembers)
-    .where(eq(organizationMembers.organizationId, orgId));
+    .from(organizationCreditBalances)
+    .where(eq(organizationCreditBalances.organizationId, orgId));
 
   // Subscription
   const subscription = await getOrganizationSubscription(orgId);
@@ -431,14 +432,17 @@ export interface TeamMemberActivity {
 }
 
 export async function getTeamActivity(orgId: number): Promise<TeamMemberActivity[]> {
+  const creditBalance = await db.query.organizationCreditBalances.findFirst({
+    where: eq(organizationCreditBalances.organizationId, orgId),
+  });
+  const usageWindowStart = creditBalance?.periodStart ?? new Date(0);
+
   const members = await db
     .select({
       memberId: organizationMembers.id,
       userId: organizationMembers.userId,
       role: organizationMembers.role,
       lastActivityAt: organizationMembers.lastActivityAt,
-      creditsUsed: organizationMembers.creditsUsed,
-      creditsAllocated: organizationMembers.creditsAllocated,
       seatAssigned: organizationMembers.seatAssigned,
       firstName: users.firstName,
       lastName: users.lastName,
@@ -471,7 +475,21 @@ export async function getTeamActivity(orgId: number): Promise<TeamMemberActivity
 
   const appCountMap = new Map(appCounts.map((a: { postedBy: number; count: number }) => [a.postedBy, Number(a.count)]));
 
-  return members.map((m: { userId: number; firstName: string | null; lastName: string | null; email: string; role: string; lastActivityAt: Date | null; creditsUsed: number; creditsAllocated: number; seatAssigned: boolean }) => ({
+  const creditUsage = await db
+    .select({
+      userId: userAiUsage.userId,
+      used: count(),
+    })
+    .from(userAiUsage)
+    .where(and(
+      eq(userAiUsage.organizationId, orgId),
+      gte(userAiUsage.computedAt, usageWindowStart),
+    ))
+    .groupBy(userAiUsage.userId);
+
+  const creditUsageMap = new Map(creditUsage.map((row: typeof creditUsage[number]) => [row.userId, Number(row.used)]));
+
+  return members.map((m: { userId: number; firstName: string | null; lastName: string | null; email: string; role: string; lastActivityAt: Date | null; seatAssigned: boolean }) => ({
     userId: m.userId,
     name: [m.firstName, m.lastName].filter(Boolean).join(' ') || m.email,
     email: m.email,
@@ -479,8 +497,8 @@ export async function getTeamActivity(orgId: number): Promise<TeamMemberActivity
     lastActivityAt: m.lastActivityAt,
     jobsPosted: jobCountMap.get(m.userId) ?? 0,
     applicationsProcessed: appCountMap.get(m.userId) ?? 0,
-    creditsUsed: m.creditsUsed,
-    creditsAllocated: m.creditsAllocated,
+    creditsUsed: creditUsageMap.get(m.userId) ?? 0,
+    creditsAllocated: 0,
     seatAssigned: m.seatAssigned,
   }));
 }
@@ -509,32 +527,40 @@ export interface AiCreditUsage {
 }
 
 export async function getAiCreditUsage(orgId: number): Promise<AiCreditUsage> {
+  const creditBalance = await db.query.organizationCreditBalances.findFirst({
+    where: eq(organizationCreditBalances.organizationId, orgId),
+  });
+  const usageWindowStart = creditBalance?.periodStart ?? new Date(0);
+
   const [totals] = await db
     .select({
-      used: sql<number>`COALESCE(SUM(${organizationMembers.creditsUsed}), 0)`,
-      allocated: sql<number>`COALESCE(SUM(${organizationMembers.creditsAllocated}), 0)`,
+      used: sql<number>`COALESCE(${organizationCreditBalances.recurringUsed} + ${organizationCreditBalances.purchasedUsed}, 0)`,
+      allocated: sql<number>`COALESCE(${organizationCreditBalances.recurringAllocated} + ${organizationCreditBalances.purchasedCredits} + ${organizationCreditBalances.purchasedUsed}, 0)`,
     })
-    .from(organizationMembers)
-    .where(eq(organizationMembers.organizationId, orgId));
+    .from(organizationCreditBalances)
+    .where(eq(organizationCreditBalances.organizationId, orgId));
 
   const byMemberRaw = await db
     .select({
-      userId: organizationMembers.userId,
+      userId: userAiUsage.userId,
       firstName: users.firstName,
       lastName: users.lastName,
       email: users.username,
-      used: organizationMembers.creditsUsed,
-      allocated: organizationMembers.creditsAllocated,
+      used: count(),
     })
-    .from(organizationMembers)
-    .innerJoin(users, eq(organizationMembers.userId, users.id))
-    .where(eq(organizationMembers.organizationId, orgId));
+    .from(userAiUsage)
+    .innerJoin(users, eq(userAiUsage.userId, users.id))
+    .where(and(
+      eq(userAiUsage.organizationId, orgId),
+      gte(userAiUsage.computedAt, usageWindowStart),
+    ))
+    .groupBy(userAiUsage.userId, users.firstName, users.lastName, users.username);
 
-  const byMember = byMemberRaw.map((m: { userId: number; firstName: string | null; lastName: string | null; email: string; used: number; allocated: number }) => ({
+  const byMember = byMemberRaw.map((m: { userId: number; firstName: string | null; lastName: string | null; email: string; used: number }) => ({
     userId: m.userId,
     name: [m.firstName, m.lastName].filter(Boolean).join(' ') || m.email,
-    used: m.used,
-    allocated: m.allocated,
+    used: Number(m.used),
+    allocated: 0,
   }));
 
   const byFeature = await db

@@ -76,11 +76,7 @@ export async function assignSeat(memberId: number): Promise<OrganizationMember> 
     .where(eq(organizationMembers.id, memberId))
     .returning();
 
-  const hasActiveCreditPeriod = !!member.creditsPeriodEnd && new Date(member.creditsPeriodEnd) > new Date();
-  const hasStoredCredits = member.creditsAllocated > 0 || member.creditsUsed > 0 || member.creditsRollover > 0;
-  if (!hasActiveCreditPeriod || !hasStoredCredits) {
-    await initializeMemberCredits(memberId, member.organizationId);
-  }
+  await initializeMemberCredits(memberId, member.organizationId);
 
   return updated;
 }
@@ -300,11 +296,7 @@ export async function reseatAllMembers(orgId: number): Promise<number> {
 
   // Allocate credits to each reseated member
   for (const member of toReseat) {
-    const hasActiveCreditPeriod = !!member.creditsPeriodEnd && new Date(member.creditsPeriodEnd) > new Date();
-    const hasStoredCredits = member.creditsAllocated > 0 || member.creditsUsed > 0 || member.creditsRollover > 0;
-    if (!hasActiveCreditPeriod || !hasStoredCredits) {
-      await initializeMemberCredits(member.id, orgId);
-    }
+    await initializeMemberCredits(member.id, orgId);
   }
 
   return toReseat.length;

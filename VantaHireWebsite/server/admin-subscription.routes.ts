@@ -4,6 +4,7 @@ import { requireAuth } from "./auth";
 import { db } from "./db";
 import {
   organizations,
+  organizationCreditBalances,
   organizationSubscriptions,
   subscriptionPlans,
   organizationMembers,
@@ -557,11 +558,10 @@ export function registerAdminSubscriptionRoutes(
       // Get total credits used across all orgs
       const creditsResult = await db
         .select({
-          totalAllocated: sql<number>`sum(${organizationMembers.creditsAllocated})`,
-          totalUsed: sql<number>`sum(${organizationMembers.creditsUsed})`,
+          totalAllocated: sql<number>`COALESCE(SUM(${organizationCreditBalances.recurringAllocated} + ${organizationCreditBalances.purchasedCredits} + ${organizationCreditBalances.purchasedUsed}), 0)`,
+          totalUsed: sql<number>`COALESCE(SUM(${organizationCreditBalances.recurringUsed} + ${organizationCreditBalances.purchasedUsed}), 0)`,
         })
-        .from(organizationMembers)
-        .where(eq(organizationMembers.seatAssigned, true));
+        .from(organizationCreditBalances);
 
       const credits = creditsResult[0] || { totalAllocated: 0, totalUsed: 0 };
 
@@ -570,12 +570,11 @@ export function registerAdminSubscriptionRoutes(
         .select({
           orgId: organizations.id,
           orgName: organizations.name,
-          totalUsed: sql<number>`sum(${organizationMembers.creditsUsed})`,
+          totalUsed: sql<number>`${organizationCreditBalances.recurringUsed} + ${organizationCreditBalances.purchasedUsed}`,
         })
-        .from(organizationMembers)
-        .innerJoin(organizations, eq(organizationMembers.organizationId, organizations.id))
-        .groupBy(organizations.id, organizations.name)
-        .orderBy(desc(sql`sum(${organizationMembers.creditsUsed})`))
+        .from(organizationCreditBalances)
+        .innerJoin(organizations, eq(organizationCreditBalances.organizationId, organizations.id))
+        .orderBy(desc(sql`${organizationCreditBalances.recurringUsed} + ${organizationCreditBalances.purchasedUsed}`))
         .limit(10);
 
       res.json({

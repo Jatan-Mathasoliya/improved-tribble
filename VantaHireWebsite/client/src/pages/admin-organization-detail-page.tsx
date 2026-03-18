@@ -41,8 +41,6 @@ interface OrganizationMember {
   userId: number;
   role: string;
   seatAssigned: boolean;
-  creditsAllocated: number;
-  creditsUsed: number;
   joinedAt: string;
   lastActivityAt: string | null;
   user: {
@@ -76,6 +74,12 @@ interface OrgStats {
   candidatesCount: number;
 }
 
+interface OrgCreditDetails {
+  effectiveLimit: number;
+  usedThisPeriod: number;
+  remaining: number;
+}
+
 interface OrganizationDetail {
   id: number;
   name: string;
@@ -101,6 +105,12 @@ interface OrganizationDetail {
 async function fetchOrganization(id: string): Promise<OrganizationDetail> {
   const res = await fetch(`/api/admin/organizations/${id}`, { credentials: "include" });
   if (!res.ok) throw new Error("Failed to fetch organization");
+  return res.json();
+}
+
+async function fetchOrgCredits(id: string): Promise<OrgCreditDetails> {
+  const res = await fetch(`/api/admin/organizations/${id}/credits`, { credentials: "include" });
+  if (!res.ok) throw new Error("Failed to fetch organization credits");
   return res.json();
 }
 
@@ -138,6 +148,11 @@ export default function AdminOrganizationDetailPage() {
   const { data: org, isLoading, error } = useQuery<OrganizationDetail>({
     queryKey: ["admin", "organization", orgId],
     queryFn: () => fetchOrganization(orgId!),
+    enabled: !!orgId,
+  });
+  const { data: creditDetails } = useQuery<OrgCreditDetails>({
+    queryKey: ["admin", "organization", orgId, "credits"],
+    queryFn: () => fetchOrgCredits(orgId!),
     enabled: !!orgId,
   });
 
@@ -191,8 +206,6 @@ export default function AdminOrganizationDetailPage() {
     );
   }
 
-  const totalCreditsAllocated = org.members.reduce((sum, m) => sum + m.creditsAllocated, 0);
-  const totalCreditsUsed = org.members.reduce((sum, m) => sum + m.creditsUsed, 0);
   const seatedMembers = org.members.filter(m => m.seatAssigned).length;
 
   return (
@@ -251,7 +264,9 @@ export default function AdminOrganizationDetailPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">AI Credits</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalCreditsUsed} / {totalCreditsAllocated}</div>
+              <div className="text-2xl font-bold">
+                {creditDetails ? `${creditDetails.usedThisPeriod} / ${creditDetails.effectiveLimit}` : "—"}
+              </div>
               <p className="text-xs text-muted-foreground">used this period</p>
             </CardContent>
           </Card>
@@ -389,7 +404,7 @@ export default function AdminOrganizationDetailPage() {
                   <TableHead>Member</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Seat</TableHead>
-                  <TableHead>AI Credits</TableHead>
+                  <TableHead>Credit Access</TableHead>
                   <TableHead>Joined</TableHead>
                   <TableHead>Last Active</TableHead>
                 </TableRow>
@@ -423,7 +438,7 @@ export default function AdminOrganizationDetailPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      {member.creditsUsed} / {member.creditsAllocated}
+                      {member.seatAssigned ? "Uses shared org balance" : "No access"}
                     </TableCell>
                     <TableCell>
                       {format(new Date(member.joinedAt), "MMM d, yyyy")}

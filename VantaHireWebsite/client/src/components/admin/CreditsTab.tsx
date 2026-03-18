@@ -34,9 +34,8 @@ interface CreditDetails {
     userId: number;
     name: string;
     email: string;
-    allocated: number;
     used: number;
-    remaining: number;
+    seatAssigned: boolean;
   }[];
 }
 
@@ -431,9 +430,9 @@ export default function CreditsTab({ orgId, planName }: CreditsTabProps) {
       {credits.memberBreakdown.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Member Credit Breakdown</CardTitle>
+            <CardTitle>Member Usage Breakdown</CardTitle>
             <CardDescription>
-              Individual credit allocation and usage per seated member.
+              Credits are now shared at the organization level. This view shows who used them.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -441,17 +440,12 @@ export default function CreditsTab({ orgId, planName }: CreditsTabProps) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Member</TableHead>
-                  <TableHead className="text-right">Allocated</TableHead>
+                  <TableHead className="text-right">Seat</TableHead>
                   <TableHead className="text-right">Used</TableHead>
-                  <TableHead className="text-right">Remaining</TableHead>
-                  <TableHead className="text-right">Usage</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {credits.memberBreakdown.map((member) => {
-                  const memberUsage = member.allocated > 0
-                    ? Math.round((member.used / member.allocated) * 100)
-                    : 0;
                   return (
                     <TableRow key={member.userId}>
                       <TableCell>
@@ -460,14 +454,12 @@ export default function CreditsTab({ orgId, planName }: CreditsTabProps) {
                           <p className="text-xs text-muted-foreground">{member.email}</p>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">{member.allocated.toLocaleString()}</TableCell>
-                      <TableCell className="text-right">{member.used.toLocaleString()}</TableCell>
-                      <TableCell className="text-right text-green-600">{member.remaining.toLocaleString()}</TableCell>
                       <TableCell className="text-right">
-                        <Badge variant={memberUsage > 80 ? "destructive" : "secondary"}>
-                          {memberUsage}%
+                        <Badge variant={member.seatAssigned ? "secondary" : "outline"}>
+                          {member.seatAssigned ? "Seated" : "Unseated"}
                         </Badge>
                       </TableCell>
+                      <TableCell className="text-right">{member.used.toLocaleString()}</TableCell>
                     </TableRow>
                   );
                 })}

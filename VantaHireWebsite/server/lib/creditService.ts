@@ -1,14 +1,14 @@
 import { db } from "../db";
 import {
+  organizationCreditBalances,
+  organizationCreditTransactions,
   organizationMembers,
   organizationSubscriptions,
-  subscriptionAuditLog,
   userAiUsage,
   type OrganizationMember,
   type UserAiUsage,
-  type SubscriptionPlan,
 } from "@shared/schema";
-import { eq, and, sql, lte, desc } from "drizzle-orm";
+import { and, desc, eq, lte, sql, gte } from "drizzle-orm";
 import { getOrganizationSubscription, logSubscriptionAction } from "./subscriptionService";
 import {
   FREE_CREDITS_CAP,
@@ -24,6 +24,7 @@ export interface CreditBalance {
   used: number;
   remaining: number;
   rollover: number;
+  purchasedCredits: number;
   periodStart: Date | null;
   periodEnd: Date | null;
 }
@@ -32,16 +33,193 @@ export interface OrgCreditSummary {
   totalAllocated: number;
   totalUsed: number;
   totalRemaining: number;
-  perSeatAllocation: number;
+  includedAllocation: number;
+  purchasedCredits: number;
   seatedMembers: number;
+}
+
+export interface OrgCreditDetails {
+  planAllocation: number;
+  bonusCredits: number;
+  customLimit: number | null;
+  effectiveLimit: number;
+  purchasedCredits: number;
+  usedThisPeriod: number;
+  remaining: number;
+  periodStart: Date | null;
+  periodEnd: Date | null;
+  seatedMembers: number;
+  memberBreakdown: {
+    userId: number;
+    name: string;
+    email: string;
+    used: number;
+    seatAssigned: boolean;
+  }[];
 }
 
 export { FREE_DAILY_RATE_LIMIT as FREE_AI_DAILY_RATE_LIMIT };
 export { PRO_DAILY_RATE_LIMIT as PRO_AI_DAILY_RATE_LIMIT };
 export { getPlanRateLimitInfo } from "./planConfig";
 
-// Get member's credit balance
-export async function getMemberCreditBalance(userId: number): Promise<CreditBalance | null> {
+function getCreditPeriodWindow(now: Date = new Date()): { periodStart: Date; periodEnd: Date } {
+  const periodStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
+  const periodEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1, 0, 0, 0, 0));
+  return { periodStart, periodEnd };
+}
+
+function getBalanceRecurringRemaining(balance: typeof organizationCreditBalances.$inferSelect): number {
+  return Math.max(0, balance.recurringAllocated - balance.recurringUsed);
+}
+
+function getBalanceTotalUsed(balance: typeof organizationCreditBalances.$inferSelect): number {
+  return balance.recurringUsed + balance.purchasedUsed;
+}
+
+function getBalanceTotalAllocated(balance: typeof organizationCreditBalances.$inferSelect): number {
+  return balance.recurringAllocated + balance.purchasedCredits + balance.purchasedUsed;
+}
+
+function getBalanceTotalRemaining(balance: typeof organizationCreditBalances.$inferSelect): number {
+  return getBalanceRecurringRemaining(balance) + balance.purchasedCredits;
+}
+
+function buildCreditBalance(balance: typeof organizationCreditBalances.$inferSelect): CreditBalance {
+  return {
+    allocated: getBalanceTotalAllocated(balance),
+    used: getBalanceTotalUsed(balance),
+    remaining: getBalanceTotalRemaining(balance),
+    rollover: balance.rolloverCredits,
+    purchasedCredits: balance.purchasedCredits,
+    periodStart: balance.periodStart,
+    periodEnd: balance.periodEnd,
+  };
+}
+
+async function getEffectiveRecurringLimit(
+  orgId: number,
+  subscription?: Awaited<ReturnType<typeof getOrganizationSubscription>> | null
+): Promise<number> {
+  const resolvedSubscription = subscription ?? await getOrganizationSubscription(orgId);
+  if (!resolvedSubscription) {
+    return FREE_CREDITS_PER_MONTH;
+  }
+
+  const { creditsPerSeat } = getPlanCreditSettings(resolvedSubscription.plan);
+  const bonusCredits = resolvedSubscription.bonusCredits || 0;
+
+  return resolvedSubscription.customCreditLimit ?? (creditsPerSeat + bonusCredits);
+}
+
+async function recordCreditTransaction(
+  organizationId: number,
+  type: string,
+  amount: number,
+  userId?: number,
+  metadata?: Record<string, unknown>
+): Promise<void> {
+  await db.insert(organizationCreditTransactions).values({
+    organizationId,
+    userId,
+    type,
+    amount,
+    metadata,
+  });
+}
+
+async function getOrgCreditBalance(orgId: number) {
+  return db.query.organizationCreditBalances.findFirst({
+    where: eq(organizationCreditBalances.organizationId, orgId),
+  });
+}
+
+async function migrateLegacyMemberCreditsToOrgBalance(orgId: number) {
+  const seatedMembers = await db.query.organizationMembers.findMany({
+    where: and(
+      eq(organizationMembers.organizationId, orgId),
+      eq(organizationMembers.seatAssigned, true),
+    ),
+    orderBy: desc(organizationMembers.joinedAt),
+  });
+
+  const recurringAllocated = seatedMembers.reduce((sum: number, member: OrganizationMember) => sum + member.creditsAllocated, 0);
+  const recurringUsed = seatedMembers.reduce((sum: number, member: OrganizationMember) => sum + member.creditsUsed, 0);
+  const rolloverCredits = seatedMembers.reduce((sum: number, member: OrganizationMember) => sum + member.creditsRollover, 0);
+  const referenceMember = seatedMembers.find((member: OrganizationMember) => member.creditsPeriodStart || member.creditsPeriodEnd);
+  const { periodStart, periodEnd } = referenceMember?.creditsPeriodStart && referenceMember.creditsPeriodEnd
+    ? {
+        periodStart: referenceMember.creditsPeriodStart,
+        periodEnd: referenceMember.creditsPeriodEnd,
+      }
+    : getCreditPeriodWindow();
+
+  const [balance] = await db.insert(organizationCreditBalances).values({
+    organizationId: orgId,
+    recurringAllocated,
+    recurringUsed,
+    rolloverCredits,
+    purchasedCredits: 0,
+    purchasedUsed: 0,
+    periodStart,
+    periodEnd,
+  }).returning();
+
+  await recordCreditTransaction(orgId, "migration", recurringAllocated, undefined, {
+    recurringUsed,
+    rolloverCredits,
+    seatedMembers: seatedMembers.length,
+  });
+
+  return balance;
+}
+
+async function ensureOrgCreditBalanceInitialized(orgId: number) {
+  const existing = await getOrgCreditBalance(orgId);
+  if (existing) {
+    return existing;
+  }
+
+  const seatedMembers = await db.query.organizationMembers.findMany({
+    where: and(
+      eq(organizationMembers.organizationId, orgId),
+      eq(organizationMembers.seatAssigned, true),
+    ),
+  });
+
+  const hasLegacyCredits = seatedMembers.some((member: OrganizationMember) =>
+    member.creditsAllocated > 0 ||
+    member.creditsUsed > 0 ||
+    member.creditsRollover > 0 ||
+    member.creditsPeriodStart !== null ||
+    member.creditsPeriodEnd !== null
+  );
+
+  if (hasLegacyCredits) {
+    return migrateLegacyMemberCreditsToOrgBalance(orgId);
+  }
+
+  const recurringAllocated = await getEffectiveRecurringLimit(orgId);
+  const { periodStart, periodEnd } = getCreditPeriodWindow();
+  const [balance] = await db.insert(organizationCreditBalances).values({
+    organizationId: orgId,
+    recurringAllocated,
+    recurringUsed: 0,
+    rolloverCredits: 0,
+    purchasedCredits: 0,
+    purchasedUsed: 0,
+    periodStart,
+    periodEnd,
+  }).returning();
+
+  await recordCreditTransaction(orgId, "cycle_reset", recurringAllocated, undefined, {
+    reason: "initialization",
+    rolloverCredits: 0,
+  });
+
+  return balance;
+}
+
+async function getCreditContextForUser(userId: number) {
   const member = await db.query.organizationMembers.findFirst({
     where: eq(organizationMembers.userId, userId),
   });
@@ -50,14 +228,18 @@ export async function getMemberCreditBalance(userId: number): Promise<CreditBala
     return null;
   }
 
-  return {
-    allocated: member.creditsAllocated,
-    used: member.creditsUsed,
-    remaining: Math.max(0, member.creditsAllocated - member.creditsUsed),
-    rollover: member.creditsRollover,
-    periodStart: member.creditsPeriodStart,
-    periodEnd: member.creditsPeriodEnd,
-  };
+  const balance = await ensureOrgCreditBalanceInitialized(member.organizationId);
+  return { member, balance };
+}
+
+// Get member's credit balance (org-shared balance for the seated member)
+export async function getMemberCreditBalance(userId: number): Promise<CreditBalance | null> {
+  const context = await getCreditContextForUser(userId);
+  if (!context) {
+    return null;
+  }
+
+  return buildCreditBalance(context.balance);
 }
 
 // Get organization's total credit summary
@@ -67,63 +249,95 @@ export async function getOrgCreditSummary(orgId: number): Promise<OrgCreditSumma
     return null;
   }
 
-  const members = await db.query.organizationMembers.findMany({
-    where: and(
+  const balance = await ensureOrgCreditBalanceInitialized(orgId);
+  const seatedMembers = await db.$count(
+    organizationMembers,
+    and(
       eq(organizationMembers.organizationId, orgId),
-      eq(organizationMembers.seatAssigned, true)
+      eq(organizationMembers.seatAssigned, true),
     ),
-  });
-
-  const totalAllocated = members.reduce((sum: number, m: typeof members[number]) => sum + m.creditsAllocated, 0);
-  const totalUsed = members.reduce((sum: number, m: typeof members[number]) => sum + m.creditsUsed, 0);
-  const { creditsPerSeat } = getPlanCreditSettings(subscription.plan);
+  );
 
   return {
-    totalAllocated,
-    totalUsed,
-    totalRemaining: Math.max(0, totalAllocated - totalUsed),
-    perSeatAllocation: creditsPerSeat,
-    seatedMembers: members.length,
+    totalAllocated: getBalanceTotalAllocated(balance),
+    totalUsed: getBalanceTotalUsed(balance),
+    totalRemaining: getBalanceTotalRemaining(balance),
+    includedAllocation: await getEffectiveRecurringLimit(orgId, subscription),
+    purchasedCredits: balance.purchasedCredits,
+    seatedMembers,
   };
 }
 
-// Use credits for a member
+// Use credits for a seated recruiter by deducting from the org balance
 export async function useCredits(userId: number, amount: number): Promise<{
   success: boolean;
   remaining: number;
   message?: string;
 }> {
-  const member = await db.query.organizationMembers.findFirst({
-    where: eq(organizationMembers.userId, userId),
-  });
+  const context = await getCreditContextForUser(userId);
 
-  if (!member || !member.seatAssigned) {
+  if (!context) {
     return {
       success: false,
       remaining: 0,
-      message: 'No active subscription or seat not assigned',
+      message: "No active subscription or seat not assigned",
     };
   }
 
-  const remaining = member.creditsAllocated - member.creditsUsed;
-  if (remaining < amount) {
+  const { member } = context;
+
+  return db.transaction(async (tx: any) => {
+    const current = await tx.query.organizationCreditBalances.findFirst({
+      where: eq(organizationCreditBalances.organizationId, member.organizationId),
+    });
+
+    if (!current) {
+      return {
+        success: false,
+        remaining: 0,
+        message: "Credit balance not initialized",
+      };
+    }
+
+    const recurringRemaining = getBalanceRecurringRemaining(current);
+    const totalRemaining = recurringRemaining + current.purchasedCredits;
+
+    if (totalRemaining < amount) {
+      return {
+        success: false,
+        remaining: totalRemaining,
+        message: "Insufficient credits",
+      };
+    }
+
+    const recurringToUse = Math.min(recurringRemaining, amount);
+    const purchasedToUse = amount - recurringToUse;
+
+    await tx.update(organizationCreditBalances)
+      .set({
+        recurringUsed: current.recurringUsed + recurringToUse,
+        purchasedCredits: current.purchasedCredits - purchasedToUse,
+        purchasedUsed: current.purchasedUsed + purchasedToUse,
+        updatedAt: new Date(),
+      })
+      .where(eq(organizationCreditBalances.organizationId, member.organizationId));
+
+    await tx.insert(organizationCreditTransactions).values({
+      organizationId: member.organizationId,
+      userId,
+      type: "usage",
+      amount,
+      metadata: {
+        recurringToUse,
+        purchasedToUse,
+      },
+    });
+
     return {
-      success: false,
-      remaining,
-      message: 'Insufficient credits',
+      success: true,
+      remaining: totalRemaining - amount,
     };
-  }
-
-  await db.update(organizationMembers)
-    .set({
-      creditsUsed: member.creditsUsed + amount,
-    })
-    .where(eq(organizationMembers.id, member.id));
-
-  return {
-    success: true,
-    remaining: remaining - amount,
-  };
+  });
 }
 
 // Check if user has enough credits
@@ -133,102 +347,87 @@ export async function hasEnoughCredits(userId: number, requiredAmount: number): 
   return balance.remaining >= requiredAmount;
 }
 
-// Allocate credits to a member (called when seat is assigned or period resets)
+// Compatibility wrapper: member-level allocation is gone, so this just ensures the org balance exists
 export async function allocateCreditsToMember(
   memberId: number,
-  amount: number,
-  rollover: number = 0,
-  cap: number
+  _amount: number,
+  _rollover: number = 0,
+  _cap: number
 ): Promise<void> {
-  const now = new Date();
-  const periodEnd = new Date(now);
-  periodEnd.setMonth(periodEnd.getMonth() + 1);
+  const member = await db.query.organizationMembers.findFirst({
+    where: eq(organizationMembers.id, memberId),
+  });
 
-  // Calculate total with rollover, capped
-  const total = Math.min(amount + rollover, cap);
-
-  await db.update(organizationMembers)
-    .set({
-      creditsAllocated: total,
-      creditsUsed: 0,
-      creditsRollover: rollover,
-      creditsPeriodStart: now,
-      creditsPeriodEnd: periodEnd,
-    })
-    .where(eq(organizationMembers.id, memberId));
+  if (member) {
+    await ensureOrgCreditBalanceInitialized(member.organizationId);
+  }
 }
 
-// Reset credits for all members in an organization (called at period renewal)
+// Reset org credits for the next monthly cycle
 export async function resetOrgCredits(orgId: number): Promise<number> {
   const subscription = await getOrganizationSubscription(orgId);
   if (!subscription) {
     return 0;
   }
 
-  const plan = subscription.plan;
-  const { creditsPerSeat, cap } = getPlanCreditSettings(plan);
+  const balance = await ensureOrgCreditBalanceInitialized(orgId);
+  const effectiveLimit = await getEffectiveRecurringLimit(orgId, subscription);
+  const { maxRolloverMonths } = getPlanCreditSettings(subscription.plan);
+  const recurringRemaining = getBalanceRecurringRemaining(balance);
+  const maxRollover = Math.max(0, effectiveLimit * maxRolloverMonths - effectiveLimit);
+  const rolloverCredits = Math.min(recurringRemaining, maxRollover);
+  const { periodStart, periodEnd } = getCreditPeriodWindow();
 
-  // Get all seated members
-  const members = await db.query.organizationMembers.findMany({
-    where: and(
-      eq(organizationMembers.organizationId, orgId),
-      eq(organizationMembers.seatAssigned, true)
-    ),
+  await db.update(organizationCreditBalances)
+    .set({
+      recurringAllocated: effectiveLimit + rolloverCredits,
+      recurringUsed: 0,
+      rolloverCredits,
+      purchasedUsed: 0,
+      periodStart,
+      periodEnd,
+      updatedAt: new Date(),
+    })
+    .where(eq(organizationCreditBalances.organizationId, orgId));
+
+  await recordCreditTransaction(orgId, "cycle_reset", effectiveLimit, undefined, {
+    rolloverCredits,
   });
 
-  let resetCount = 0;
-
-  for (const member of members) {
-    // Calculate rollover (unused credits, capped at max rollover)
-    const unused = Math.max(0, member.creditsAllocated - member.creditsUsed);
-    const rollover = Math.min(unused, cap - creditsPerSeat);
-
-    await allocateCreditsToMember(member.id, creditsPerSeat, rollover, cap);
-    resetCount++;
-  }
-
-  return resetCount;
+  return 1;
 }
 
-// Initialize credits for new member
-export async function initializeMemberCredits(memberId: number, orgId: number): Promise<void> {
-  const subscription = await getOrganizationSubscription(orgId);
-  if (!subscription) {
-    // Free plan defaults
-    await allocateCreditsToMember(memberId, FREE_CREDITS_PER_MONTH, 0, FREE_CREDITS_CAP);
-    return;
-  }
-
-  const plan = subscription.plan;
-  const { creditsPerSeat, cap } = getPlanCreditSettings(plan);
-
-  // New members start with full allocation, no rollover
-  await allocateCreditsToMember(memberId, creditsPerSeat, 0, cap);
+// Initialize credits for a member by ensuring the shared org balance exists
+export async function initializeMemberCredits(_memberId: number, orgId: number): Promise<void> {
+  await ensureOrgCreditBalanceInitialized(orgId);
 }
 
-// Forfeit all credits for a member (called when seat is removed)
-export async function forfeitMemberCredits(memberId: number): Promise<void> {
-  await db.update(organizationMembers)
-    .set({
-      creditsAllocated: 0,
-      creditsUsed: 0,
-      creditsRollover: 0,
-      creditsPeriodStart: null,
-      creditsPeriodEnd: null,
-    })
-    .where(eq(organizationMembers.id, memberId));
+// Member-level credit forfeiture is no longer used with org-shared balances
+export async function forfeitMemberCredits(_memberId: number): Promise<void> {
+  return;
 }
 
-// Get members with credits expiring soon (for notifications)
+// Get members in orgs with credits expiring soon (for notifications)
 export async function getMembersWithExpiringCredits(daysUntilExpiry: number = 3): Promise<OrganizationMember[]> {
   const expiryDate = new Date();
   expiryDate.setDate(expiryDate.getDate() + daysUntilExpiry);
 
+  const balances = await db.query.organizationCreditBalances.findMany({
+    where: and(
+      lte(organizationCreditBalances.periodEnd, expiryDate),
+      sql`${organizationCreditBalances.recurringAllocated} - ${organizationCreditBalances.recurringUsed} + ${organizationCreditBalances.purchasedCredits} > 0`,
+    ),
+  });
+
+  if (balances.length === 0) {
+    return [];
+  }
+
+  const orgIds = balances.map((balance: typeof balances[number]) => balance.organizationId);
   return db.query.organizationMembers.findMany({
     where: and(
+      sql`${organizationMembers.organizationId} IN (${sql.join(orgIds, sql`, `)})`,
       eq(organizationMembers.seatAssigned, true),
-      lte(organizationMembers.creditsPeriodEnd, expiryDate),
-      sql`${organizationMembers.creditsAllocated} - ${organizationMembers.creditsUsed} > 0`
     ),
   });
 }
@@ -266,75 +465,41 @@ export async function getCreditUsageHistory(
 // Validate credit requirements for AI operation
 export function getCreditCostForOperation(operationType: string): number {
   const costs: Record<string, number> = {
-    'fit': 1,      // Single fit score
-    'batch_fit': 1, // Per candidate in batch
-    'content': 2,   // Content generation
-    'summary': 1,   // Candidate summary
-    'feedback': 1,  // AI feedback
+    fit: 1,
+    batch_fit: 1,
+    content: 2,
+    summary: 1,
+    feedback: 1,
   };
 
   return costs[operationType] ?? 1;
 }
 
-// Bulk allocate credits for plan upgrade
+// Increase the org's current-cycle recurring credits after plan upgrade
 export async function bulkAllocateCreditsForUpgrade(
   orgId: number,
-  newCreditsPerSeat: number,
+  newCreditsPerCycle: number,
   newCap: number
 ): Promise<number> {
-  const members = await db.query.organizationMembers.findMany({
-    where: and(
-      eq(organizationMembers.organizationId, orgId),
-      eq(organizationMembers.seatAssigned, true)
-    ),
+  const balance = await ensureOrgCreditBalanceInitialized(orgId);
+  const currentRecurringRemaining = getBalanceRecurringRemaining(balance);
+  const newRecurringTotal = Math.min(currentRecurringRemaining + newCreditsPerCycle, newCap);
+
+  await db.update(organizationCreditBalances)
+    .set({
+      recurringAllocated: newRecurringTotal,
+      recurringUsed: 0,
+      rolloverCredits: Math.max(0, newRecurringTotal - newCreditsPerCycle),
+      updatedAt: new Date(),
+    })
+    .where(eq(organizationCreditBalances.organizationId, orgId));
+
+  await recordCreditTransaction(orgId, "cycle_reset", newCreditsPerCycle, undefined, {
+    reason: "plan_upgrade",
+    previousRecurringRemaining: currentRecurringRemaining,
   });
 
-  let updatedCount = 0;
-
-  for (const member of members) {
-    // Keep existing unused credits as base, add new allocation
-    const currentUnused = Math.max(0, member.creditsAllocated - member.creditsUsed);
-    const newTotal = Math.min(currentUnused + newCreditsPerSeat, newCap);
-
-    const now = new Date();
-    const periodEnd = new Date(now);
-    periodEnd.setMonth(periodEnd.getMonth() + 1);
-
-    await db.update(organizationMembers)
-      .set({
-        creditsAllocated: newTotal,
-        creditsUsed: 0,
-        creditsPeriodStart: now,
-        creditsPeriodEnd: periodEnd,
-      })
-      .where(eq(organizationMembers.id, member.id));
-
-    updatedCount++;
-  }
-
-  return updatedCount;
-}
-
-// ===== Admin Bonus Credits Functions =====
-
-export interface OrgCreditDetails {
-  planAllocation: number;      // Base from plan × seats
-  bonusCredits: number;        // Admin-granted bonuses
-  customLimit: number | null;  // Override if set
-  effectiveLimit: number;      // Actual monthly limit
-  usedThisPeriod: number;
-  remaining: number;
-  periodStart: Date | null;
-  periodEnd: Date | null;
-  seatedMembers: number;
-  memberBreakdown: {
-    userId: number;
-    name: string;
-    email: string;
-    allocated: number;
-    used: number;
-    remaining: number;
-  }[];
+  return 1;
 }
 
 // Get detailed credit information for an organization (admin use)
@@ -344,15 +509,11 @@ export async function getOrgCreditDetails(orgId: number): Promise<OrgCreditDetai
     return null;
   }
 
+  const balance = await ensureOrgCreditBalanceInitialized(orgId);
   const plan = subscription.plan;
   const { creditsPerSeat } = getPlanCreditSettings(plan);
-
-  // Get all seated members with their user info
-  const members = await db.query.organizationMembers.findMany({
-    where: and(
-      eq(organizationMembers.organizationId, orgId),
-      eq(organizationMembers.seatAssigned, true)
-    ),
+  const seatedMembers = await db.query.organizationMembers.findMany({
+    where: eq(organizationMembers.organizationId, orgId),
     with: {
       user: {
         columns: {
@@ -365,47 +526,45 @@ export async function getOrgCreditDetails(orgId: number): Promise<OrgCreditDetai
     },
   });
 
-  const planAllocation = creditsPerSeat * subscription.seats;
-  const bonusCredits = subscription.bonusCredits || 0;
-  const customLimit = subscription.customCreditLimit;
+  const periodStart = balance.periodStart || getCreditPeriodWindow().periodStart;
+  const usageByUser = await db
+    .select({
+      userId: userAiUsage.userId,
+      used: sql<number>`COUNT(*)`,
+    })
+    .from(userAiUsage)
+    .where(and(
+      eq(userAiUsage.organizationId, orgId),
+      gte(userAiUsage.computedAt, periodStart),
+    ))
+    .groupBy(userAiUsage.userId);
 
-  // Effective limit: custom override takes precedence, then plan allocation + bonus
-  const effectiveLimit = customLimit !== null && customLimit !== undefined
-    ? customLimit
-    : planAllocation + bonusCredits;
-
-  const totalUsed = members.reduce((sum: number, m: typeof members[number]) => sum + m.creditsUsed, 0);
-  const totalAllocated = members.reduce((sum: number, m: typeof members[number]) => sum + m.creditsAllocated, 0);
-
-  // Period dates from first member (all should be synced)
-  const periodStart = members[0]?.creditsPeriodStart || null;
-  const periodEnd = members[0]?.creditsPeriodEnd || null;
-
-  const memberBreakdown = members.map((m: typeof members[number]) => ({
-    userId: m.userId,
-    name: m.user ? `${m.user.firstName || ''} ${m.user.lastName || ''}`.trim() || m.user.username : 'Unknown',
-    email: m.user?.username || '',
-    allocated: m.creditsAllocated,
-    used: m.creditsUsed,
-    remaining: Math.max(0, m.creditsAllocated - m.creditsUsed),
-  }));
+  const usageMap = new Map(usageByUser.map((entry: typeof usageByUser[number]) => [entry.userId, Number(entry.used)]));
 
   return {
-    planAllocation,
-    bonusCredits,
-    customLimit,
-    effectiveLimit,
-    usedThisPeriod: totalUsed,
-    remaining: Math.max(0, totalAllocated - totalUsed),
-    periodStart,
-    periodEnd,
-    seatedMembers: members.length,
-    memberBreakdown,
+    planAllocation: creditsPerSeat,
+    bonusCredits: subscription.bonusCredits || 0,
+    customLimit: subscription.customCreditLimit,
+    effectiveLimit: await getEffectiveRecurringLimit(orgId, subscription),
+    purchasedCredits: balance.purchasedCredits,
+    usedThisPeriod: getBalanceTotalUsed(balance),
+    remaining: getBalanceTotalRemaining(balance),
+    periodStart: balance.periodStart,
+    periodEnd: balance.periodEnd,
+    seatedMembers: seatedMembers.filter((member: typeof seatedMembers[number]) => member.seatAssigned).length,
+    memberBreakdown: seatedMembers.map((member: typeof seatedMembers[number]) => ({
+      userId: member.userId,
+      name: member.user
+        ? `${member.user.firstName || ""} ${member.user.lastName || ""}`.trim() || member.user.username
+        : "Unknown",
+      email: member.user?.username || "",
+      used: usageMap.get(member.userId) ?? 0,
+      seatAssigned: member.seatAssigned,
+    })),
   };
 }
 
-// Recalculate and redistribute credits for an organization based on effective limit
-// Called when: bonus credits granted/cleared, custom limit set/cleared, seats/plan change
+// Recalculate org recurring allocation after admin overrides or plan changes
 export async function recalculateOrgCredits(orgId: number): Promise<{
   effectiveLimit: number;
   perMember: number;
@@ -413,65 +572,40 @@ export async function recalculateOrgCredits(orgId: number): Promise<{
 }> {
   const subscription = await getOrganizationSubscription(orgId);
   if (!subscription) {
-    throw new Error('Organization has no subscription');
+    throw new Error("Organization has no subscription");
   }
 
-  const plan = subscription.plan;
-  const { creditsPerSeat } = getPlanCreditSettings(plan);
-
-  // Get all seated members
-  const members = await db.query.organizationMembers.findMany({
-    where: and(
+  const balance = await ensureOrgCreditBalanceInitialized(orgId);
+  const seatedMembers = await db.$count(
+    organizationMembers,
+    and(
       eq(organizationMembers.organizationId, orgId),
-      eq(organizationMembers.seatAssigned, true)
+      eq(organizationMembers.seatAssigned, true),
     ),
-  });
+  );
 
-  if (members.length === 0) {
-    return { effectiveLimit: 0, perMember: 0, membersUpdated: 0 };
-  }
+  const effectiveLimit = await getEffectiveRecurringLimit(orgId, subscription);
+  const { maxRolloverMonths } = getPlanCreditSettings(subscription.plan);
+  const maxRollover = Math.max(0, effectiveLimit * maxRolloverMonths - effectiveLimit);
+  const rolloverCredits = Math.min(balance.rolloverCredits, maxRollover);
+  const recurringAllocated = Math.max(effectiveLimit + rolloverCredits, balance.recurringUsed);
 
-  // Calculate effective limit
-  const planAllocation = creditsPerSeat * members.length;
-  const bonusCredits = subscription.bonusCredits || 0;
-  const customLimit = subscription.customCreditLimit;
-
-  const effectiveLimit = customLimit !== null && customLimit !== undefined
-    ? customLimit
-    : planAllocation + bonusCredits;
-
-  // Calculate per-member allocation with remainder distribution
-  const perMember = Math.floor(effectiveLimit / members.length);
-  const remainder = effectiveLimit % members.length;
-
-  let membersUpdated = 0;
-
-  for (let i = 0; i < members.length; i++) {
-    const member = members[i];
-    // Distribute remainder to first N members (round-robin)
-    const newAllocation = perMember + (i < remainder ? 1 : 0);
-
-    // Clawback protection: can't reduce below what they've already used
-    const finalAllocation = Math.max(newAllocation, member.creditsUsed);
-
-    await db.update(organizationMembers)
-      .set({
-        creditsAllocated: finalAllocation,
-      })
-      .where(eq(organizationMembers.id, member.id));
-
-    membersUpdated++;
-  }
+  await db.update(organizationCreditBalances)
+    .set({
+      recurringAllocated,
+      rolloverCredits,
+      updatedAt: new Date(),
+    })
+    .where(eq(organizationCreditBalances.organizationId, orgId));
 
   return {
     effectiveLimit,
-    perMember,
-    membersUpdated,
+    perMember: seatedMembers > 0 ? Math.floor(effectiveLimit / seatedMembers) : effectiveLimit,
+    membersUpdated: seatedMembers,
   };
 }
 
 // Grant bonus credits to an organization
-// Credits are always distributed to members via recalculateOrgCredits()
 export async function grantBonusCredits(
   orgId: number,
   amount: number,
@@ -480,13 +614,12 @@ export async function grantBonusCredits(
 ): Promise<{ totalGranted: number; membersAffected: number; newBonusTotal: number }> {
   const subscription = await getOrganizationSubscription(orgId);
   if (!subscription) {
-    throw new Error('Organization has no subscription');
+    throw new Error("Organization has no subscription");
   }
 
   const currentBonus = subscription.bonusCredits || 0;
   const newBonusTotal = currentBonus + amount;
 
-  // Update the subscription with the new bonus amount
   await db.update(organizationSubscriptions)
     .set({
       bonusCredits: newBonusTotal,
@@ -497,18 +630,17 @@ export async function grantBonusCredits(
     })
     .where(eq(organizationSubscriptions.id, subscription.id));
 
-  // Recalculate and redistribute credits to all members
   const recalcResult = await recalculateOrgCredits(orgId);
+  await recordCreditTransaction(orgId, "bonus_grant", amount, grantedBy, { reason });
 
-  // Log the action
   await logSubscriptionAction(
     orgId,
     subscription.id,
-    'admin_override',
+    "admin_override",
     { bonusCredits: currentBonus },
     { bonusCredits: newBonusTotal, bonusAmount: amount },
     grantedBy,
-    `Bonus credits: ${reason}`
+    `Bonus credits: ${reason}`,
   );
 
   return {
@@ -518,8 +650,7 @@ export async function grantBonusCredits(
   };
 }
 
-// Set custom credit limit for an organization (typically Business plan)
-// Recalculates member allocations after setting the limit
+// Set custom credit limit for an organization
 export async function setCustomCreditLimit(
   orgId: number,
   customLimit: number | null,
@@ -528,7 +659,7 @@ export async function setCustomCreditLimit(
 ): Promise<{ previousLimit: number | null; newLimit: number | null; membersAffected: number }> {
   const subscription = await getOrganizationSubscription(orgId);
   if (!subscription) {
-    throw new Error('Organization has no subscription');
+    throw new Error("Organization has no subscription");
   }
 
   const previousLimit = subscription.customCreditLimit;
@@ -540,18 +671,17 @@ export async function setCustomCreditLimit(
     })
     .where(eq(organizationSubscriptions.id, subscription.id));
 
-  // Recalculate and redistribute credits to all members
   const recalcResult = await recalculateOrgCredits(orgId);
+  await recordCreditTransaction(orgId, "custom_limit", customLimit ?? 0, setBy, { reason, previousLimit });
 
-  // Log the action
   await logSubscriptionAction(
     orgId,
     subscription.id,
-    'admin_override',
+    "admin_override",
     { customCreditLimit: previousLimit },
     { customCreditLimit: customLimit },
     setBy,
-    `Custom credit limit: ${reason}`
+    `Custom credit limit: ${reason}`,
   );
 
   return {
@@ -562,7 +692,6 @@ export async function setCustomCreditLimit(
 }
 
 // Clear bonus credits for an organization
-// Implements clawback by recalculating member allocations (respects credits already used)
 export async function clearBonusCredits(
   orgId: number,
   reason: string,
@@ -570,7 +699,7 @@ export async function clearBonusCredits(
 ): Promise<{ previousAmount: number; membersAffected: number }> {
   const subscription = await getOrganizationSubscription(orgId);
   if (!subscription) {
-    throw new Error('Organization has no subscription');
+    throw new Error("Organization has no subscription");
   }
 
   const previousAmount = subscription.bonusCredits || 0;
@@ -585,25 +714,21 @@ export async function clearBonusCredits(
     })
     .where(eq(organizationSubscriptions.id, subscription.id));
 
-  // Recalculate and redistribute credits (implements clawback)
-  // Members keep credits they've already used, but allocation is reduced
   const recalcResult = await recalculateOrgCredits(orgId);
+  await recordCreditTransaction(orgId, "bonus_clear", previousAmount, clearedBy, { reason });
 
-  // Log the action
   await logSubscriptionAction(
     orgId,
     subscription.id,
-    'admin_override',
+    "admin_override",
     { bonusCredits: previousAmount },
     { bonusCredits: 0 },
     clearedBy,
-    `Cleared bonus credits: ${reason}`
+    `Cleared bonus credits: ${reason}`,
   );
 
   return { previousAmount, membersAffected: recalcResult.membersUpdated };
 }
-
-// ===== Daily Rate Limit Functions =====
 
 // Get daily rate limit for a user based on their organization's plan
 export async function getUserDailyRateLimit(userId: number): Promise<number> {

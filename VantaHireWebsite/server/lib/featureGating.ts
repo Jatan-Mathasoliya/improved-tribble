@@ -6,7 +6,7 @@ import {
 } from "@shared/schema";
 import { eq, and } from "drizzle-orm";
 import { getOrganizationSubscription } from "./subscriptionService";
-import { FREE_CREDITS_PER_MONTH } from "./planConfig";
+import { FREE_CREDITS_PER_MONTH, getPlanCreditSettings } from "./planConfig";
 
 // Environment variables for instance configuration
 export const INSTANCE_TYPE = process.env.INSTANCE_TYPE || 'multi_tenant';
@@ -281,21 +281,23 @@ export async function getSubscriptionLimits(orgId: number): Promise<{
   }
 
   if (planName === 'pro') {
+    const { creditsPerSeat } = getPlanCreditSettings(plan);
     return {
       maxSeats: null, // Pay per seat
       maxJobsActive: null, // Unlimited
       maxApplicationsPerJob: null, // Unlimited
-      maxAiCreditsPerMonth: plan.aiCreditsPerSeatMonthly * subscription.seats,
+      maxAiCreditsPerMonth: subscription.customCreditLimit ?? ((subscription.bonusCredits || 0) + creditsPerSeat),
     };
   }
 
   // Business plan - custom/unlimited
   const overrides = subscription.featureOverrides as Record<string, number | undefined> | null;
+  const { creditsPerSeat } = getPlanCreditSettings(plan);
   return {
     maxSeats: null,
     maxJobsActive: null,
     maxApplicationsPerJob: null,
-    maxAiCreditsPerMonth: overrides?.aiCredits ?? plan.aiCreditsPerSeatMonthly,
+    maxAiCreditsPerMonth: overrides?.aiCredits ?? subscription.customCreditLimit ?? ((subscription.bonusCredits || 0) + creditsPerSeat),
   };
 }
 

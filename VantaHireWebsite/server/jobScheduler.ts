@@ -15,7 +15,7 @@ import {
 } from '@shared/schema';
 import { lt, eq, and, sql, or, gte, lte, isNull } from 'drizzle-orm';
 import { getEmailService } from './simpleEmailService';
-import { getPlanCreditSettings } from './lib/planConfig';
+import { resetOrgCredits } from './lib/creditService';
 
 // Job lifecycle scheduler with activity-based deactivation
 export function startJobScheduler() {
@@ -837,58 +837,15 @@ export async function processGracePeriodExpirations(): Promise<void> {
  */
 async function resetMonthlyAiCredits(): Promise<void> {
   try {
-    // Get all active subscriptions with their plans
-    const activeSubscriptions = await db
-      .select({
-        subscription: organizationSubscriptions,
-        plan: subscriptionPlans,
-      })
-      .from(organizationSubscriptions)
-      .innerJoin(subscriptionPlans, eq(organizationSubscriptions.planId, subscriptionPlans.id))
-      .where(eq(organizationSubscriptions.status, 'active'));
+    const activeSubscriptions = await db.query.organizationSubscriptions.findMany({
+      where: eq(organizationSubscriptions.status, 'active'),
+    });
 
     console.log(`Processing credit reset for ${activeSubscriptions.length} active subscriptions`);
 
-    for (const { subscription, plan } of activeSubscriptions) {
-      const { creditsPerSeat, cap } = getPlanCreditSettings(plan);
-
-      // Get all seated members of this organization
-      const members = await db
-        .select()
-        .from(organizationMembers)
-        .where(
-          and(
-            eq(organizationMembers.organizationId, subscription.organizationId),
-            eq(organizationMembers.seatAssigned, true)
-          )
-        );
-
-      const now = new Date();
-      const periodStart = now;
-      const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, 1); // First of next month
-
-      for (const member of members) {
-        // unusedCredits already includes any previously rolled over credits
-        const unusedCredits = Math.max(0, member.creditsAllocated - member.creditsUsed);
-        const newRollover = Math.min(
-          unusedCredits,
-          Math.max(0, cap - creditsPerSeat)
-        );
-
-        // Update member credits
-        await db
-          .update(organizationMembers)
-          .set({
-            creditsAllocated: creditsPerSeat + newRollover,
-            creditsUsed: 0,
-            creditsRollover: newRollover,
-            creditsPeriodStart: periodStart,
-            creditsPeriodEnd: periodEnd,
-          })
-          .where(eq(organizationMembers.id, member.id));
-      }
-
-      console.log(`Reset credits for ${members.length} members in org ${subscription.organizationId}`);
+    for (const subscription of activeSubscriptions) {
+      await resetOrgCredits(subscription.organizationId);
+      console.log(`Reset org credits for org ${subscription.organizationId}`);
     }
 
     console.log('Monthly credit reset completed');

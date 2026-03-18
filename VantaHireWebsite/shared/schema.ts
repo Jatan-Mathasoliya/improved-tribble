@@ -839,6 +839,38 @@ export const organizationSubscriptions = pgTable("organization_subscriptions", {
   cashfreeSubIdx: index("org_subscriptions_cashfree_sub_idx").on(table.cashfreeSubscriptionId),
 }));
 
+// Organization-level AI credit balance
+export const organizationCreditBalances = pgTable("organization_credit_balances", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  recurringAllocated: integer("recurring_allocated").notNull().default(0),
+  recurringUsed: integer("recurring_used").notNull().default(0),
+  rolloverCredits: integer("rollover_credits").notNull().default(0),
+  purchasedCredits: integer("purchased_credits").notNull().default(0),
+  purchasedUsed: integer("purchased_used").notNull().default(0),
+  periodStart: timestamp("period_start"),
+  periodEnd: timestamp("period_end"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: uniqueIndex("org_credit_balances_org_idx").on(table.organizationId),
+}));
+
+// Credit ledger for resets, usage, purchases, and admin adjustments
+export const organizationCreditTransactions = pgTable("organization_credit_transactions", {
+  id: serial("id").primaryKey(),
+  organizationId: integer("organization_id").notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: integer("user_id").references(() => users.id),
+  type: text("type").notNull(), // cycle_reset, usage, purchase, bonus_grant, bonus_clear, custom_limit, migration
+  amount: integer("amount").notNull(),
+  metadata: jsonb("metadata"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (table) => ({
+  orgIdx: index("org_credit_transactions_org_idx").on(table.organizationId),
+  typeIdx: index("org_credit_transactions_type_idx").on(table.type),
+  createdAtIdx: index("org_credit_transactions_created_at_idx").on(table.createdAt),
+}));
+
 // Payment transactions
 export const paymentTransactions = pgTable("payment_transactions", {
   id: serial("id").primaryKey(),
@@ -2431,6 +2463,8 @@ export type InsertSubscriptionPlan = z.infer<typeof insertSubscriptionPlanSchema
 
 export type OrganizationSubscription = typeof organizationSubscriptions.$inferSelect;
 export type InsertOrganizationSubscription = z.infer<typeof insertOrganizationSubscriptionSchema>;
+export type OrganizationCreditBalance = typeof organizationCreditBalances.$inferSelect;
+export type OrganizationCreditTransaction = typeof organizationCreditTransactions.$inferSelect;
 
 export type PaymentTransaction = typeof paymentTransactions.$inferSelect;
 export type InsertPaymentTransaction = z.infer<typeof insertPaymentTransactionSchema>;

@@ -214,7 +214,7 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
               <ul className="space-y-1.5 text-sm text-muted-foreground">
                 <li className="flex items-center gap-2">
                   <Check className="h-3.5 w-3.5 text-green-500" />
-                  {formatMetric(proCredits)} AI credits per seat/month
+                  {formatMetric(proCredits)} included AI credits/month
                 </li>
                 <li className="flex items-center gap-2">
                   <Check className="h-3.5 w-3.5 text-green-500" />
@@ -310,7 +310,7 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
                 onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
               />
               <p className="text-sm text-muted-foreground">
-                Each seat gets {formatMetric(proCredits)} AI credits per month.
+                Growth includes {formatMetric(proCredits)} AI credits per month per organization. Seats are billed separately.
               </p>
             </div>
 

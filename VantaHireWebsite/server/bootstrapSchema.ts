@@ -1152,6 +1152,42 @@ export async function ensureAtsSchema(): Promise<void> {
     );
   `);
 
+  // Organization Credit Balances table
+  console.log('  Creating organization_credit_balances table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS organization_credit_balances (
+      id SERIAL PRIMARY KEY,
+      organization_id INTEGER NOT NULL UNIQUE REFERENCES organizations(id) ON DELETE CASCADE,
+      recurring_allocated INTEGER NOT NULL DEFAULT 0,
+      recurring_used INTEGER NOT NULL DEFAULT 0,
+      rollover_credits INTEGER NOT NULL DEFAULT 0,
+      purchased_credits INTEGER NOT NULL DEFAULT 0,
+      purchased_used INTEGER NOT NULL DEFAULT 0,
+      period_start TIMESTAMP,
+      period_end TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+      updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+  `);
+  await db.execute(sql`ALTER TABLE organization_credit_balances ADD COLUMN IF NOT EXISTS purchased_used INTEGER NOT NULL DEFAULT 0;`);
+
+  // Organization Credit Transactions table
+  console.log('  Creating organization_credit_transactions table...');
+  await db.execute(sql`
+    CREATE TABLE IF NOT EXISTS organization_credit_transactions (
+      id SERIAL PRIMARY KEY,
+      organization_id INTEGER NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+      user_id INTEGER REFERENCES users(id),
+      type TEXT NOT NULL,
+      amount INTEGER NOT NULL,
+      metadata JSONB,
+      created_at TIMESTAMP DEFAULT NOW() NOT NULL
+    );
+  `);
+  await db.execute(sql`CREATE UNIQUE INDEX IF NOT EXISTS org_credit_balances_org_idx ON organization_credit_balances(organization_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS org_credit_transactions_org_idx ON organization_credit_transactions(organization_id);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS org_credit_transactions_type_idx ON organization_credit_transactions(type);`);
+
   // Payment Transactions table
   console.log('  Creating payment_transactions table...');
   await db.execute(sql`

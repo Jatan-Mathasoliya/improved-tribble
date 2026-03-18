@@ -121,7 +121,7 @@ export default function PricingPage() {
   // Build features array with dynamic values
   const features: PlanFeature[] = [
     { name: "Active jobs", free: "5", pro: "Unlimited", business: "Unlimited" },
-    { name: "AI credits / seat / month", free: formatMetric(freeCredits), pro: formatMetric(proCredits), business: "Custom" },
+    { name: "Included AI credits / month", free: formatMetric(freeCredits), pro: formatMetric(proCredits), business: "Custom" },
     { name: "Team members", free: "1", pro: "Unlimited", business: "Unlimited" },
     ...staticFeatures,
   ];
@@ -418,7 +418,7 @@ export default function PricingPage() {
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                  {formatMetric(proCredits)} AI credits per seat/month
+                  {formatMetric(proCredits)} included AI credits/month
                 </li>
                 <li className="flex items-center gap-2 text-white/80 text-sm">
                   <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
@@ -659,7 +659,7 @@ export default function PricingPage() {
                     onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
                   />
                   <p className="text-sm text-muted-foreground">
-                    Each seat gets {formatMetric(proCredits)} AI credits per month.
+                    Growth includes {formatMetric(proCredits)} AI credits per month per organization. Seats are billed separately.
                   </p>
                 </div>
 

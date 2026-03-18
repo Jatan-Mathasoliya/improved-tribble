@@ -12,7 +12,7 @@ import type { Express, Request, Response, NextFunction } from 'express';
 import { z } from 'zod';
 import { storage } from './storage';
 import { db } from './db';
-import { users, organizationMembers } from '@shared/schema';
+import { users, organizationCreditBalances, organizationMembers } from '@shared/schema';
 import { eq } from 'drizzle-orm';
 import { requireAuth, requireRole } from './auth';
 import type { CsrfMiddleware } from './types/routes';
@@ -654,8 +654,14 @@ export function registerProfileRoutes(
         return;
       }
 
-      // Check if onboarding already completed
-      if (user.onboardingCompletedAt) {
+      // Check if user has an organization
+      const membership = await db.query.organizationMembers.findFirst({
+        where: eq(organizationMembers.userId, user.id),
+      });
+      const hasOrganization = !!membership;
+
+      // Check if onboarding already completed and the org membership still exists
+      if (user.onboardingCompletedAt && hasOrganization) {
         res.json({
           needsOnboarding: false,
           currentStep: 'complete',
@@ -666,29 +672,23 @@ export function registerProfileRoutes(
         return;
       }
 
-      // Check if user has an organization
-      const membership = await db.query.organizationMembers.findFirst({
-        where: eq(organizationMembers.userId, user.id),
-      });
-      const hasOrganization = !!membership;
-
-      // Lazy-init credits if member exists but credits weren't initialized
-      // (fallback for failed credit init during invite acceptance)
-      // Only for seated members with missing credit period markers; 0 credits can be intentional.
-      if (
-        membership
-        && membership.seatAssigned
-        && (membership.creditsPeriodStart === null || membership.creditsPeriodEnd === null)
-      ) {
+      // Lazy-init the shared org balance for seated members if it doesn't exist yet.
+      if (membership && membership.seatAssigned) {
         try {
-          await initializeMemberCredits(membership.id, membership.organizationId);
-          creditsLazyInit = true;
-          console.info('[metrics] credits_lazy_init', {
-            userId: user.id,
-            memberId: membership.id,
-            orgId: membership.organizationId,
-            via: 'onboarding-status',
+          const orgCreditBalance = await db.query.organizationCreditBalances.findFirst({
+            where: eq(organizationCreditBalances.organizationId, membership.organizationId),
           });
+
+          if (!orgCreditBalance) {
+            await initializeMemberCredits(membership.id, membership.organizationId);
+            creditsLazyInit = true;
+            console.info('[metrics] credits_lazy_init', {
+              userId: user.id,
+              memberId: membership.id,
+              orgId: membership.organizationId,
+              via: 'onboarding-status',
+            });
+          }
         } catch (creditError) {
           // Still don't block onboarding - log and continue
           console.warn('[metrics] credits_lazy_init_failed', {
@@ -793,6 +793,15 @@ export function registerProfileRoutes(
       }
 
       // Mark onboarding as complete
+      const membership = await db.query.organizationMembers.findFirst({
+        where: eq(organizationMembers.userId, user.id),
+      });
+
+      if (!membership) {
+        res.status(400).json({ error: 'You must create or join an organization before completing onboarding' });
+        return;
+      }
+
       await db
         .update(users)
         .set({ onboardingCompletedAt: new Date() })
