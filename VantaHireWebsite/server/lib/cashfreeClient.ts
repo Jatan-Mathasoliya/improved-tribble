@@ -12,7 +12,7 @@ const CASHFREE_WEBHOOK_SECRET = process.env.CASHFREE_WEBHOOK_SECRET || '';
 const CASHFREE_ENV = process.env.CASHFREE_ENV || 'SANDBOX';
 
 // GST configuration
-const GST_RATE = parseInt(process.env.GST_RATE || '18', 10);
+const GST_RATE = parseInt(process.env.GST_RATE || '0', 10);
 
 // API Base URLs
 const API_BASE_URL = CASHFREE_ENV === 'PRODUCTION'
@@ -135,23 +135,19 @@ async function cashfreeRequest<T>(
 // Calculate price with GST
 export function calculatePriceWithGST(
   baseAmount: number, // in paise
-  includeGST: boolean = true
 ): {
   baseAmount: number;
   gstAmount: number;
   totalAmount: number;
 } {
-  if (!includeGST) {
-    // Price is inclusive of GST, extract GST component
-    const gstAmount = Math.round(baseAmount * GST_RATE / (100 + GST_RATE));
+  if (GST_RATE <= 0) {
     return {
-      baseAmount: baseAmount - gstAmount,
-      gstAmount,
+      baseAmount,
+      gstAmount: 0,
       totalAmount: baseAmount,
     };
   }
 
-  // Add GST to base amount
   const gstAmount = Math.round(baseAmount * GST_RATE / 100);
   return {
     baseAmount,
@@ -183,10 +179,7 @@ export async function createCheckoutOrder(
 
   const baseAmount = pricePerSeat * seats;
 
-  // If organization has GSTIN, show GST separately
-  // Otherwise, price is tax-inclusive
-  const hasGSTIN = !!organization.gstin;
-  const pricing = calculatePriceWithGST(baseAmount, hasGSTIN);
+  const pricing = calculatePriceWithGST(baseAmount);
 
   const orderId = `ORD_${organization.id}_${Date.now()}`;
 
@@ -448,10 +441,7 @@ export async function createSeatAddCheckout(
   taxAmount: number;
   totalAmount: number;
 }> {
-  // If organization has GSTIN, show GST separately
-  // Otherwise, price is tax-inclusive
-  const hasGSTIN = !!organization.gstin;
-  const pricing = calculatePriceWithGST(proratedAmount, hasGSTIN);
+  const pricing = calculatePriceWithGST(proratedAmount);
 
   const orderId = `SEAT_${organization.id}_${Date.now()}`;
 
@@ -519,8 +509,7 @@ export async function createCreditPackCheckout(
   taxAmount: number;
   totalAmount: number;
 }> {
-  const hasGSTIN = !!organization.gstin;
-  const pricing = calculatePriceWithGST(amount, hasGSTIN);
+  const pricing = calculatePriceWithGST(amount);
 
   const orderId = `CREDIT_${organization.id}_${Date.now()}`;
 
@@ -577,4 +566,14 @@ export function isCashfreeConfigured(): boolean {
 // Get supported payment methods
 export function getSupportedPaymentMethods(): string[] {
   return ['upi', 'card', 'netbanking'];
+}
+
+export function getBillingTaxConfig(): {
+  gstRate: number;
+  taxEnabled: boolean;
+} {
+  return {
+    gstRate: Math.max(0, GST_RATE),
+    taxEnabled: GST_RATE > 0,
+  };
 }

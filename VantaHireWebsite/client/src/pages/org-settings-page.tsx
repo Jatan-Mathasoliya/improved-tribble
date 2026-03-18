@@ -316,7 +316,7 @@ export default function OrgSettingsPage() {
                 maxLength={15}
               />
               <p className="text-xs text-muted-foreground">
-                Provide GSTIN to receive GST-compliant invoices. Without GSTIN, invoices will be tax-inclusive.
+                Provide GSTIN if you want it printed on invoices for tax records.
               </p>
             </div>
 

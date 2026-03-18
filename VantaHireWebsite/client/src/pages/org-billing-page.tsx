@@ -6,11 +6,14 @@ import {
   usePlans,
   useSeatUsage,
   useInvoices,
+  useBillingConfig,
   useCreditPackConfig,
   useCreateCheckout,
   useCreateCreditPackCheckout,
   useCancelSubscription,
   useReactivateSubscription,
+  calculateTaxAmount,
+  calculateTotalWithTax,
   formatPriceINR,
 } from "@/hooks/use-subscription";
 import { useOrganization } from "@/hooks/use-organization";
@@ -64,6 +67,7 @@ export default function OrgBillingPage() {
   const { data: seatUsage } = useSeatUsage();
   const { data: invoices } = useInvoices();
   const { data: credits } = useAiCredits();
+  const { data: billingConfig } = useBillingConfig();
   const { data: creditPackConfig } = useCreditPackConfig();
   const createCheckout = useCreateCheckout();
   const createCreditPackCheckout = useCreateCreditPackCheckout();
@@ -89,6 +93,15 @@ export default function OrgBillingPage() {
   );
   const creditPackTotalCredits = creditPackConfig ? creditPackConfig.creditsPerPack * creditPackQuantityNumber : 0;
   const creditPackTotalPrice = creditPackConfig ? creditPackConfig.pricePerPack * creditPackQuantityNumber : 0;
+  const gstRate = billingConfig?.gstRate || 0;
+  const taxEnabled = !!billingConfig?.taxEnabled;
+  const upgradeSubtotal = proPlan
+    ? (billingCycle === 'monthly' ? proPlan.pricePerSeatMonthly : proPlan.pricePerSeatAnnual) * seats
+    : 0;
+  const upgradeTaxAmount = calculateTaxAmount(upgradeSubtotal, gstRate);
+  const upgradeTotal = calculateTotalWithTax(upgradeSubtotal, gstRate);
+  const creditPackTaxAmount = calculateTaxAmount(creditPackTotalPrice, gstRate);
+  const creditPackGrandTotal = calculateTotalWithTax(creditPackTotalPrice, gstRate);
   const creditPackLabel = creditPackConfig
     ? `Add ${creditPackConfig.creditsPerPack}-credit top-ups from ${formatPriceINR(creditPackConfig.pricePerPack)}`
     : "Extra credit packs available";
@@ -542,21 +555,29 @@ export default function OrgBillingPage() {
             </div>
             {proPlan && (
               <div className="p-4 bg-slate-50 rounded-lg">
-                <div className="flex justify-between">
+                <div className="flex justify-between text-sm">
+                  <span>Subtotal</span>
+                  <span>{formatPriceINR(upgradeSubtotal)}</span>
+                </div>
+                {taxEnabled && (
+                  <div className="mt-2 flex justify-between text-sm">
+                    <span>GST ({gstRate}%)</span>
+                    <span>{formatPriceINR(upgradeTaxAmount)}</span>
+                  </div>
+                )}
+                <div className="mt-2 flex justify-between">
                   <span>Total</span>
                   <span className="font-bold">
-                    {formatPriceINR(
-                      billingCycle === 'monthly'
-                        ? proPlan.pricePerSeatMonthly * seats
-                        : proPlan.pricePerSeatAnnual * seats
-                    )}
+                    {formatPriceINR(upgradeTotal)}
                     <span className="text-sm font-normal text-muted-foreground">
                       /{billingCycle === 'monthly' ? 'month' : 'year'}
                     </span>
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  + 18% GST applicable
+                  {taxEnabled
+                    ? `GST (${gstRate}%) is added at checkout.`
+                    : 'No additional tax is configured.'}
                 </p>
               </div>
             )}
@@ -613,8 +634,20 @@ export default function OrgBillingPage() {
                 <span>Total</span>
                 <span className="font-bold">{formatPriceINR(creditPackTotalPrice)}</span>
               </div>
+              {taxEnabled && (
+                <div className="flex justify-between text-sm">
+                  <span>GST ({gstRate}%)</span>
+                  <span>{formatPriceINR(creditPackTaxAmount)}</span>
+                </div>
+              )}
+              <div className="flex justify-between">
+                <span>Grand total</span>
+                <span className="font-bold">{formatPriceINR(creditPackGrandTotal)}</span>
+              </div>
               <p className="text-xs text-muted-foreground">
-                + 18% GST applicable
+                {taxEnabled
+                  ? `GST (${gstRate}%) is added at checkout.`
+                  : 'No additional tax is configured.'}
               </p>
             </div>
           </div>

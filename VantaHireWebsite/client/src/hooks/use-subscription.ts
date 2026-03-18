@@ -56,6 +56,11 @@ export interface CreditPackConfig {
   maxQuantity: number;
 }
 
+export interface BillingConfig {
+  gstRate: number;
+  taxEnabled: boolean;
+}
+
 // API functions
 async function fetchPlans() {
   const res = await fetch('/api/subscription/plans', {
@@ -110,6 +115,16 @@ async function fetchCreditPackConfig() {
   return res.json();
 }
 
+async function fetchBillingConfig() {
+  const res = await fetch('/api/subscription/billing-config', {
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    throw new Error('Failed to fetch billing config');
+  }
+  return res.json();
+}
+
 // Hooks
 export function usePlans() {
   return useQuery<SubscriptionPlan[]>({
@@ -149,6 +164,23 @@ export function useCreditPackConfig() {
     queryFn: fetchCreditPackConfig,
     staleTime: 1000 * 60 * 5,
   });
+}
+
+export function useBillingConfig() {
+  return useQuery<BillingConfig>({
+    queryKey: ['subscription', 'billing-config'],
+    queryFn: fetchBillingConfig,
+    staleTime: 1000 * 60 * 5,
+  });
+}
+
+export function calculateTaxAmount(amount: number, gstRate: number): number {
+  if (gstRate <= 0) return 0;
+  return Math.round(amount * gstRate / 100);
+}
+
+export function calculateTotalWithTax(amount: number, gstRate: number): number {
+  return amount + calculateTaxAmount(amount, gstRate);
 }
 
 export function useCreateCheckout() {

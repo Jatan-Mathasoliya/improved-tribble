@@ -16,7 +16,7 @@ const COMPANY_LEGAL_NAME = process.env.COMPANY_LEGAL_NAME || 'Airevolabs LLP';
 const COMPANY_GSTIN = process.env.COMPANY_GSTIN || '';
 const COMPANY_ADDRESS = process.env.COMPANY_ADDRESS || '';
 const COMPANY_STATE = process.env.COMPANY_STATE || 'Maharashtra';
-const GST_RATE = parseInt(process.env.GST_RATE || '18', 10);
+const GST_RATE = parseInt(process.env.GST_RATE || '0', 10);
 
 export interface InvoiceLineItem {
   description: string;
@@ -50,6 +50,9 @@ export interface InvoiceData {
   cgst: number;
   sgst: number;
   igst: number;
+  cgstRate: number;
+  sgstRate: number;
+  igstRate: number;
   totalAmount: number;
 
   // Payment info
@@ -73,6 +76,14 @@ function calculateGST(
   amount: number,
   buyerState: string | null
 ): { cgst: number; sgst: number; igst: number } {
+  if (GST_RATE <= 0) {
+    return {
+      cgst: 0,
+      sgst: 0,
+      igst: 0,
+    };
+  }
+
   const gstAmount = Math.round(amount * GST_RATE / 100);
 
   // If buyer is in same state as seller, split into CGST + SGST
@@ -239,6 +250,9 @@ export async function generateInvoiceData(transactionId: number): Promise<Invoic
     cgst: gst.cgst,
     sgst: gst.sgst,
     igst: gst.igst,
+    cgstRate: GST_RATE > 0 ? GST_RATE / 2 : 0,
+    sgstRate: GST_RATE > 0 ? GST_RATE / 2 : 0,
+    igstRate: GST_RATE,
     totalAmount: transaction.totalAmount,
 
     paymentMethod: transaction.cashfreePaymentMethod,

@@ -35,6 +35,7 @@ import {
   createCheckoutOrder,
   createCreditPackCheckout,
   createSeatAddCheckout,
+  getBillingTaxConfig,
   getOrderStatus,
   isCashfreeConfigured,
 } from "./lib/cashfreeClient";
@@ -179,6 +180,15 @@ export function registerSubscriptionRoutes(
   });
 
   // ===== Checkout =====
+
+  app.get("/api/subscription/billing-config", async (req, res) => {
+    try {
+      res.json(getBillingTaxConfig());
+    } catch (error: any) {
+      console.error("Error getting billing config:", error);
+      res.status(500).json({ error: "Failed to get billing config" });
+    }
+  });
 
   app.get("/api/subscription/credit-packs/config", async (req, res) => {
     try {

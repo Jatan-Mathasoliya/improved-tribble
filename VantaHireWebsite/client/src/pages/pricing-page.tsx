@@ -4,7 +4,16 @@ import Layout from "@/components/Layout";
 import { Helmet } from "react-helmet-async";
 import { useAuth } from "@/hooks/use-auth";
 import { useOrganization } from "@/hooks/use-organization";
-import { usePlans, useSubscription, useCreateCheckout, useCreditPackConfig, formatPriceINR } from "@/hooks/use-subscription";
+import {
+  usePlans,
+  useSubscription,
+  useCreateCheckout,
+  useCreditPackConfig,
+  useBillingConfig,
+  calculateTaxAmount,
+  calculateTotalWithTax,
+  formatPriceINR,
+} from "@/hooks/use-subscription";
 import { initiateCashfreeCheckout } from "@/lib/cashfree";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -83,6 +92,7 @@ export default function PricingPage() {
   const { data: plans } = usePlans();
   const { data: subscription } = useSubscription();
   const { data: creditPackConfig } = useCreditPackConfig();
+  const { data: billingConfig } = useBillingConfig();
   const createCheckout = useCreateCheckout();
   const { toast } = useToast();
   const [, setLocation] = useLocation();
@@ -110,6 +120,13 @@ export default function PricingPage() {
   const creditPackLabel = creditPackConfig
     ? `Add extra ${creditPackConfig.creditsPerPack}-credit packs at ${formatPriceINR(creditPackConfig.pricePerPack)}`
     : 'Extra credit packs available';
+  const gstRate = billingConfig?.gstRate || 0;
+  const taxEnabled = !!billingConfig?.taxEnabled;
+  const subtotal = proPlan
+    ? (billingCycle === 'monthly' ? proPlan.pricePerSeatMonthly : proPlan.pricePerSeatAnnual) * seats
+    : 0;
+  const gstAmount = calculateTaxAmount(subtotal, gstRate);
+  const totalWithTax = calculateTotalWithTax(subtotal, gstRate);
 
   const formatMetric = (value?: number | null) => {
     if (typeof value !== "number" || value <= 0) {
@@ -412,7 +429,9 @@ export default function PricingPage() {
                   {proPlan ? formatPriceINR(proPlan.pricePerSeatMonthly) : '...'}
                   <span className="text-base font-normal text-white/50">/seat/month</span>
                 </div>
-                <p className="text-xs text-white/50 mt-1">+ applicable taxes | Save with annual billing</p>
+                <p className="text-xs text-white/50 mt-1">
+                  {taxEnabled ? `+ GST (${gstRate}%) | Save with annual billing` : 'No additional tax configured | Save with annual billing'}
+                </p>
               </div>
               <p className="text-xs text-white/50 mb-4">Everything in Free, plus:</p>
               <ul className="space-y-3 mb-6">
@@ -694,28 +713,36 @@ export default function PricingPage() {
                       onChange={(e) => setGstin(e.target.value.toUpperCase())}
                     />
                     <p className="text-xs text-muted-foreground">
-                      For GST invoice. Leave blank for tax-inclusive invoice.
+                      Optional. Add GSTIN if you want it printed on the invoice.
                     </p>
                   </div>
                 )}
 
                 {proPlan && (
                   <div className="p-4 bg-slate-100 dark:bg-slate-800 rounded-lg">
-                    <div className="flex justify-between">
+                    <div className="flex justify-between text-sm">
+                      <span>Subtotal</span>
+                      <span>{formatPriceINR(subtotal)}</span>
+                    </div>
+                    {taxEnabled && (
+                      <div className="mt-2 flex justify-between text-sm">
+                        <span>GST ({gstRate}%)</span>
+                        <span>{formatPriceINR(gstAmount)}</span>
+                      </div>
+                    )}
+                    <div className="mt-2 flex justify-between">
                       <span>Total</span>
                       <span className="font-bold">
-                        {formatPriceINR(
-                          billingCycle === 'monthly'
-                            ? proPlan.pricePerSeatMonthly * seats
-                            : proPlan.pricePerSeatAnnual * seats
-                        )}
+                        {formatPriceINR(totalWithTax)}
                         <span className="text-sm font-normal text-muted-foreground">
                           /{billingCycle === 'monthly' ? 'month' : 'year'}
                         </span>
                       </span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      + 18% GST applicable
+                      {taxEnabled
+                        ? `GST (${gstRate}%) is added at checkout.`
+                        : 'No additional tax is configured.'}
                     </p>
                   </div>
                 )}

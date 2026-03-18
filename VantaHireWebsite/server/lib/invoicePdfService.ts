@@ -153,15 +153,15 @@ export async function generateInvoicePdf(invoiceData: InvoiceData): Promise<stri
 
     // GST breakdown
     if (invoiceData.cgst > 0) {
-      doc.text('CGST (9%):', totalsLeft, y, { width: 100 });
+      doc.text(`CGST (${invoiceData.cgstRate}%):`, totalsLeft, y, { width: 100 });
       doc.text(formatINR(invoiceData.cgst), totalsLeft + 100, y, { width: 95, align: 'right' });
       y += 18;
 
-      doc.text('SGST (9%):', totalsLeft, y, { width: 100 });
+      doc.text(`SGST (${invoiceData.sgstRate}%):`, totalsLeft, y, { width: 100 });
       doc.text(formatINR(invoiceData.sgst), totalsLeft + 100, y, { width: 95, align: 'right' });
       y += 18;
     } else if (invoiceData.igst > 0) {
-      doc.text('IGST (18%):', totalsLeft, y, { width: 100 });
+      doc.text(`IGST (${invoiceData.igstRate}%):`, totalsLeft, y, { width: 100 });
       doc.text(formatINR(invoiceData.igst), totalsLeft + 100, y, { width: 95, align: 'right' });
       y += 18;
     }

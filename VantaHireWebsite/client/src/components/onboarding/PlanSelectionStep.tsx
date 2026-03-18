@@ -1,5 +1,13 @@
 import { useState } from "react";
-import { usePlans, useCreateCheckout, useCreditPackConfig, formatPriceINR } from "@/hooks/use-subscription";
+import {
+  usePlans,
+  useCreateCheckout,
+  useCreditPackConfig,
+  useBillingConfig,
+  calculateTaxAmount,
+  calculateTotalWithTax,
+  formatPriceINR,
+} from "@/hooks/use-subscription";
 import { useOnboardingStatus } from "@/hooks/use-onboarding-status";
 import { useToast } from "@/hooks/use-toast";
 import { initiateCashfreeCheckout } from "@/lib/cashfree";
@@ -39,6 +47,7 @@ interface PlanSelectionStepProps {
 export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps) {
   const { data: plans, isLoading: plansLoading } = usePlans();
   const { data: creditPackConfig } = useCreditPackConfig();
+  const { data: billingConfig } = useBillingConfig();
   const { completeOnboardingAsync, isCompleting } = useOnboardingStatus();
   const createCheckout = useCreateCheckout();
   const { toast } = useToast();
@@ -52,6 +61,13 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
   const creditPackLabel = creditPackConfig
     ? `Add ${creditPackConfig.creditsPerPack}-credit top-ups at ${formatPriceINR(creditPackConfig.pricePerPack)}`
     : 'Extra credit packs available';
+  const gstRate = billingConfig?.gstRate || 0;
+  const taxEnabled = !!billingConfig?.taxEnabled;
+  const subtotal = proPlan
+    ? (billingCycle === 'monthly' ? proPlan.pricePerSeatMonthly : proPlan.pricePerSeatAnnual) * seats
+    : 0;
+  const gstAmount = calculateTaxAmount(subtotal, gstRate);
+  const totalWithTax = calculateTotalWithTax(subtotal, gstRate);
   const formatMetric = (value?: number | null) => {
     if (typeof value !== "number" || value <= 0) {
       return "—";
@@ -337,21 +353,29 @@ export default function PlanSelectionStep({ onComplete }: PlanSelectionStepProps
 
             {proPlan && (
               <div className="p-4 bg-muted rounded-lg">
-                <div className="flex justify-between">
+                <div className="flex justify-between text-sm">
+                  <span>Subtotal</span>
+                  <span>{formatPriceINR(subtotal)}</span>
+                </div>
+                {taxEnabled && (
+                  <div className="mt-2 flex justify-between text-sm">
+                    <span>GST ({gstRate}%)</span>
+                    <span>{formatPriceINR(gstAmount)}</span>
+                  </div>
+                )}
+                <div className="mt-2 flex justify-between">
                   <span>Total</span>
                   <span className="font-bold">
-                    {formatPriceINR(
-                      billingCycle === 'monthly'
-                        ? proPlan.pricePerSeatMonthly * seats
-                        : proPlan.pricePerSeatAnnual * seats
-                    )}
+                    {formatPriceINR(totalWithTax)}
                     <span className="text-sm font-normal text-muted-foreground">
                       /{billingCycle === 'monthly' ? 'month' : 'year'}
                     </span>
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  + 18% GST applicable
+                  {taxEnabled
+                    ? `GST (${gstRate}%) is added at checkout.`
+                    : 'No additional tax is configured.'}
                 </p>
               </div>
             )}
