@@ -14,16 +14,16 @@ export default function CookiePolicyPage() {
       <Helmet>
         <title>Cookie Policy | VantaHire</title>
         <meta name="description" content="VantaHire Cookie Policy. Learn about the cookies we use and how to manage your preferences." />
-        <link rel="canonical" href="https://www.vantahire.com/cookie-policy" />
+        <link rel="canonical" href="https://vantahire.com/cookie-policy" />
         <meta property="og:title" content="Cookie Policy | VantaHire" />
         <meta property="og:description" content="Learn about cookies used on VantaHire and manage your preferences." />
-        <meta property="og:url" content="https://www.vantahire.com/cookie-policy" />
+        <meta property="og:url" content="https://vantahire.com/cookie-policy" />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta property="og:image" content="https://vantahire.com/og-image.jpg" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Cookie Policy | VantaHire" />
         <meta name="twitter:description" content="Learn about cookies used on VantaHire and manage your preferences." />
-        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+        <meta name="twitter:image" content="https://vantahire.com/twitter-image.jpg" />
       </Helmet>
       <div className="container mx-auto px-4 py-16 max-w-4xl">
         <div className="mb-8">

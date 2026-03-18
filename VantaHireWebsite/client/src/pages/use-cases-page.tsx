@@ -90,23 +90,23 @@ export default function UseCasesPage() {
       <Helmet>
         <title>Use Cases | VantaHire - Built for Teams Like Yours</title>
         <meta name="description" content="See how startups, agencies, enterprises, and HR teams use VantaHire to hire faster. Industry solutions for IT, Telecom, Fintech, Healthcare, and Automotive." />
-        <link rel="canonical" href="https://www.vantahire.com/use-cases" />
+        <link rel="canonical" href="https://vantahire.com/use-cases" />
         <meta property="og:title" content="Use Cases | VantaHire - Built for Teams Like Yours" />
         <meta property="og:description" content="From startups to enterprises, see how teams use VantaHire to transform their hiring." />
-        <meta property="og:url" content="https://www.vantahire.com/use-cases" />
+        <meta property="og:url" content="https://vantahire.com/use-cases" />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta property="og:image" content="https://vantahire.com/og-image.jpg" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Use Cases | VantaHire - Built for Teams Like Yours" />
         <meta name="twitter:description" content="From startups to enterprises, see how teams use VantaHire to transform their hiring." />
-        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+        <meta name="twitter:image" content="https://vantahire.com/twitter-image.jpg" />
         <script type="application/ld+json">
           {JSON.stringify({
             "@context": "https://schema.org",
             "@type": "BreadcrumbList",
             "itemListElement": [
-              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" },
-              { "@type": "ListItem", "position": 2, "name": "Use Cases", "item": "https://www.vantahire.com/use-cases" }
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vantahire.com/" },
+              { "@type": "ListItem", "position": 2, "name": "Use Cases", "item": "https://vantahire.com/use-cases" }
             ]
           })}
         </script>

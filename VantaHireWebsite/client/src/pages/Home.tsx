@@ -31,16 +31,16 @@ const Home = () => {
       <Helmet>
         <title>VantaHire - Human Decisions, AI Acceleration | AI-Native Recruiting Platform</title>
         <meta name="description" content="The AI-native recruiting platform that helps startups and recruiting firms find, rank, and engage the right candidates faster. AI sourcing, WhatsApp outreach, client portal, and pipeline management in one platform." />
-        <link rel="canonical" href="https://www.vantahire.com/" />
+        <link rel="canonical" href="https://vantahire.com/" />
         <meta property="og:title" content="Human Decisions, AI Acceleration" />
         <meta property="og:description" content="The AI-native recruiting platform that helps startups and recruiting firms find, rank, and engage the right candidates faster." />
-        <meta property="og:url" content="https://www.vantahire.com/" />
+        <meta property="og:url" content="https://vantahire.com/" />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta property="og:image" content="https://vantahire.com/og-image.jpg" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="VantaHire - Human Decisions, AI Acceleration" />
         <meta name="twitter:description" content="The AI-native recruiting platform that helps startups and recruiting firms find, rank, and engage the right candidates faster." />
-        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+        <meta name="twitter:image" content="https://vantahire.com/twitter-image.jpg" />
       </Helmet>
       <div className="public-theme min-h-screen bg-background text-foreground">
         <CircuitBackground />

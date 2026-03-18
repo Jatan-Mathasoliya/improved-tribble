@@ -83,78 +83,84 @@ export async function setupVite(app: Express, server: Server) {
     '/': {
       title: 'VantaHire - Human Decisions, AI Acceleration | AI-Native Recruiting Platform',
       description: 'The AI-native recruiting platform that helps startups and recruiting firms find, rank, and engage the right candidates faster. AI sourcing, WhatsApp outreach, client portal, and pipeline management in one platform.',
-      canonical: 'https://www.vantahire.com/',
+      canonical: 'https://vantahire.com/',
       keywords: 'AI recruiting platform, AI-native ATS, AI candidate sourcing, WhatsApp recruitment outreach, recruiting pipeline management, India APAC hiring',
     },
     '/product': {
       title: 'How VantaHire Works | AI Sourcing, Pipeline, Outreach in One Platform',
       description: 'Three layers. One platform. AI sourcing engine, recruiter workflow, and candidate memory system — from candidate discovery to client feedback without switching tools.',
-      canonical: 'https://www.vantahire.com/product',
+      canonical: 'https://vantahire.com/product',
       keywords: 'AI sourcing engine, resume knowledge graph, recruiter pipeline, candidate discovery, WhatsApp outreach tool, client feedback portal',
-      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Product", "item": "https://www.vantahire.com/product" }] }],
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Product", "item": "https://vantahire.com/product" }] }],
     },
     '/features': {
       title: 'Features | VantaHire - Six Pillars of AI-Native Recruiting',
       description: 'Resume Knowledge Graph, AI Candidate Discovery, WhatsApp + Email Outreach, Client Feedback Portal, Recruiter Dashboard, and Job Command Center. All the capabilities recruiters need.',
-      canonical: 'https://www.vantahire.com/features',
+      canonical: 'https://vantahire.com/features',
       keywords: 'resume knowledge graph, AI candidate discovery, WhatsApp email outreach, client feedback portal, recruiter dashboard, job command center',
-      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Features", "item": "https://www.vantahire.com/features" }] }],
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Features", "item": "https://vantahire.com/features" }] }],
     },
     '/pricing': {
       title: 'Pricing | VantaHire - Simple, Transparent Pricing',
       description: 'Simple pricing. No surprises. Start free, upgrade when your team grows. AI sourcing, WhatsApp outreach, client portal, and pipeline management included.',
-      canonical: 'https://www.vantahire.com/pricing',
+      canonical: 'https://vantahire.com/pricing',
       keywords: 'VantaHire pricing, ATS pricing India, recruiting software cost, free ATS plan, Growth plan pricing, enterprise recruiting platform',
       jsonLd: [
-        { "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Pricing", "item": "https://www.vantahire.com/pricing" }] },
-        { "@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
-          { "@type": "Question", "name": "Is there really a free plan?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. No credit card required. No time limit. Start using VantaHire today and upgrade when you need more capacity." } },
-          { "@type": "Question", "name": "Can I switch plans anytime?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Upgrade or downgrade at any time. No long-term contracts. Month-to-month billing on all plans." } },
-          { "@type": "Question", "name": "How does seat-based pricing work?", "acceptedAnswer": { "@type": "Answer", "text": "You pay per recruiter who actively uses the platform. Team members who only view reports or dashboards do not count as seats." } },
-          { "@type": "Question", "name": "Do you offer annual discounts?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Annual billing saves compared to monthly. Toggle between monthly and annual on the pricing page to see the difference." } },
-          { "@type": "Question", "name": "What payment methods do you accept?", "acceptedAnswer": { "@type": "Answer", "text": "Credit card and UPI for Free and Growth plans via Cashfree. Enterprise customers can pay by invoice. GST-compliant invoicing available for India." } },
-          { "@type": "Question", "name": "Is my data safe?", "acceptedAnswer": { "@type": "Answer", "text": "VantaHire enforces a three-tier privacy model. Your uploaded resumes and candidate data stay private to your organization. Only candidates who opt in are discoverable by other customers." } },
-          { "@type": "Question", "name": "Can I cancel anytime?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Cancel from your account settings. No cancellation fees. Your data remains accessible for 30 days after cancellation." } },
-        ] },
+        { "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Pricing", "item": "https://vantahire.com/pricing" }] },
       ],
     },
     '/compare': {
       title: 'Compare | VantaHire vs Complex ATS Platforms',
       description: 'See how VantaHire compares to legacy ATS platforms. Faster setup, recruiter-first design, and AI acceleration without the complexity.',
-      canonical: 'https://www.vantahire.com/compare',
+      canonical: 'https://vantahire.com/compare',
       keywords: 'ATS comparison, VantaHire vs Greenhouse, VantaHire vs Lever, best ATS for startups, AI recruiting comparison',
-      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Compare", "item": "https://www.vantahire.com/compare" }] }],
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Compare", "item": "https://vantahire.com/compare" }] }],
     },
     '/use-cases': {
       title: 'Use Cases | VantaHire - Built for Teams Like Yours',
       description: 'Discover how consulting firms, staffing agencies, startups, and enterprise teams use VantaHire to hire faster across India and APAC.',
-      canonical: 'https://www.vantahire.com/use-cases',
+      canonical: 'https://vantahire.com/use-cases',
       keywords: 'recruiting use cases, staffing agency ATS, startup hiring platform, enterprise recruiting, APAC recruitment tool',
-      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Use Cases", "item": "https://www.vantahire.com/use-cases" }] }],
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Use Cases", "item": "https://vantahire.com/use-cases" }] }],
     },
     '/about': {
       title: 'About Us | VantaHire - AI + Human Expertise for Better Hiring',
       description: 'VantaHire combines AI acceleration with human expertise to make recruiting faster and fairer. Learn about our mission, team, and vision.',
-      canonical: 'https://www.vantahire.com/about',
+      canonical: 'https://vantahire.com/about',
       keywords: 'VantaHire team, about VantaHire, AI recruiting company, Bangalore startup, recruiting technology mission',
-      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "About", "item": "https://www.vantahire.com/about" }] }],
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "About", "item": "https://vantahire.com/about" }] }],
     },
     '/jobs': {
       title: 'Browse Jobs | VantaHire - Find Your Next Role',
       description: 'Browse open positions across technology, consulting, and more. Apply directly through VantaHire\'s recruiter-first platform.',
-      canonical: 'https://www.vantahire.com/jobs',
+      canonical: 'https://vantahire.com/jobs',
       keywords: 'jobs India, tech jobs Bangalore, IT jobs APAC, apply online, VantaHire jobs',
     },
     '/recruiters': {
       title: 'Recruiters Directory | VantaHire',
       description: 'Meet VantaHire\'s specialist recruiters. Industry experts in IT, telecom, automotive, fintech, and healthcare hiring across India and APAC.',
-      canonical: 'https://www.vantahire.com/recruiters',
+      canonical: 'https://vantahire.com/recruiters',
       keywords: 'specialist recruiters India, IT recruiters, telecom recruiters, healthcare recruiters APAC',
     },
     '/brand': {
       title: 'Brand Assets | VantaHire',
       description: 'Download VantaHire logos, brand guidelines, and media assets. Everything you need for press, partnerships, and co-marketing.',
-      canonical: 'https://www.vantahire.com/brand',
+      canonical: 'https://vantahire.com/brand',
+    },
+    '/privacy-policy': {
+      title: 'Privacy Policy | VantaHire',
+      description: 'How VantaHire collects, uses, and protects your data. Read our privacy policy covering candidate data, recruiter data, and platform usage.',
+      canonical: 'https://vantahire.com/privacy-policy',
+    },
+    '/terms-of-service': {
+      title: 'Terms of Service | VantaHire',
+      description: 'Terms and conditions for using the VantaHire recruiting platform. Covers account usage, data ownership, and service agreements.',
+      canonical: 'https://vantahire.com/terms-of-service',
+    },
+    '/cookie-policy': {
+      title: 'Cookie Policy | VantaHire',
+      description: 'How VantaHire uses cookies and similar technologies. Learn about the cookies we use and how to manage your preferences.',
+      canonical: 'https://vantahire.com/cookie-policy',
     },
   };
 
@@ -182,7 +188,7 @@ export async function setupVite(app: Express, server: Server) {
       // Inject marketing page meta in dev mode
       const pageMeta = MARKETING_PAGES_DEV[url];
       if (pageMeta) {
-        const baseUrl = (process.env.BASE_URL || 'https://www.vantahire.com').replace(/\/$/, '');
+        const baseUrl = (process.env.BASE_URL || 'https://vantahire.com').replace(/\/$/, '');
         template = upsertTitle(template, pageMeta.title);
         template = upsertMetaTag(template, 'name', 'title', pageMeta.title);
         template = upsertMetaTag(template, 'name', 'description', pageMeta.description);
@@ -353,78 +359,84 @@ export async function serveStatic(app: Express) {
     '/': {
       title: 'VantaHire - Human Decisions, AI Acceleration | AI-Native Recruiting Platform',
       description: 'The AI-native recruiting platform that helps startups and recruiting firms find, rank, and engage the right candidates faster. AI sourcing, WhatsApp outreach, client portal, and pipeline management in one platform.',
-      canonical: 'https://www.vantahire.com/',
+      canonical: 'https://vantahire.com/',
       keywords: 'AI recruiting platform, AI-native ATS, AI candidate sourcing, WhatsApp recruitment outreach, recruiting pipeline management, India APAC hiring',
     },
     '/product': {
       title: 'How VantaHire Works | AI Sourcing, Pipeline, Outreach in One Platform',
       description: 'Three layers. One platform. AI sourcing engine, recruiter workflow, and candidate memory system — from candidate discovery to client feedback without switching tools.',
-      canonical: 'https://www.vantahire.com/product',
+      canonical: 'https://vantahire.com/product',
       keywords: 'AI sourcing engine, resume knowledge graph, recruiter pipeline, candidate discovery, WhatsApp outreach tool, client feedback portal',
-      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Product", "item": "https://www.vantahire.com/product" }] }],
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Product", "item": "https://vantahire.com/product" }] }],
     },
     '/features': {
       title: 'Features | VantaHire - Six Pillars of AI-Native Recruiting',
       description: 'Resume Knowledge Graph, AI Candidate Discovery, WhatsApp + Email Outreach, Client Feedback Portal, Recruiter Dashboard, and Job Command Center. All the capabilities recruiters need.',
-      canonical: 'https://www.vantahire.com/features',
+      canonical: 'https://vantahire.com/features',
       keywords: 'resume knowledge graph, AI candidate discovery, WhatsApp email outreach, client feedback portal, recruiter dashboard, job command center',
-      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Features", "item": "https://www.vantahire.com/features" }] }],
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Features", "item": "https://vantahire.com/features" }] }],
     },
     '/pricing': {
       title: 'Pricing | VantaHire - Simple, Transparent Pricing',
       description: 'Simple pricing. No surprises. Start free, upgrade when your team grows. AI sourcing, WhatsApp outreach, client portal, and pipeline management included.',
-      canonical: 'https://www.vantahire.com/pricing',
+      canonical: 'https://vantahire.com/pricing',
       keywords: 'VantaHire pricing, ATS pricing India, recruiting software cost, free ATS plan, Growth plan pricing, enterprise recruiting platform',
       jsonLd: [
-        { "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Pricing", "item": "https://www.vantahire.com/pricing" }] },
-        { "@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
-          { "@type": "Question", "name": "Is there really a free plan?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. No credit card required. No time limit. Start using VantaHire today and upgrade when you need more capacity." } },
-          { "@type": "Question", "name": "Can I switch plans anytime?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Upgrade or downgrade at any time. No long-term contracts. Month-to-month billing on all plans." } },
-          { "@type": "Question", "name": "How does seat-based pricing work?", "acceptedAnswer": { "@type": "Answer", "text": "You pay per recruiter who actively uses the platform. Team members who only view reports or dashboards do not count as seats." } },
-          { "@type": "Question", "name": "Do you offer annual discounts?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Annual billing saves compared to monthly. Toggle between monthly and annual on the pricing page to see the difference." } },
-          { "@type": "Question", "name": "What payment methods do you accept?", "acceptedAnswer": { "@type": "Answer", "text": "Credit card and UPI for Free and Growth plans via Cashfree. Enterprise customers can pay by invoice. GST-compliant invoicing available for India." } },
-          { "@type": "Question", "name": "Is my data safe?", "acceptedAnswer": { "@type": "Answer", "text": "VantaHire enforces a three-tier privacy model. Your uploaded resumes and candidate data stay private to your organization. Only candidates who opt in are discoverable by other customers." } },
-          { "@type": "Question", "name": "Can I cancel anytime?", "acceptedAnswer": { "@type": "Answer", "text": "Yes. Cancel from your account settings. No cancellation fees. Your data remains accessible for 30 days after cancellation." } },
-        ] },
+        { "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Pricing", "item": "https://vantahire.com/pricing" }] },
       ],
     },
     '/compare': {
       title: 'Compare | VantaHire vs Complex ATS Platforms',
       description: 'See how VantaHire compares to legacy ATS platforms. Faster setup, recruiter-first design, and AI acceleration without the complexity.',
-      canonical: 'https://www.vantahire.com/compare',
+      canonical: 'https://vantahire.com/compare',
       keywords: 'ATS comparison, VantaHire vs Greenhouse, VantaHire vs Lever, best ATS for startups, AI recruiting comparison',
-      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Compare", "item": "https://www.vantahire.com/compare" }] }],
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Compare", "item": "https://vantahire.com/compare" }] }],
     },
     '/use-cases': {
       title: 'Use Cases | VantaHire - Built for Teams Like Yours',
       description: 'Discover how consulting firms, staffing agencies, startups, and enterprise teams use VantaHire to hire faster across India and APAC.',
-      canonical: 'https://www.vantahire.com/use-cases',
+      canonical: 'https://vantahire.com/use-cases',
       keywords: 'recruiting use cases, staffing agency ATS, startup hiring platform, enterprise recruiting, APAC recruitment tool',
-      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Use Cases", "item": "https://www.vantahire.com/use-cases" }] }],
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "Use Cases", "item": "https://vantahire.com/use-cases" }] }],
     },
     '/about': {
       title: 'About Us | VantaHire - AI + Human Expertise for Better Hiring',
       description: 'VantaHire combines AI acceleration with human expertise to make recruiting faster and fairer. Learn about our mission, team, and vision.',
-      canonical: 'https://www.vantahire.com/about',
+      canonical: 'https://vantahire.com/about',
       keywords: 'VantaHire team, about VantaHire, AI recruiting company, Bangalore startup, recruiting technology mission',
-      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "About", "item": "https://www.vantahire.com/about" }] }],
+      jsonLd: [{ "@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{ "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vantahire.com/" }, { "@type": "ListItem", "position": 2, "name": "About", "item": "https://vantahire.com/about" }] }],
     },
     '/jobs': {
       title: 'Browse Jobs | VantaHire - Find Your Next Role',
       description: 'Browse open positions across technology, consulting, and more. Apply directly through VantaHire\'s recruiter-first platform.',
-      canonical: 'https://www.vantahire.com/jobs',
+      canonical: 'https://vantahire.com/jobs',
       keywords: 'jobs India, tech jobs Bangalore, IT jobs APAC, apply online, VantaHire jobs',
     },
     '/recruiters': {
       title: 'Recruiters Directory | VantaHire',
       description: 'Meet VantaHire\'s specialist recruiters. Industry experts in IT, telecom, automotive, fintech, and healthcare hiring across India and APAC.',
-      canonical: 'https://www.vantahire.com/recruiters',
+      canonical: 'https://vantahire.com/recruiters',
       keywords: 'specialist recruiters India, IT recruiters, telecom recruiters, healthcare recruiters APAC',
     },
     '/brand': {
       title: 'Brand Assets | VantaHire',
       description: 'Download VantaHire logos, brand guidelines, and media assets. Everything you need for press, partnerships, and co-marketing.',
-      canonical: 'https://www.vantahire.com/brand',
+      canonical: 'https://vantahire.com/brand',
+    },
+    '/privacy-policy': {
+      title: 'Privacy Policy | VantaHire',
+      description: 'How VantaHire collects, uses, and protects your data. Read our privacy policy covering candidate data, recruiter data, and platform usage.',
+      canonical: 'https://vantahire.com/privacy-policy',
+    },
+    '/terms-of-service': {
+      title: 'Terms of Service | VantaHire',
+      description: 'Terms and conditions for using the VantaHire recruiting platform. Covers account usage, data ownership, and service agreements.',
+      canonical: 'https://vantahire.com/terms-of-service',
+    },
+    '/cookie-policy': {
+      title: 'Cookie Policy | VantaHire',
+      description: 'How VantaHire uses cookies and similar technologies. Learn about the cookies we use and how to manage your preferences.',
+      canonical: 'https://vantahire.com/cookie-policy',
     },
   };
 
@@ -436,7 +448,7 @@ export async function serveStatic(app: Express) {
       const indexPath = path.resolve(distPath, "index.html");
       let html = await fs.promises.readFile(indexPath, "utf-8");
 
-      const baseUrl = (process.env.BASE_URL || 'https://www.vantahire.com').replace(/\/$/, '');
+      const baseUrl = (process.env.BASE_URL || 'https://vantahire.com').replace(/\/$/, '');
 
       html = upsertTitle(html, pageMeta.title);
       html = upsertMetaTag(html, 'name', 'title', pageMeta.title);
@@ -548,7 +560,7 @@ export async function serveStatic(app: Express) {
       let html = await fs.promises.readFile(indexPath, "utf-8");
 
       // Generate JSON-LD
-      const baseUrl = process.env.BASE_URL || 'https://www.vantahire.com';
+      const baseUrl = process.env.BASE_URL || 'https://vantahire.com';
       const jobUrl = job.slug ? `${baseUrl}/jobs/${job.slug}` : `${baseUrl}/jobs/${job.id}`;
       const pageTitle = `${job.title} | VantaHire`;
       const metaDescription = truncateText(

@@ -44,23 +44,23 @@ export default function ComparePage() {
       <Helmet>
         <title>Compare | VantaHire vs Complex ATS Platforms</title>
         <meta name="description" content="See how VantaHire compares to traditional ATS platforms. Built with recruiters, designed for velocity, zero complexity." />
-        <link rel="canonical" href="https://www.vantahire.com/compare" />
+        <link rel="canonical" href="https://vantahire.com/compare" />
         <meta property="og:title" content="Compare | VantaHire vs Complex ATS Platforms" />
         <meta property="og:description" content="They add features. We remove friction. See how VantaHire makes recruiting teams 2X more efficient." />
-        <meta property="og:url" content="https://www.vantahire.com/compare" />
+        <meta property="og:url" content="https://vantahire.com/compare" />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta property="og:image" content="https://vantahire.com/og-image.jpg" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Compare | VantaHire vs Complex ATS Platforms" />
         <meta name="twitter:description" content="They add features. We remove friction. See how VantaHire makes recruiting teams 2X more efficient." />
-        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+        <meta name="twitter:image" content="https://vantahire.com/twitter-image.jpg" />
         <script type="application/ld+json">
           {JSON.stringify({
             "@context": "https://schema.org",
             "@type": "BreadcrumbList",
             "itemListElement": [
-              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" },
-              { "@type": "ListItem", "position": 2, "name": "Compare", "item": "https://www.vantahire.com/compare" }
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vantahire.com/" },
+              { "@type": "ListItem", "position": 2, "name": "Compare", "item": "https://vantahire.com/compare" }
             ]
           })}
         </script>

@@ -129,23 +129,23 @@ export default function FeaturesPage() {
       <Helmet>
         <title>Features | VantaHire - Six Pillars of AI-Native Recruiting</title>
         <meta name="description" content="Resume Knowledge Graph, AI Candidate Discovery, WhatsApp + Email Outreach, Client Feedback Portal, Recruiter Dashboard, and Job Command Center. All the capabilities recruiters need." />
-        <link rel="canonical" href="https://www.vantahire.com/features" />
+        <link rel="canonical" href="https://vantahire.com/features" />
         <meta property="og:title" content="Features | VantaHire - Six Pillars of AI-Native Recruiting" />
         <meta property="og:description" content="Resume Knowledge Graph, AI Discovery, WhatsApp Outreach, Client Portal, Dashboard, and Command Center — every capability recruiters need." />
-        <meta property="og:url" content="https://www.vantahire.com/features" />
+        <meta property="og:url" content="https://vantahire.com/features" />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta property="og:image" content="https://vantahire.com/og-image.jpg" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Features | VantaHire - Six Pillars of AI-Native Recruiting" />
         <meta name="twitter:description" content="Resume Knowledge Graph, AI Discovery, WhatsApp Outreach, Client Portal, Dashboard, and Command Center." />
-        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+        <meta name="twitter:image" content="https://vantahire.com/twitter-image.jpg" />
         <script type="application/ld+json">
           {JSON.stringify({
             "@context": "https://schema.org",
             "@type": "BreadcrumbList",
             "itemListElement": [
-              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" },
-              { "@type": "ListItem", "position": 2, "name": "Features", "item": "https://www.vantahire.com/features" }
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vantahire.com/" },
+              { "@type": "ListItem", "position": 2, "name": "Features", "item": "https://vantahire.com/features" }
             ]
           })}
         </script>

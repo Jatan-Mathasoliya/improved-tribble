@@ -99,23 +99,23 @@ export default function ProductPage() {
       <Helmet>
         <title>How VantaHire Works | AI Sourcing, Pipeline, Outreach in One Platform</title>
         <meta name="description" content="Three layers. One platform. AI sourcing engine, recruiter workflow, and candidate memory system — from candidate discovery to client feedback without switching tools." />
-        <link rel="canonical" href="https://www.vantahire.com/product" />
+        <link rel="canonical" href="https://vantahire.com/product" />
         <meta property="og:title" content="How VantaHire Works | AI-Native Recruiting Platform" />
         <meta property="og:description" content="Three layers. One platform. AI sourcing engine, recruiter workflow, and candidate memory system." />
-        <meta property="og:url" content="https://www.vantahire.com/product" />
+        <meta property="og:url" content="https://vantahire.com/product" />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta property="og:image" content="https://vantahire.com/og-image.jpg" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="How VantaHire Works | AI-Native Recruiting Platform" />
         <meta name="twitter:description" content="Three layers. One platform. From candidate discovery to client feedback without switching tools." />
-        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+        <meta name="twitter:image" content="https://vantahire.com/twitter-image.jpg" />
         <script type="application/ld+json">
           {JSON.stringify({
             "@context": "https://schema.org",
             "@type": "BreadcrumbList",
             "itemListElement": [
-              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" },
-              { "@type": "ListItem", "position": 2, "name": "Product", "item": "https://www.vantahire.com/product" }
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vantahire.com/" },
+              { "@type": "ListItem", "position": 2, "name": "Product", "item": "https://vantahire.com/product" }
             ]
           })}
         </script>

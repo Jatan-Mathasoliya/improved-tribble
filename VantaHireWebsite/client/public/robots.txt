@@ -56,5 +56,5 @@ Disallow: /client-shortlist/
 Disallow: /consultants
 
 # Sitemap locations
-Sitemap: https://www.vantahire.com/sitemap.xml
-Sitemap: https://www.vantahire.com/sitemap-jobs.xml
+Sitemap: https://vantahire.com/sitemap.xml
+Sitemap: https://vantahire.com/sitemap-jobs.xml

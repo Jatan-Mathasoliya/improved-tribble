@@ -37,23 +37,23 @@ export default function AboutPage() {
       <Helmet>
         <title>About Us | VantaHire - AI + Human Expertise for Better Hiring</title>
         <meta name="description" content="Meet the team behind VantaHire. Founded by TA professionals from Adobe, Ericsson, and more—we're on a mission to make hiring faster, fairer, and less painful." />
-        <link rel="canonical" href="https://www.vantahire.com/about" />
+        <link rel="canonical" href="https://vantahire.com/about" />
         <meta property="og:title" content="About Us | VantaHire - AI + Human Expertise for Better Hiring" />
         <meta property="og:description" content="Founded by recruiting veterans, VantaHire combines AI + human expertise to transform how teams hire." />
-        <meta property="og:url" content="https://www.vantahire.com/about" />
+        <meta property="og:url" content="https://vantahire.com/about" />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta property="og:image" content="https://vantahire.com/og-image.jpg" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="About Us | VantaHire - AI + Human Expertise for Better Hiring" />
         <meta name="twitter:description" content="Founded by recruiting veterans, VantaHire combines AI + human expertise to transform how teams hire." />
-        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+        <meta name="twitter:image" content="https://vantahire.com/twitter-image.jpg" />
         <script type="application/ld+json">
           {JSON.stringify({
             "@context": "https://schema.org",
             "@type": "BreadcrumbList",
             "itemListElement": [
-              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://www.vantahire.com/" },
-              { "@type": "ListItem", "position": 2, "name": "About", "item": "https://www.vantahire.com/about" }
+              { "@type": "ListItem", "position": 1, "name": "Home", "item": "https://vantahire.com/" },
+              { "@type": "ListItem", "position": 2, "name": "About", "item": "https://vantahire.com/about" }
             ]
           })}
         </script>

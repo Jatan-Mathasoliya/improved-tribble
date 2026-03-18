@@ -61,16 +61,16 @@ export default function RecruitersDirectoryPage() {
       <Helmet>
         <title>Recruiters Directory | VantaHire</title>
         <meta name="description" content="Browse our network of specialist recruiters. Find expert recruiters in IT, Telecom, Fintech, Healthcare, and Automotive industries." />
-        <link rel="canonical" href="https://www.vantahire.com/recruiters" />
+        <link rel="canonical" href="https://vantahire.com/recruiters" />
         <meta property="og:title" content="Recruiters Directory | VantaHire" />
         <meta property="og:description" content="Connect with specialist recruiters across industries." />
-        <meta property="og:url" content="https://www.vantahire.com/recruiters" />
+        <meta property="og:url" content="https://vantahire.com/recruiters" />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta property="og:image" content="https://vantahire.com/og-image.jpg" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Recruiters Directory | VantaHire" />
         <meta name="twitter:description" content="Connect with specialist recruiters across industries." />
-        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+        <meta name="twitter:image" content="https://vantahire.com/twitter-image.jpg" />
       </Helmet>
       <div className="public-theme min-h-screen bg-background text-foreground py-12">
         {/* Premium background effects */}

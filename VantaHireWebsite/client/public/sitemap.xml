@@ -3,105 +3,78 @@
 
   <!-- Homepage -->
   <url>
-    <loc>https://www.vantahire.com/</loc>
-    <lastmod>2026-03-17</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
+    <loc>https://vantahire.com/</loc>
+    <lastmod>2026-03-18</lastmod>
   </url>
 
   <!-- Marketing Pages -->
   <url>
-    <loc>https://www.vantahire.com/landing/hiring-insights.html</loc>
-    <lastmod>2026-03-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
+    <loc>https://vantahire.com/product</loc>
+    <lastmod>2026-03-18</lastmod>
   </url>
 
   <url>
-    <loc>https://www.vantahire.com/product</loc>
-    <lastmod>2026-03-17</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <loc>https://vantahire.com/features</loc>
+    <lastmod>2026-03-18</lastmod>
   </url>
 
   <url>
-    <loc>https://www.vantahire.com/features</loc>
-    <lastmod>2026-03-17</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <loc>https://vantahire.com/pricing</loc>
+    <lastmod>2026-03-18</lastmod>
   </url>
 
   <url>
-    <loc>https://www.vantahire.com/pricing</loc>
-    <lastmod>2026-03-17</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.9</priority>
+    <loc>https://vantahire.com/compare</loc>
+    <lastmod>2026-03-18</lastmod>
   </url>
 
   <url>
-    <loc>https://www.vantahire.com/compare</loc>
-    <lastmod>2026-03-17</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
+    <loc>https://vantahire.com/use-cases</loc>
+    <lastmod>2026-03-18</lastmod>
   </url>
 
   <url>
-    <loc>https://www.vantahire.com/use-cases</loc>
-    <lastmod>2026-03-17</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
+    <loc>https://vantahire.com/about</loc>
+    <lastmod>2026-03-18</lastmod>
   </url>
 
   <url>
-    <loc>https://www.vantahire.com/about</loc>
-    <lastmod>2026-03-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.7</priority>
-  </url>
-
-  <url>
-    <loc>https://www.vantahire.com/brand</loc>
-    <lastmod>2026-03-17</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
+    <loc>https://vantahire.com/brand</loc>
+    <lastmod>2026-03-18</lastmod>
   </url>
 
   <!-- Jobs -->
   <url>
-    <loc>https://www.vantahire.com/jobs</loc>
-    <lastmod>2026-03-17</lastmod>
-    <changefreq>daily</changefreq>
-    <priority>0.9</priority>
+    <loc>https://vantahire.com/jobs</loc>
+    <lastmod>2026-03-18</lastmod>
   </url>
 
   <!-- Recruiters Directory -->
   <url>
-    <loc>https://www.vantahire.com/recruiters</loc>
+    <loc>https://vantahire.com/recruiters</loc>
+    <lastmod>2026-03-18</lastmod>
+  </url>
+
+  <!-- Landing Pages -->
+  <url>
+    <loc>https://vantahire.com/landing/hiring-insights.html</loc>
     <lastmod>2026-03-17</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.7</priority>
   </url>
 
   <!-- Legal Pages -->
   <url>
-    <loc>https://www.vantahire.com/privacy-policy</loc>
-    <lastmod>2026-03-17</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
+    <loc>https://vantahire.com/privacy-policy</loc>
+    <lastmod>2026-03-18</lastmod>
   </url>
 
   <url>
-    <loc>https://www.vantahire.com/terms-of-service</loc>
-    <lastmod>2026-03-17</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
+    <loc>https://vantahire.com/terms-of-service</loc>
+    <lastmod>2026-03-18</lastmod>
   </url>
 
   <url>
-    <loc>https://www.vantahire.com/cookie-policy</loc>
-    <lastmod>2026-03-17</lastmod>
-    <changefreq>yearly</changefreq>
-    <priority>0.3</priority>
+    <loc>https://vantahire.com/cookie-policy</loc>
+    <lastmod>2026-03-18</lastmod>
   </url>
 
 </urlset>

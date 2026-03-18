@@ -89,16 +89,16 @@ export default function BrandAssetsPage() {
       <Helmet>
         <title>Brand & Messaging | VantaHire</title>
         <meta name="description" content="VantaHire brand assets, messaging guidelines, and official logos. Recruiting Velocity, by Design." />
-        <link rel="canonical" href="https://www.vantahire.com/brand" />
+        <link rel="canonical" href="https://vantahire.com/brand" />
         <meta property="og:title" content="Brand & Messaging | VantaHire" />
         <meta property="og:description" content="VantaHire brand assets, messaging guidelines, and official logos. Recruiting Velocity, by Design." />
-        <meta property="og:url" content="https://www.vantahire.com/brand" />
+        <meta property="og:url" content="https://vantahire.com/brand" />
         <meta property="og:type" content="website" />
-        <meta property="og:image" content="https://www.vantahire.com/og-image.jpg" />
+        <meta property="og:image" content="https://vantahire.com/og-image.jpg" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Brand & Messaging | VantaHire" />
         <meta name="twitter:description" content="VantaHire brand assets, messaging guidelines, and official logos. Recruiting Velocity, by Design." />
-        <meta name="twitter:image" content="https://www.vantahire.com/twitter-image.jpg" />
+        <meta name="twitter:image" content="https://vantahire.com/twitter-image.jpg" />
       </Helmet>
 
       <div className="public-theme min-h-screen bg-background text-foreground">

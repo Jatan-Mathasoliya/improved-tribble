@@ -306,7 +306,7 @@ export function generateJobPostingSchema(job: {
   salaryPeriod?: string | null;
   experienceYears?: number | null;
   educationRequirement?: string | null;
-}, baseUrl: string = 'https://www.vantahire.com') {
+}, baseUrl: string = 'https://vantahire.com') {
   // Validate required fields
   const errors = validateJobPosting(job);
   if (errors.length > 0) {
@@ -442,7 +442,7 @@ export function generateJobsSitemapXML(jobs: Array<{
   slug?: string | null;
   updatedAt?: Date | string;
   createdAt: Date | string;
-}>, baseUrl: string = 'https://www.vantahire.com'): string {
+}>, baseUrl: string = 'https://vantahire.com'): string {
   const normalizedBase = baseUrl.replace(/\/+$/, '');
   const urlEntries = jobs.map(job => {
     // Prefer pure slug for SEO-friendly URLs
@@ -454,8 +454,6 @@ export function generateJobsSitemapXML(jobs: Array<{
     return `  <url>
     <loc>${url}</loc>
     ${lastmod ? `<lastmod>${lastmod.split('T')[0]}</lastmod>` : ''}
-    <changefreq>weekly</changefreq>
-    <priority>0.8</priority>
   </url>`;
   }).join('\n');
 

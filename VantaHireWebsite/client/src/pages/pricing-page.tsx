@@ -311,75 +311,11 @@ export default function PricingPage() {
       <Helmet>
         <title>Pricing | VantaHire - Simple, Transparent Pricing</title>
         <meta name="description" content="Simple pricing. No surprises. Start free, upgrade when your team grows. No long contracts. AI sourcing, WhatsApp outreach, client portal, and pipeline management included." />
-        <link rel="canonical" href="https://www.vantahire.com/pricing" />
+        <link rel="canonical" href="https://vantahire.com/pricing" />
         <meta property="og:title" content="Pricing | VantaHire - Simple, Transparent Pricing" />
         <meta property="og:description" content="Simple pricing. No surprises. Start free, upgrade when your team grows." />
-        <meta property="og:url" content="https://www.vantahire.com/pricing" />
+        <meta property="og:url" content="https://vantahire.com/pricing" />
         <meta property="og:type" content="website" />
-        <script type="application/ld+json">
-          {JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "FAQPage",
-            "mainEntity": [
-              {
-                "@type": "Question",
-                "name": "Is there really a free plan?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "Yes. No credit card required. No time limit. Start using VantaHire today and upgrade when you need more capacity."
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "Can I switch plans anytime?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "Yes. Upgrade or downgrade at any time. No long-term contracts. Month-to-month billing on all plans."
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "How does seat-based pricing work?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "You pay per recruiter who actively uses the platform. Team members who only view reports or dashboards do not count as seats."
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "Do you offer annual discounts?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "Yes. Annual billing saves compared to monthly. Toggle between monthly and annual on the pricing page to see the difference."
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "What payment methods do you accept?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "Credit card and UPI for Free and Growth plans via Cashfree. Enterprise customers can pay by invoice. GST-compliant invoicing available for India."
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "Is my data safe?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "VantaHire enforces a three-tier privacy model. Your uploaded resumes and candidate data stay private to your organization. Only candidates who opt in are discoverable by other customers."
-                }
-              },
-              {
-                "@type": "Question",
-                "name": "Can I cancel anytime?",
-                "acceptedAnswer": {
-                  "@type": "Answer",
-                  "text": "Yes. Cancel from your account settings. No cancellation fees. Your data remains accessible for 30 days after cancellation."
-                }
-              }
-            ]
-          })}
-        </script>
       </Helmet>
 
       <div className="public-theme min-h-screen bg-background text-foreground">

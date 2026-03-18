@@ -4,7 +4,7 @@
 
 import { Job } from "@shared/schema";
 
-export const DEFAULT_SITE_URL = "https://www.vantahire.com";
+export const DEFAULT_SITE_URL = "https://vantahire.com";
 
 /**
  * Strip HTML tags and normalize whitespace for meta descriptions.
