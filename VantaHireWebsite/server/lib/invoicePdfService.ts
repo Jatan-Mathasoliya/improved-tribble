@@ -188,6 +188,22 @@ export async function generateInvoicePdf(invoiceData: InvoiceData): Promise<stri
       }
       if (invoiceData.paymentId) {
         doc.text(`Transaction ID: ${invoiceData.paymentId}`, 50, y);
+        y += 15;
+      }
+    }
+
+    if (invoiceData.notes.length > 0) {
+      y += 25;
+      doc
+        .font('Helvetica-Bold')
+        .fontSize(10)
+        .text('Credit Impact:', 50, y)
+        .font('Helvetica');
+      y += 18;
+
+      for (const note of invoiceData.notes) {
+        doc.text(`• ${note}`, 60, y, { width: 470 });
+        y += 18;
       }
     }
 

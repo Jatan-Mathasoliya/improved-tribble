@@ -59,6 +59,7 @@ export interface InvoiceData {
   paymentMethod: string | null;
   paymentId: string | null;
   transactionId: number;
+  notes: string[];
 }
 
 // Generate invoice number
@@ -202,15 +203,30 @@ export async function generateInvoiceData(transactionId: number): Promise<Invoic
 
   if (transaction.type === 'seat_addition') {
     const seats = (transaction.metadata as any)?.additionalSeats || 1;
+    const proratedCredits = (transaction.metadata as any)?.proratedCredits || 0;
     description = `Additional seats - ${seats} seat(s) (Prorated)`;
+    if (proratedCredits > 0) {
+      description += ` (+${proratedCredits} included AI credits this cycle)`;
+    }
   }
 
+  const notes: string[] = [];
   if (transaction.type === 'credit_pack') {
     const packQuantity = (transaction.metadata as any)?.quantity || 1;
     const credits = (transaction.metadata as any)?.credits || 0;
-    description = `Extra AI credit packs - ${packQuantity} pack(s) (${credits} credits)`;
+    description = `Extra AI credit packs - ${packQuantity} pack(s) (${credits} credits added)`;
     quantity = packQuantity;
     unitPrice = Math.round(transaction.amount / packQuantity);
+    notes.push(`${credits} purchased AI credits were added to the shared organization credit pool.`);
+    notes.push(`Included monthly credits are consumed before purchased credits.`);
+  }
+
+  if (transaction.type === 'seat_addition') {
+    const proratedCredits = (transaction.metadata as any)?.proratedCredits || 0;
+    if (proratedCredits > 0) {
+      notes.push(`${proratedCredits} prorated included AI credits were added to the shared organization pool for the current monthly credit cycle.`);
+    }
+    notes.push(`Future monthly credit allocations will use the new paid seat count.`);
   }
 
   const lineItems: InvoiceLineItem[] = [{
@@ -258,6 +274,7 @@ export async function generateInvoiceData(transactionId: number): Promise<Invoic
     paymentMethod: transaction.cashfreePaymentMethod,
     paymentId: transaction.cashfreePaymentId,
     transactionId: transaction.id,
+    notes,
   };
 }
 

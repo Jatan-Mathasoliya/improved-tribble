@@ -1029,7 +1029,7 @@ export function registerSubscriptionRoutes(
         return;
       }
 
-      // Store pending change in featureOverrides (will be applied at renewal)
+      // Store pending change in featureOverrides (applies at the next paid term boundary)
       await db.update(organizationSubscriptions)
         .set({
           featureOverrides: {

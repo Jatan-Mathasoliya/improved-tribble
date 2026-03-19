@@ -785,7 +785,7 @@ export async function hasEnoughCredits(userId: number, requiredAmount: number): 
   return balance.remaining >= requiredAmount;
 }
 
-// Compatibility wrapper: member-level allocation is gone, so this just ensures the org balance exists
+// Compatibility wrapper for legacy callers: credits are org-shared now, so this only ensures the org balance exists
 export async function allocateCreditsToMember(
   memberId: number,
   _amount: number,

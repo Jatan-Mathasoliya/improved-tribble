@@ -497,7 +497,7 @@ async function handlePaymentFailure(
   }
 }
 
-// Handle subscription renewal
+// Handle paid-term extension from a provider-side renewal event
 async function handleSubscriptionRenewal(
   subscriptionId: string,
   status: string
@@ -515,7 +515,7 @@ async function handleSubscriptionRenewal(
   if (status === 'ACTIVE') {
     const renewed = await renewSubscription(subscription.id);
     await clearPaymentFailure(subscription.id);
-    console.log(`Subscription ${subscription.id} renewed`);
+    console.log(`Subscription ${subscription.id} paid term extended`);
 
     const emailService = await getEmailService();
     if (emailService) {
@@ -525,15 +525,15 @@ async function handleSubscriptionRenewal(
         const renewalDate = renewed.currentPeriodEnd
           ? new Date(renewed.currentPeriodEnd).toLocaleDateString()
           : '';
-        const subject = `Subscription renewed - ${contact.organizationName}`;
+        const subject = `Paid term extended - ${contact.organizationName}`;
         const html = `
-          <h2>Subscription Renewed</h2>
+          <h2>Paid Term Extended</h2>
           <p>Hello${contact.billingName ? ` ${contact.billingName}` : ''},</p>
-          <p>Your subscription for <strong>${contact.organizationName}</strong> has been renewed.</p>
-          ${renewalDate ? `<p>Next renewal date: ${renewalDate}</p>` : ''}
+          <p>Your paid term for <strong>${contact.organizationName}</strong> has been extended.</p>
+          ${renewalDate ? `<p>Next paid term end date: ${renewalDate}</p>` : ''}
           <p>Manage billing here: <a href="${baseUrl}/org/billing">${baseUrl}/org/billing</a></p>
         `;
-        const text = `Subscription renewed for ${contact.organizationName}.${renewalDate ? ` Next renewal date: ${renewalDate}.` : ''}\n\nManage billing: ${baseUrl}/org/billing`;
+        const text = `Paid term extended for ${contact.organizationName}.${renewalDate ? ` Next paid term end date: ${renewalDate}.` : ''}\n\nManage billing: ${baseUrl}/org/billing`;
         await emailService.sendEmail({
           to: contact.billingEmail,
           subject,
