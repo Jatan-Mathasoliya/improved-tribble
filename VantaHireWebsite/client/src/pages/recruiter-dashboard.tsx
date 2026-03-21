@@ -16,10 +16,9 @@ import { useAiCreditExhaustionToast } from "@/hooks/use-ai-credit-exhaustion";
 import { apiRequest } from "@/lib/queryClient";
 import { Mail, Send, Loader2 } from "lucide-react";
 import { RecruiterKpiRibbon } from "@/components/recruiter/RecruiterKpiRibbon";
-import { PipelineActionChecklist } from "@/components/recruiter/PipelineActionChecklist";
+import { RecruiterActionsBoard } from "@/components/recruiter/RecruiterActionsBoard";
 import { AiPipelineSummary } from "@/components/recruiter/AiPipelineSummary";
 import { ProfileCompletionBanner } from "@/components/ProfileCompletionBanner";
-import type { PipelineData } from "@/lib/pipeline-types";
 import { useSubscription } from "@/hooks/use-subscription";
 // Extended types for API responses with relations
 type ApplicationWithJob = Application & {
@@ -29,54 +28,14 @@ type ApplicationWithJob = Application & {
 type JobWithCounts = Job & {
   company?: string;
   applicationCount?: number;
+  clientName?: string | null;
 };
 
-type HiringMetrics = {
-  timeToFill: {
-    overall: number | null;
-    byJob: Array<{
-      jobId: number;
-      jobTitle: string;
-      averageDays: number;
-      hiredCount: number;
-      oldestHireDate: string | null;
-      newestHireDate: string | null;
-    }>;
-  };
-  timeInStage: Array<{
-    stageId: number;
-    stageName: string;
-    stageOrder: number;
-    averageDays: number;
-    transitionCount: number;
-    minDays: number;
-    maxDays: number;
-  }>;
-  totalApplications: number;
-  totalHires: number;
-  conversionRate: number;
-};
-
-type JobHealth = {
+type RecruiterJobHealth = {
   jobId: number;
   jobTitle: string;
-  isActive: boolean;
   status: "green" | "amber" | "red";
   reason: string;
-  totalApplications: number;
-  daysSincePosted: number;
-  daysSinceLastApplication: number | null;
-  conversionRate: number;
-};
-
-type AnalyticsNudges = {
-  jobsNeedingAttention: JobHealth[];
-  staleCandidates: Array<{
-    jobId: number;
-    jobTitle: string;
-    count: number;
-    oldestStaleDays: number;
-  }>;
 };
 
 type DashboardAiInsights = {
@@ -91,6 +50,26 @@ const RANGE_PRESETS: Record<string, number> = {
   "30d": 30,
   "90d": 90,
 };
+
+function isClosedStageStatus(status: string, stageName = ""): boolean {
+  return (
+    status === "rejected" ||
+    status === "hired" ||
+    stageName.includes("rejected") ||
+    stageName.includes("hired")
+  );
+}
+
+function firstRecruiterActionAt(app: ApplicationWithJob): Date | null {
+  const appliedAtMs = new Date(app.appliedAt).getTime();
+  const candidates = [app.lastViewedAt, app.downloadedAt, app.stageChangedAt]
+    .filter((value): value is NonNullable<typeof value> => value != null)
+    .map((value) => new Date(value))
+    .filter((value) => !Number.isNaN(value.getTime()) && value.getTime() >= appliedAtMs)
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  return candidates[0] ?? null;
+}
 
 export default function RecruiterDashboard() {
   const { toast } = useToast();
@@ -148,40 +127,6 @@ export default function RecruiterDashboard() {
     queryKey: ["/api/pipeline/stages"],
   });
 
-  const { data: hiringMetrics } = useQuery<HiringMetrics>({
-    queryKey: ["/api/analytics/hiring-metrics", rangePreset, selectedJobId],
-    queryFn: async () => {
-      const params = new URLSearchParams();
-      const days = RANGE_PRESETS[rangePreset] ?? 30;
-      const end = new Date();
-      const start = new Date(end.getTime() - days * 24 * 60 * 60 * 1000);
-      params.set("startDate", start.toISOString());
-      params.set("endDate", end.toISOString());
-      if (selectedJobId !== "all") params.set("jobId", String(selectedJobId));
-      const res = await fetch(`/api/analytics/hiring-metrics?${params.toString()}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch hiring metrics");
-      return res.json();
-    },
-  });
-
-  const { data: jobHealth = [] } = useQuery<JobHealth[]>({
-    queryKey: ["/api/analytics/job-health"],
-    queryFn: async () => {
-      const res = await fetch("/api/analytics/job-health", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch job health");
-      return res.json();
-    },
-  });
-
-  const { data: nudges } = useQuery<AnalyticsNudges>({
-    queryKey: ["/api/analytics/nudges"],
-    queryFn: async () => {
-      const res = await fetch("/api/analytics/nudges", { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch analytics nudges");
-      return res.json();
-    },
-  });
-
   const days = RANGE_PRESETS[rangePreset] ?? 30;
   const dateEnd = useMemo(() => new Date(), [rangePreset]);
   const dateStart = useMemo(() => {
@@ -195,97 +140,55 @@ export default function RecruiterDashboard() {
     return jobs.filter((job) => job.id === selectedJobId);
   }, [jobs, selectedJobId]);
 
+  const currentApplications = useMemo(() => {
+    return applications.filter((app) =>
+      selectedJobId === "all" ? true : app.jobId === selectedJobId,
+    );
+  }, [applications, selectedJobId]);
+
   const filteredApplications = useMemo(() => {
-    return applications.filter((app) => {
+    return currentApplications.filter((app) => {
       const appliedAt = new Date(app.appliedAt);
-      const withinRange = appliedAt >= dateStart && appliedAt <= dateEnd;
-      const matchesJob = selectedJobId === "all" ? true : app.jobId === selectedJobId;
-      return withinRange && matchesJob;
+      return appliedAt >= dateStart && appliedAt <= dateEnd;
     });
-  }, [applications, dateStart, dateEnd, selectedJobId]);
+  }, [currentApplications, dateStart, dateEnd]);
 
-  type DropoffResponse = {
-    stages: Array<{ stageId: number; name: string; order: number; count: number }>;
-    unassigned: number;
-    conversions: Array<{ name: string; count: number; rate: number }>;
-  };
-
-type HmFeedbackResponse = {
-  averageDays: number | null;
-  waitingCount: number;
-  sampleSize: number;
-};
-
-  const commonParams = useMemo(() => {
-    const params = new URLSearchParams();
-    params.set("startDate", dateStart.toISOString());
-    params.set("endDate", dateEnd.toISOString());
-    if (selectedJobId !== "all") params.set("jobId", String(selectedJobId));
-    return params.toString();
-  }, [dateStart, dateEnd, selectedJobId]);
-
-  const { data: dropoffData } = useQuery<DropoffResponse>({
-    queryKey: ["/api/analytics/dropoff", commonParams],
-    queryFn: async () => {
-      const res = await fetch(`/api/analytics/dropoff?${commonParams}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch dropoff analytics");
-      return res.json();
-    },
-  });
-
-  // Derive default review/next stages for HM feedback analytics
-  const reviewStageIds = useMemo(
+  const stageNameById = useMemo(
     () =>
-      pipelineStages
-        .filter((s) => s.name.toLowerCase().includes("review"))
-        .map((s) => s.id),
-    [pipelineStages]
+      new Map(
+        pipelineStages.map((stage) => [stage.id, stage.name.toLowerCase()]),
+      ),
+    [pipelineStages],
   );
-  const nextStageIds = useMemo(
+
+  const stageById = useMemo(
+    () => new Map(pipelineStages.map((stage) => [stage.id, stage])),
+    [pipelineStages],
+  );
+
+  const activeFilteredJobs = useMemo(
+    () => filteredJobs.filter((job) => job.isActive),
+    [filteredJobs],
+  );
+
+  const currentActivePipelineApplications = useMemo(
     () =>
-      pipelineStages
-        .filter((s) => {
-          const name = s.name.toLowerCase();
-          return name.includes("interview") || name.includes("offer");
-        })
-        .map((s) => s.id),
-    [pipelineStages]
+      currentApplications.filter((app) => {
+        const stageName = stageNameById.get(app.currentStage ?? -1) ?? "";
+        return !isClosedStageStatus(app.status, stageName);
+      }),
+    [currentApplications, stageNameById],
   );
-  const { data: hmFeedback } = useQuery<HmFeedbackResponse>({
-    queryKey: ["/api/analytics/hm-feedback", commonParams, reviewStageIds, nextStageIds],
-    queryFn: async () => {
-      const params = new URLSearchParams(commonParams);
-      if (reviewStageIds.length) {
-        reviewStageIds.forEach((id) => params.append("reviewStageIds", String(id)));
-      }
-      if (nextStageIds.length) {
-        nextStageIds.forEach((id) => params.append("nextStageIds", String(id)));
-      }
-      const res = await fetch(`/api/analytics/hm-feedback?${params.toString()}`, { credentials: "include" });
-      if (!res.ok) throw new Error("Failed to fetch HM feedback timing");
-      return res.json();
-    },
-  });
 
   const stats = useMemo(() => {
     const totalJobs = filteredJobs.length;
-    const activeJobs = filteredJobs.filter((job) => job.isActive).length;
-    const totalApplications = filteredApplications.length;
-    const totalHires =
-      hiringMetrics?.totalHires ??
-      filteredApplications.filter(
-        (app) =>
-          app.status === "hired" ||
-          pipelineStages.find((s) => s.id === app.currentStage)?.name?.toLowerCase().includes("hire")
-      ).length;
-    const conversionRate =
-      totalApplications > 0 ? Math.round((totalHires / totalApplications) * 1000) / 10 : 0;
-    const avgTimeToFill = hiringMetrics?.timeToFill.overall ?? null;
-    const hmFeedbackStage = hiringMetrics?.timeInStage.find((stage) =>
-      stage.stageName.toLowerCase().includes("review")
-    );
-    const hmFeedbackTime = hmFeedback?.averageDays ?? hmFeedbackStage?.averageDays ?? null;
-    const newToday = filteredApplications.filter((app) => {
+    const activeJobs = activeFilteredJobs.length;
+    const totalApplications = currentApplications.length;
+    const totalHires = filteredApplications.filter((app) => {
+      const stageName = stageNameById.get(app.currentStage ?? -1) ?? "";
+      return app.status === "hired" || stageName.includes("hired");
+    }).length;
+    const newToday = currentApplications.filter((app) => {
       const applied = new Date(app.appliedAt);
       const today = new Date();
       return applied.toDateString() === today.toDateString();
@@ -293,8 +196,11 @@ type HmFeedbackResponse = {
 
     const firstActionDurations: number[] = [];
     filteredApplications.forEach((app) => {
-      if (app.stageChangedAt) {
-        const delta = (new Date(app.stageChangedAt).getTime() - new Date(app.appliedAt).getTime()) / (1000 * 60 * 60 * 24);
+      const firstActionAt = firstRecruiterActionAt(app);
+      if (firstActionAt) {
+        const delta =
+          (firstActionAt.getTime() - new Date(app.appliedAt).getTime()) /
+          (1000 * 60 * 60 * 24);
         if (delta >= 0) firstActionDurations.push(delta);
       }
     });
@@ -302,41 +208,37 @@ type HmFeedbackResponse = {
       ? Math.round((firstActionDurations.reduce((a, b) => a + b, 0) / firstActionDurations.length) * 10) / 10
       : null;
 
-    let interviewConv = 0;
-    if (dropoffData?.conversions?.length) {
-      const interviewStep = dropoffData.conversions.find((c) => c.name.toLowerCase().includes("interview"));
-      if (interviewStep) interviewConv = interviewStep.rate;
-    } else {
-      const screeningIds = pipelineStages.filter((s) => s.name.toLowerCase().includes("screen")).map((s) => s.id);
-      const interviewIds = pipelineStages.filter((s) => s.name.toLowerCase().includes("interview")).map((s) => s.id);
-      const screeningCount = filteredApplications.filter((a) => a.currentStage && screeningIds.includes(a.currentStage)).length;
-      const interviewCount = filteredApplications.filter((a) => a.currentStage && interviewIds.includes(a.currentStage)).length;
-      interviewConv = screeningCount > 0 ? Math.round((interviewCount / screeningCount) * 1000) / 10 : 0;
-    }
+    const sortedStages = [...pipelineStages].sort((a, b) => (a.order - b.order) || (a.id - b.id));
+    const screeningStage = sortedStages.find((stage) => stage.name.toLowerCase().includes("screen"));
+    const interviewStage = sortedStages.find((stage) => stage.name.toLowerCase().includes("interview"));
+    const screeningOrder = screeningStage?.order ?? null;
+    const interviewOrder = interviewStage?.order ?? null;
+
+    const screeningCount = filteredApplications.filter((app) => {
+      if (app.currentStage == null || screeningOrder == null) return false;
+      const stage = stageById.get(app.currentStage);
+      if (!stage) return false;
+      return (stage.order ?? -1) >= screeningOrder;
+    }).length;
+    const interviewCount = filteredApplications.filter((app) => {
+      if (app.currentStage == null || interviewOrder == null) return false;
+      const stage = stageById.get(app.currentStage);
+      if (!stage) return false;
+      return (stage.order ?? -1) >= interviewOrder;
+    }).length;
+    const interviewConv =
+      screeningCount > 0 ? Math.round((interviewCount / screeningCount) * 1000) / 10 : 0;
 
     return {
       totalJobs,
       activeJobs,
       totalApplications,
       totalHires,
-      conversionRate,
-      avgTimeToFill,
-      hmFeedbackTime,
       newToday,
       avgFirstReview,
       interviewConv,
     };
-  }, [filteredJobs, filteredApplications, hiringMetrics, pipelineStages, hmFeedback, dropoffData]);
-
-  const pipelineHealthScore = useMemo(() => {
-    // No jobs = no data to show, indicate empty state
-    if (!jobHealth.length) return { score: 0, tag: "No data", isEmpty: true };
-    const weight = { green: 95, amber: 68, red: 40 };
-    const avg =
-      jobHealth.reduce((sum, j) => sum + (weight[j.status] ?? 70), 0) / jobHealth.length;
-    const tag = avg >= 80 ? "Healthy" : avg >= 60 ? "Stable" : "At risk";
-    return { score: Math.round(avg), tag, isEmpty: false };
-  }, [jobHealth]);
+  }, [filteredJobs, activeFilteredJobs, currentApplications, filteredApplications, pipelineStages, stageById, stageNameById]);
 
   const timeSeriesData = useMemo(() => {
     const buckets: Record<string, number> = {};
@@ -356,24 +258,6 @@ type HmFeedbackResponse = {
   }, [filteredApplications, dateStart, dateEnd]);
 
   const funnelData = useMemo(() => {
-    if (dropoffData) {
-      const stageColorMap = new Map(pipelineStages.map((s) => [s.id, s.color]));
-      const sorted = [...dropoffData.stages].sort((a, b) => (a.order - b.order) || (a.stageId - b.stageId));
-      const unassigned = dropoffData.unassigned
-        ? [{ name: "Unassigned", count: dropoffData.unassigned, color: "#94a3b8", order: -1 }]
-        : [];
-      return [
-        ...unassigned,
-        ...sorted.map((s) => ({
-          name: s.name,
-          count: s.count,
-          color: stageColorMap.get(s.stageId) || "#64748b",
-          order: s.order,
-          stageId: s.stageId,
-        })),
-      ];
-    }
-    // Fallback to client-side derivation
     const counts: Record<string, number> = {};
     filteredApplications.forEach((app) => {
       const key = app.currentStage ? String(app.currentStage) : "unassigned";
@@ -391,15 +275,9 @@ type HmFeedbackResponse = {
       ? [{ name: "Unassigned", count: counts["unassigned"], color: "#94a3b8", order: -1 }]
       : [];
     return [...unassigned, ...mapped];
-  }, [dropoffData, filteredApplications, pipelineStages]);
+  }, [filteredApplications, pipelineStages]);
 
   const dropoffInsights = useMemo(() => {
-    if (dropoffData?.conversions) {
-      const weakest = [...dropoffData.conversions]
-        .filter((c) => c.rate !== 100)
-        .sort((a, b) => a.rate - b.rate)[0];
-      return { conversions: dropoffData.conversions, weakest };
-    }
     const sortedStages = [...pipelineStages].sort((a, b) => (a.order - b.order) || (a.id - b.id));
     const counts = sortedStages.map((stage) => ({
       name: stage.name,
@@ -415,71 +293,102 @@ type HmFeedbackResponse = {
       .filter((c) => c.name && c.rate !== 100)
       .sort((a, b) => a.rate - b.rate)[0];
     return { conversions, weakest: lowest };
-  }, [dropoffData, filteredApplications, pipelineStages]);
-
-  const jobsNeedingAttention = useMemo(() => {
-    if (nudges?.jobsNeedingAttention?.length) {
-      return [...nudges.jobsNeedingAttention].sort((a, b) => {
-        const weight = { red: 2, amber: 1, green: 0 } as const;
-        return (weight[b.status] ?? 0) - (weight[a.status] ?? 0);
-      });
-    }
-    return [...jobHealth].sort((a, b) => (a.status === "red" ? -1 : b.status === "red" ? 1 : 0));
-  }, [nudges, jobHealth]);
-
-  const jdSuggestions = useMemo(() => {
-    const suggestions: Array<{
-      jobId: number;
-      title: string;
-      score: string;
-      tips: string[];
-    }> = [];
-    filteredJobs.forEach((job) => {
-      const tips: string[] = [];
-      const descriptionLength = job.description?.length || 0;
-      if (!job.location) tips.push("Add a location or remote policy to increase clarity.");
-      if (descriptionLength < 400) tips.push("Expand responsibilities and success criteria (JD is very short).");
-      if ((job.skills || []).length < 3) tips.push("List 3–5 must-have skills to improve screening.");
-      if (descriptionLength > 2000) tips.push("Break long paragraphs into bullets for readability.");
-      if (tips.length > 0) {
-        const score = tips.length >= 3 ? "Needs improvement" : "Moderate";
-        suggestions.push({ jobId: job.id, title: job.title, score, tips });
-      }
-    });
-    return suggestions;
-  }, [filteredJobs]);
-
-  const aiSummaryText = useMemo(() => {
-    const amber = jobHealth.filter((j) => j.status === "amber").length;
-    const red = jobHealth.filter((j) => j.status === "red").length;
-    const weakestDrop = dropoffInsights.weakest;
-    if (red > 0) {
-      return `Pipeline risk: ${red} job(s) are red and need movement. ${
-        weakestDrop ? `${weakestDrop.name} conversion is ${weakestDrop.rate}%` : ""
-      }`;
-    }
-    if (amber > 0) {
-      return `Stable but watchlist: ${amber} job(s) flagged. ${
-        weakestDrop ? `${weakestDrop.name} conversion is ${weakestDrop.rate}%` : ""
-      }`;
-    }
-    return weakestDrop
-      ? `Pipeline is healthy. Watch ${weakestDrop.name} conversion (${weakestDrop.rate}%).`
-      : "Pipeline is healthy. No major bottlenecks detected.";
-  }, [jobHealth, dropoffInsights]);
+  }, [filteredApplications, pipelineStages]);
 
   // Derive trends from time-series (compare last 7 days vs previous 7)
   const appsTrend = useMemo(() => {
-    if (timeSeriesData.length < 14) return { trend: "flat" as const, value: "" };
-    const recent = timeSeriesData.slice(-7).reduce((s, d) => s + d.value, 0);
-    const prior = timeSeriesData.slice(-14, -7).reduce((s, d) => s + d.value, 0);
+    if (timeSeriesData.length < 8) return { trend: "flat" as const, value: "" };
+    const today = timeSeriesData[timeSeriesData.length - 1]?.value ?? 0;
+    const prior = timeSeriesData[timeSeriesData.length - 8]?.value ?? 0;
     if (prior === 0) return { trend: "flat" as const, value: "" };
-    const pct = Math.round(((recent - prior) / prior) * 100);
+    const pct = Math.round(((today - prior) / prior) * 100);
     return {
       trend: pct > 5 ? "up" as const : pct < -5 ? "down" as const : "flat" as const,
       value: pct > 0 ? `+${pct}%` : `${pct}%`,
     };
   }, [timeSeriesData]);
+
+  const stageBottlenecks = useMemo(() => {
+    const stuckThresholdDays = 3;
+    const now = new Date().getTime();
+    const bottlenecks: Array<{ stage: string; message: string; actionLabel: string }> = [];
+    pipelineStages.forEach((stage) => {
+      const appsInStage = currentActivePipelineApplications.filter((a) => a.currentStage === stage.id);
+      const stuck = appsInStage.filter((a) => {
+        const referenceTime = a.stageChangedAt ?? a.appliedAt;
+        const days = (now - new Date(referenceTime).getTime()) / (1000 * 60 * 60 * 24);
+        return days >= stuckThresholdDays;
+      });
+      if (stuck.length > 0) {
+        bottlenecks.push({
+          stage: stage.name,
+          message: `${stuck.length} candidate(s) in this stage for > ${stuckThresholdDays} days`,
+          actionLabel: "View candidates",
+        });
+      }
+    });
+    return bottlenecks;
+  }, [pipelineStages, currentActivePipelineApplications]);
+
+  const jobsNeedingAttention = useMemo<RecruiterJobHealth[]>(() => {
+    const attention = activeFilteredJobs.map((job) => {
+      const jobApplications = currentActivePipelineApplications.filter((app) => app.jobId === job.id);
+      const rangeApplications = filteredApplications.filter((app) => app.jobId === job.id);
+      const activeCount = jobApplications.length;
+      const staleCount = jobApplications.filter((app) => {
+        const referenceTime = app.stageChangedAt ?? app.appliedAt;
+        const waitDays =
+          (Date.now() - new Date(referenceTime).getTime()) / (1000 * 60 * 60 * 24);
+        return waitDays >= 5;
+      }).length;
+
+      let status: RecruiterJobHealth["status"] = "green";
+      const reasons: string[] = [];
+
+      if (activeCount === 0) {
+        status = "red";
+        reasons.push("No active candidates left");
+      } else if (activeCount < 3) {
+        status = "amber";
+        reasons.push(`Only ${activeCount} active candidate${activeCount === 1 ? "" : "s"} left`);
+      }
+
+      if (staleCount >= 3) {
+        status = "red";
+        reasons.push(`${staleCount} candidates stalled in stage`);
+      } else if (staleCount > 0 && status === "green") {
+        status = "amber";
+        reasons.push(`${staleCount} candidate${staleCount === 1 ? "" : "s"} need movement`);
+      }
+
+      if (rangeApplications.length === 0 && status !== "red") {
+        status = "amber";
+        reasons.push(`No new applicants in last ${days}d`);
+      }
+
+      return {
+        jobId: job.id,
+        jobTitle: job.title,
+        status,
+        reason: reasons[0] ?? "Healthy pipeline",
+      };
+    });
+
+    return attention.sort((a, b) => {
+      const weight = { red: 2, amber: 1, green: 0 } as const;
+      return (weight[b.status] ?? 0) - (weight[a.status] ?? 0);
+    });
+  }, [activeFilteredJobs, currentActivePipelineApplications, filteredApplications, days]);
+
+  const pipelineHealthScore = useMemo(() => {
+    if (!activeFilteredJobs.length) return { score: 0, tag: "No data", isEmpty: true };
+    const weight = { green: 95, amber: 68, red: 38 };
+    const avg =
+      jobsNeedingAttention.reduce((sum, job) => sum + (weight[job.status] ?? 70), 0) /
+      jobsNeedingAttention.length;
+    const tag = avg >= 80 ? "Healthy" : avg >= 60 ? "Stable" : "At risk";
+    return { score: Math.round(avg), tag, isEmpty: false };
+  }, [activeFilteredJobs.length, jobsNeedingAttention]);
 
   const kpiItems = useMemo(
     () => [
@@ -499,7 +408,7 @@ type HmFeedbackResponse = {
         value: stats.newToday ?? 0,
         trend: appsTrend.trend,
         trendValue: appsTrend.value || undefined,
-        secondary: "vs last week",
+        secondary: "vs same day last week",
       },
       {
         label: "First Review",
@@ -517,188 +426,55 @@ type HmFeedbackResponse = {
     [stats, pipelineHealthScore, appsTrend]
   );
 
-  const stageBottlenecks = useMemo(() => {
-    const stuckThresholdDays = 3;
-    const now = new Date().getTime();
-    const bottlenecks: Array<{ stage: string; message: string; actionLabel: string }> = [];
-    pipelineStages.forEach((stage) => {
-      const appsInStage = filteredApplications.filter((a) => a.currentStage === stage.id);
-      const stuck = appsInStage.filter((a) => {
-        if (!a.stageChangedAt) return false;
-        const days = (now - new Date(a.stageChangedAt).getTime()) / (1000 * 60 * 60 * 24);
-        return days >= stuckThresholdDays;
-      });
-      if (stuck.length > 0) {
-        bottlenecks.push({
-          stage: stage.name,
-          message: `${stuck.length} candidate(s) in this stage for > ${stuckThresholdDays} days`,
-          actionLabel: "View candidates",
-        });
-      }
-    });
-    return bottlenecks;
-  }, [pipelineStages, filteredApplications]);
-
   const dropoffSteps = useMemo(() => {
-    if (dropoffData?.conversions?.length) {
-      return dropoffData.conversions.map((c) => ({
-        name: c.name,
-        count: dropoffData.stages.find((s) => s.name === c.name)?.count ?? c.count,
-        rate: c.rate,
-      }));
-    }
     return dropoffInsights.conversions.map((c) => ({
       name: c.name,
       count: c.count,
       rate: c.rate,
     }));
-  }, [dropoffData, dropoffInsights]);
+  }, [dropoffInsights]);
 
-  const dropoffSummary = useMemo(() => {
-    const weakest = dropoffInsights.weakest || dropoffData?.conversions?.find((c) => c.rate === Math.min(...(dropoffData?.conversions.map((x) => x.rate) || [0])));
-    if (weakest) {
-      return `Conversion into ${weakest.name} is ${weakest.rate}%. Consider nudging candidates or refining screening.`;
-    }
-    return "Pipeline is steady. No major drop-offs detected.";
-  }, [dropoffInsights, dropoffData]);
+  const timeInStageSnapshot = useMemo(
+    () =>
+      pipelineStages
+        .map((stage) => {
+          const appsInStage = currentActivePipelineApplications.filter((app) => app.currentStage === stage.id);
+          if (appsInStage.length === 0) return null;
+          const averageDays =
+            appsInStage.reduce((sum, app) => {
+              const referenceTime = app.stageChangedAt ?? app.appliedAt;
+              return sum + ((Date.now() - new Date(referenceTime).getTime()) / (1000 * 60 * 60 * 24));
+            }, 0) / appsInStage.length;
 
-  // Transform data for PipelineActionChecklist
-  const actionChecklistData: PipelineData = useMemo(() => {
-    const now = new Date().getTime();
-    const stuckThresholdDays = 3;
-
-    // Calculate stuck candidates by stage with max days
-    const stuckByStage: PipelineData["stuckByStage"] = {};
-    pipelineStages.forEach((stage) => {
-      const appsInStage = filteredApplications.filter((a) => a.currentStage === stage.id);
-      let maxDays = 0;
-      let count = 0;
-      appsInStage.forEach((a) => {
-        if (a.stageChangedAt) {
-          const days = (now - new Date(a.stageChangedAt).getTime()) / (1000 * 60 * 60 * 24);
-          if (days >= stuckThresholdDays) {
-            count++;
-            maxDays = Math.max(maxDays, Math.floor(days));
-          }
-        }
-      });
-      if (count > 0) {
-        stuckByStage[stage.id] = { count, maxDays, stageName: stage.name };
-      }
-    });
-
-    // Unreviewed applications (applied stage, no action yet)
-    const appliedStage = pipelineStages.find((s) => s.name.toLowerCase() === "applied");
-    const unreviewedApps = appliedStage
-      ? filteredApplications.filter((a) => a.currentStage === appliedStage.id)
-      : [];
-    let oldestUnreviewedHours = 0;
-    unreviewedApps.forEach((a) => {
-      const hours = (now - new Date(a.appliedAt).getTime()) / (1000 * 60 * 60);
-      oldestUnreviewedHours = Math.max(oldestUnreviewedHours, hours);
-    });
-
-    // Pending offers - candidates in "Offer Extended" stage
-    const offerStage = pipelineStages.find(
-      (s) => s.name.toLowerCase().includes("offer") && !s.name.toLowerCase().includes("reject")
-    );
-    const pendingOffers: PipelineData["pendingOffers"] = [];
-    if (offerStage) {
-      filteredApplications
-        .filter((a) => a.currentStage === offerStage.id)
-        .forEach((a) => {
-          if (a.stageChangedAt) {
-            const daysSinceSent = Math.floor(
-              (now - new Date(a.stageChangedAt).getTime()) / (1000 * 60 * 60 * 24)
-            );
-            pendingOffers.push({
-              applicationId: a.id,
-              candidateName: a.name || `Candidate #${a.id}`,
-              daysSinceSent,
-            });
-          }
-        });
-    }
-
-    // Shortlisted but no interview scheduled
-    const screeningStage = pipelineStages.find((s) => s.name.toLowerCase().includes("screen"));
-    const shortlistedNoInterview = screeningStage
-      ? filteredApplications.filter(
-          (a) => a.currentStage === screeningStage.id && a.status === "shortlisted"
-        ).length
-      : 0;
-
-    // Jobs with low pipeline (< 3 active candidates)
-    const jobsWithLowPipeline: PipelineData["jobsWithLowPipeline"] = [];
-    filteredJobs.forEach((job) => {
-      if (!job.isActive) return;
-      const activeApps = filteredApplications.filter(
-        (a) => a.jobId === job.id && a.status !== "rejected" && a.status !== "hired"
-      );
-      if (activeApps.length < 3) {
-        jobsWithLowPipeline.push({
-          jobId: job.id,
-          title: job.title,
-          activeCount: activeApps.length,
-        });
-      }
-    });
-
-    // JD quality issues (reuse jdSuggestions)
-    const jdIssues: PipelineData["jdIssues"] = jdSuggestions.map((j) => ({
-      jobId: j.jobId,
-      title: j.title,
-      issue: j.tips[0] || "Needs improvement",
-    }));
-
-    // Stale jobs (no activity > 30 days)
-    const staleJobs: PipelineData["staleJobs"] = [];
-    filteredJobs.forEach((job) => {
-      if (!job.isActive) return;
-      const jobApps = filteredApplications.filter((a) => a.jobId === job.id);
-      let lastActivity = new Date(job.createdAt || now).getTime();
-      jobApps.forEach((a) => {
-        const appDate = new Date(a.appliedAt).getTime();
-        const stageDate = a.stageChangedAt ? new Date(a.stageChangedAt).getTime() : 0;
-        lastActivity = Math.max(lastActivity, appDate, stageDate);
-      });
-      const daysSinceActivity = Math.floor((now - lastActivity) / (1000 * 60 * 60 * 24));
-      if (daysSinceActivity >= 30) {
-        staleJobs.push({ jobId: job.id, title: job.title, daysSinceActivity });
-      }
-    });
-
-    return {
-      stuckByStage,
-      unreviewedCount: unreviewedApps.length,
-      oldestUnreviewedHours,
-      pendingOffers,
-      shortlistedNoInterview,
-      jobsWithLowPipeline,
-      jdIssues,
-      staleJobs,
-      candidatesNeedingUpdate: 0, // Would require email tracking to implement
-    };
-  }, [filteredApplications, filteredJobs, pipelineStages, jdSuggestions]);
+          return {
+            stageName: stage.name,
+            averageDays: Math.round(averageDays * 10) / 10,
+          };
+        })
+        .filter((value): value is { stageName: string; averageDays: number } => value !== null),
+    [pipelineStages, currentActivePipelineApplications],
+  );
 
   // Batched AI insights - one call per day, cached server-side
   const aiPayload = useMemo(() => {
-    if (!pipelineHealthScore || !jobsNeedingAttention.length) return null;
+    if (!filteredJobs.length) return null;
     return {
       pipelineHealthScore,
       timeRangeLabel: `Last ${RANGE_PRESETS[rangePreset]} days`,
       applicationsOverTime: timeSeriesData.slice(-14),
       stageDistribution: funnelData.map((f) => ({ name: f.name, count: f.count })),
       dropoff: dropoffSteps,
-      timeInStage: hiringMetrics?.timeInStage?.map((t) => ({ stageName: t.stageName, averageDays: t.averageDays })) || [],
-      jobsNeedingAttention: jobsNeedingAttention.map((job) => ({
+      timeInStage: timeInStageSnapshot,
+      jobsNeedingAttention: jobsNeedingAttention
+        .filter((job) => job.status !== "green")
+        .map((job) => ({
         jobId: job.jobId,
         title: job.jobTitle,
         severity: job.status === "red" ? "high" as const : job.status === "amber" ? "medium" as const : "low" as const,
         reason: job.reason || "Needs movement",
       })),
     };
-  }, [pipelineHealthScore, rangePreset, timeSeriesData, funnelData, dropoffSteps, hiringMetrics, jobsNeedingAttention]);
+  }, [filteredJobs.length, pipelineHealthScore, rangePreset, timeSeriesData, funnelData, dropoffSteps, timeInStageSnapshot, jobsNeedingAttention]);
 
   const { data: aiInsights, isLoading: aiLoading, error: aiInsightsError } = useQuery<DashboardAiInsights>({
     queryKey: ["/api/ai/dashboard-insights", aiPayload],
@@ -875,10 +651,7 @@ type HmFeedbackResponse = {
             />
           </div>
           <div data-tour="pipeline-checklist">
-            <PipelineActionChecklist
-              pipelineData={actionChecklistData}
-              pipelineHealthScore={pipelineHealthScore}
-            />
+            <RecruiterActionsBoard />
           </div>
         </div>
       </div>

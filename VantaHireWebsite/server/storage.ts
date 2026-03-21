@@ -1740,6 +1740,9 @@ export class DatabaseStorage implements IStorage {
         downloadedAt: applications.downloadedAt,
         appliedAt: applications.appliedAt,
         updatedAt: applications.updatedAt,
+        interviewDate: applications.interviewDate,
+        interviewTime: applications.interviewTime,
+        stageChangedAt: applications.stageChangedAt,
         feedbackCount: sql<number>`COALESCE(COUNT(DISTINCT ${applicationFeedback.id}), 0)`,
         job: {
           id: jobs.id,

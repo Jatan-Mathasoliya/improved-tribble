@@ -510,25 +510,19 @@ export function registerJobsRoutes(
   app.get("/api/my-jobs", requireRole(['recruiter', 'super_admin']), requireSeat({ allowNoOrg: true }), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const user = req.user!;
-
-      // Super admin sees all jobs across all orgs
-      if (user.role === 'super_admin') {
-        const allJobs = await storage.getAllJobsWithDetails();
-        res.json(allJobs);
-        return;
-      }
-
-      // Get user's organization to filter jobs and update activity
       const orgResult = await getUserOrganization(user.id);
-      const organizationId = orgResult?.organization.id ?? null;
+      const organizationId =
+        user.role === 'super_admin' && !orgResult
+          ? undefined
+          : (orgResult?.organization.id ?? null);
 
       // Update member activity
       if (orgResult) {
         await updateMemberActivity(user.id);
       }
 
-      // For recruiters, get jobs they own + are co-recruited on
-      // Only shows jobs from their current organization (enforces data isolation after leaving)
+      // Recruiter-scoped jobs: primary recruiter + co-recruiter assignments.
+      // Super admins with an org stay scoped to that org and their own assignments.
       const userJobs = await storage.getJobsByUser(user.id, organizationId);
 
       res.json(userJobs);
@@ -1011,20 +1005,22 @@ export function registerJobsRoutes(
       if (parsedEnd) whereClauses.push(lte(applications.appliedAt, parsedEnd));
       if (parsedJobId) whereClauses.push(eq(applications.jobId, parsedJobId));
 
-      // Super admin sees all; others must be org owner/admin
+      // Super admin without an org sees all; otherwise scope analytics to the user's org.
       let organizationId: number | undefined;
-      if (req.user!.role !== 'super_admin') {
-        const orgResult = await getUserOrganization(req.user!.id);
-        if (!orgResult) {
+      const orgResult = await getUserOrganization(req.user!.id);
+      if (!orgResult) {
+        if (req.user!.role === 'super_admin') {
+          organizationId = undefined;
+        } else {
           res.status(403).json({ error: 'You must belong to an organization to view analytics' });
           return;
         }
+      } else {
         const { organization, membership } = orgResult;
-        if (membership.role !== 'owner' && membership.role !== 'admin') {
+        if (req.user!.role !== 'super_admin' && membership.role !== 'owner' && membership.role !== 'admin') {
           res.status(403).json({ error: 'Analytics are only available to organization owners and admins' });
           return;
         }
-        // Filter by organization
         organizationId = organization.id;
         whereClauses.push(eq(jobs.organizationId, organization.id));
       }
@@ -1203,19 +1199,21 @@ export function registerJobsRoutes(
       if (parsedEnd) whereClauses.push(lte(applicationStageHistory.changedAt, parsedEnd));
       if (parsedJobId) whereClauses.push(eq(applications.jobId, parsedJobId));
 
-      // Super admin sees all; others must be org owner/admin
-      if (req.user!.role !== 'super_admin') {
-        const orgResult = await getUserOrganization(req.user!.id);
-        if (!orgResult) {
+      // Super admin without an org sees all; otherwise scope analytics to the user's org.
+      const orgResult = await getUserOrganization(req.user!.id);
+      if (!orgResult) {
+        if (req.user!.role === 'super_admin') {
+          organizationId = undefined;
+        } else {
           res.status(403).json({ error: 'You must belong to an organization to view analytics' });
           return;
         }
+      } else {
         const { organization, membership } = orgResult;
-        if (membership.role !== 'owner' && membership.role !== 'admin') {
+        if (req.user!.role !== 'super_admin' && membership.role !== 'owner' && membership.role !== 'admin') {
           res.status(403).json({ error: 'Analytics are only available to organization owners and admins' });
           return;
         }
-        // Filter by organization - owners/admins see all org jobs
         organizationId = organization.id;
         whereClauses.push(eq(jobs.organizationId, organization.id));
       }

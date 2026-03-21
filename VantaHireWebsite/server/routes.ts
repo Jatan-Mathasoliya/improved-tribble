@@ -35,6 +35,7 @@ import { registerCashfreeWebhook } from "./webhooks/cashfree.webhook";
 import { registerSignalWebhook } from "./webhooks/signal.webhook";
 import { registerSignalRoutes } from "./signal.routes";
 import { registerCandidateSemanticRoutes } from "./candidates.semantic.routes";
+import { registerRecruiterDashboardRoutes } from "./recruiterDashboard.routes";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup security middleware with environment-aware CSP
@@ -488,6 +489,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Register candidate semantic search routes (ActiveKG-powered, with CSRF)
   registerCandidateSemanticRoutes(app, doubleCsrfProtection);
+
+  // Register recruiter dashboard action routes
+  registerRecruiterDashboardRoutes(app);
 
   // Register AI matching routes (resume library + fit scoring)
   registerAIRoutes(app);
