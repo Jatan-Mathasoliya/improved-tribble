@@ -69,9 +69,9 @@ export default function ApplicationsPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const stageParam = params.get("stage");
-    if (stageParam) {
-      setStageFilter(stageParam);
-    }
+    const statusParam = params.get("status");
+    setStageFilter(stageParam ?? "all");
+    setStatusFilter(statusParam ?? "all");
   }, [location]);
 
   // Fetch pipeline stages for stage filter

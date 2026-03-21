@@ -77,6 +77,7 @@ export default function ApplicationManagementPage() {
   const [selectedApplications, setSelectedApplications] = useState<number[]>([]);
   const [stageFilter, setStageFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const [deepLinkedApplicationId, setDeepLinkedApplicationId] = useState<number | null>(null);
   const [selectedTab, setSelectedTab] = useState("all");
   const [sortBy, setSortBy] = useState<'date' | 'ai_fit'>('date'); // AI Fit Sorting
   const [actionFilter, setActionFilter] = useState<string[]>([]); // AI Suggested Action Filter
@@ -147,9 +148,9 @@ export default function ApplicationManagementPage() {
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const stageParam = params.get("stage");
-    if (stageParam) {
-      setStageFilter(stageParam);
-    }
+    const applicationIdParam = params.get("applicationId");
+    setStageFilter(stageParam ?? "all");
+    setDeepLinkedApplicationId(applicationIdParam ? Number(applicationIdParam) : null);
   }, [location]);
 
   // Redirect if not recruiter or admin
@@ -791,6 +792,26 @@ export default function ApplicationManagementPage() {
     setSelectedApp(null);
     setSelectedAppResumeText(null);
   };
+
+  useEffect(() => {
+    if (!deepLinkedApplicationId || !applications?.length) {
+      return;
+    }
+
+    const targetApplication = applications.find((app) => app.id === deepLinkedApplicationId);
+    if (!targetApplication) {
+      setDeepLinkedApplicationId(null);
+      return;
+    }
+
+    if (selectedApp?.id === targetApplication.id) {
+      setDeepLinkedApplicationId(null);
+      return;
+    }
+
+    void handleOpenDetails(targetApplication);
+    setDeepLinkedApplicationId(null);
+  }, [applications, deepLinkedApplicationId, selectedApp?.id]);
 
   const handleDragCancel = () => {
     toast({
