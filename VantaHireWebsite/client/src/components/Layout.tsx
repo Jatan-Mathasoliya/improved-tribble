@@ -1,23 +1,15 @@
 import { useLocation, Link } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
-import { useAIFeatures } from "@/hooks/use-ai-features";
 import { useOrganization } from "@/hooks/use-organization";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { Menu, X, User, LogOut, Briefcase, Plus, ChevronDown, BarChart3, Shield, Sparkles, Settings, Building2, Users, CreditCard } from "lucide-react";
-import { useState, useEffect } from "react";
+import { Menu, X, LogOut, Briefcase, Plus } from "lucide-react";
+import { useState, useEffect, type CSSProperties } from "react";
 import Footer from "@/components/Footer";
 import QuickAccessBar from "@/components/QuickAccessBar";
-import type { User as SelectUser } from "@shared/schema";
 import vantahireLogo from "@/assets/vantahire-logo.png";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import AtsSidebar from "@/components/AtsSidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -26,7 +18,6 @@ interface LayoutProps {
 const Layout = ({ children }: LayoutProps) => {
   const [location, setLocation] = useLocation();
   const { user, logoutMutation } = useAuth();
-  const { resumeAdvisor, fitScoring } = useAIFeatures();
   const { data: orgData } = useOrganization();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [scrollPosition, setScrollPosition] = useState(0);
@@ -40,15 +31,13 @@ const Layout = ({ children }: LayoutProps) => {
   const isOrgOwner = orgRole === 'owner';
   const isOrgAdmin = orgRole === 'admin';
   const isOrgOwnerOrAdmin = isOrgOwner || isOrgAdmin;
-  const isCandidate = user?.role === 'candidate';
-  const isHiringManager = user?.role === 'hiring_manager';
   const displayName = user?.firstName || user?.username || 'User';
-  const aiEnabled = resumeAdvisor || fitScoring;
 
   // Get role display label
   const getRoleLabel = (role: string | undefined) => {
     switch (role) {
       case 'admin': return 'Admin';
+      case 'super_admin': return 'Admin';
       case 'recruiter': return 'Recruiter';
       case 'hiring_manager': return 'Hiring Manager';
       case 'candidate': return 'Candidate';
@@ -113,238 +102,59 @@ const Layout = ({ children }: LayoutProps) => {
 
   const isJobsRoute = location.startsWith('/jobs') || location === '/auth';
 
+  if (atsContext) {
+    return (
+      <div className="min-h-screen bg-background text-foreground ats-theme">
+        <SidebarProvider
+          defaultOpen
+          style={
+            {
+              "--sidebar-width": "16.5rem",
+              "--sidebar-width-icon": "4.5rem",
+            } as CSSProperties
+          }
+        >
+          <AtsSidebar
+            location={location}
+            navigate={setLocation}
+            onLogout={handleLogout}
+            user={user}
+            organizationData={orgData}
+            isRecruiter={isRecruiter}
+            isAdmin={isAdmin}
+            isOrgOwner={isOrgOwner}
+            isOrgOwnerOrAdmin={isOrgOwnerOrAdmin}
+            displayName={displayName}
+          />
+
+          <SidebarInset className="min-h-svh bg-background transition-[width] duration-200 ease-linear">
+            <div className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border/70 bg-background/95 px-4 backdrop-blur md:hidden">
+              <SidebarTrigger className="-ml-1" />
+              <div className="flex min-w-0 items-center gap-2">
+                <img src={vantahireLogo} alt="VantaHire" className="h-8 w-auto" />
+                <span className="truncate text-sm font-semibold text-foreground">VantaHire ATS</span>
+              </div>
+            </div>
+
+            <div className="flex min-h-[calc(100svh-3.5rem)] flex-1 flex-col md:min-h-svh">
+              <div className="min-w-0 flex-1">
+                {children}
+              </div>
+              <Footer minimal />
+            </div>
+          </SidebarInset>
+        </SidebarProvider>
+      </div>
+    );
+  }
+
   return (
     <div className={cn(
       "min-h-screen bg-background text-foreground",
-      atsContext ? "ats-theme" : "public-theme"
+      "public-theme"
     )}>
       {/* Quick Access Bar for authenticated users (not in ATS context) */}
-      {user && !atsContext && <QuickAccessBar />}
-
-      {/* ATS Header - Dark theme for recruiter/admin dashboards */}
-      {atsContext && (
-        <header className="fixed top-0 left-0 right-0 z-50 bg-[#0d0d1a] border-b border-primary/20 shadow-lg">
-          <nav className="container mx-auto px-4 py-3 flex items-center justify-between">
-            {/* Logo */}
-            <div className="flex items-center gap-3">
-              <Link
-                href="/"
-                className="text-xl font-extrabold tracking-wide bg-gradient-to-r from-purple-400 via-pink-400 to-amber-400 bg-clip-text text-transparent hover:opacity-80 transition-opacity"
-              >
-                VantaHire
-              </Link>
-              <span className="px-2.5 py-1 bg-warning/100 text-foreground text-xs font-bold rounded-md">
-                ATS
-              </span>
-            </div>
-
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center space-x-1">
-              {(isRecruiter || isAdmin) && (
-                <>
-                  <Link
-                    href="/recruiter-dashboard"
-                    className={cn(
-                      "px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                      location === '/recruiter-dashboard'
-                        ? "text-warning bg-white/10"
-                        : "text-white/70 hover:text-white hover:bg-white/10"
-                    )}
-                  >
-                    Dashboard
-                  </Link>
-                  <Link
-                    href="/applications"
-                    className={cn(
-                      "px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                      location === '/applications'
-                        ? "text-warning bg-white/10"
-                        : "text-white/70 hover:text-white hover:bg-white/10"
-                    )}
-                  >
-                    Applications
-                  </Link>
-                  <Link
-                    href="/candidates"
-                    className={cn(
-                      "px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                      location === '/candidates'
-                        ? "text-warning bg-white/10"
-                        : "text-white/70 hover:text-white hover:bg-white/10"
-                    )}
-                  >
-                    Talent Search
-                  </Link>
-                  <Link
-                    href="/my-jobs"
-                    className={cn(
-                      "px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                      location === '/my-jobs'
-                        ? "text-warning bg-white/10"
-                        : "text-white/70 hover:text-white hover:bg-white/10"
-                    )}
-                  >
-                    My Jobs
-                  </Link>
-                  <Link
-                    href="/admin/forms"
-                    className={cn(
-                      "px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                      location.startsWith('/admin/forms')
-                        ? "text-warning bg-white/10"
-                        : "text-white/70 hover:text-white hover:bg-white/10"
-                    )}
-                  >
-                    Forms
-                  </Link>
-                  <Link
-                    href="/clients"
-                    className={cn(
-                      "px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                      location.startsWith('/clients')
-                        ? "text-warning bg-white/10"
-                        : "text-white/70 hover:text-white hover:bg-white/10"
-                    )}
-                  >
-                    Clients
-                  </Link>
-                  <Link
-                    href="/admin/email-templates"
-                    className={cn(
-                      "px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                      location.startsWith('/admin/email-templates')
-                        ? "text-warning bg-white/10"
-                        : "text-white/70 hover:text-white hover:bg-white/10"
-                    )}
-                  >
-                    Email
-                  </Link>
-                  <Link
-                    href="/pricing"
-                    className={cn(
-                      "px-3 py-2 text-sm font-medium rounded-md transition-colors",
-                      location === '/pricing'
-                        ? "text-warning bg-white/10"
-                        : "text-white/70 hover:text-white hover:bg-white/10"
-                    )}
-                  >
-                    Pricing
-                  </Link>
-                </>
-              )}
-            </div>
-
-            {/* User Actions */}
-            <div className="flex items-center gap-3">
-              {/* Post Job CTA */}
-              {(isRecruiter || isAdmin) && (
-                <Button
-                  onClick={() => setLocation("/jobs/post")}
-                  size="sm"
-                  variant="gold"
-                  className="hidden md:flex"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Post Job
-                </Button>
-              )}
-
-              {/* Role Badge - visible next to username */}
-              {getRoleLabel(user?.role) && (
-                <Badge variant="outline" className="text-xs capitalize border-white/30 text-white/70 hidden sm:inline-flex">
-                  {getRoleLabel(user?.role)}
-                </Badge>
-              )}
-
-              {/* User Dropdown */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="ghost" size="sm" className="gap-2 text-white/70 hover:text-white hover:bg-white/10">
-                    <User className="h-4 w-4" />
-                    <span className="hidden sm:inline">{displayName}</span>
-                    <ChevronDown className="h-3 w-3" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-56 bg-card">
-                  <div className="px-2 py-1.5 text-sm font-medium text-foreground">
-                    {user?.firstName} {user?.lastName}
-                  </div>
-                  <div className="px-2 py-1 text-xs text-muted-foreground">
-                    @{user?.username}
-                  </div>
-                  <div className="px-2 py-1.5 flex items-center gap-2">
-                    {getRoleLabel(user?.role) && (
-                      <Badge variant="outline" className="text-xs capitalize">
-                        {getRoleLabel(user?.role)}
-                      </Badge>
-                    )}
-                    <Badge variant="secondary" className="text-xs bg-muted text-muted-foreground">
-                      v1.8
-                    </Badge>
-                  </div>
-                  <DropdownMenuSeparator />
-
-                  {isAdmin && (
-                    <>
-                      <DropdownMenuItem onClick={() => setLocation("/admin")} className="cursor-pointer">
-                        <Shield className="h-4 w-4 mr-2" />
-                        Admin Dashboard
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setLocation("/analytics")} className="cursor-pointer">
-                        <BarChart3 className="h-4 w-4 mr-2" />
-                        Job Analytics
-                      </DropdownMenuItem>
-                      <DropdownMenuSeparator />
-                    </>
-                  )}
-
-                  {(user?.role === 'recruiter' || user?.role === 'super_admin') && (
-                    <>
-                      <DropdownMenuItem onClick={() => setLocation("/profile/settings")} className="cursor-pointer">
-                        <Settings className="h-4 w-4 mr-2" />
-                        Profile Settings
-                      </DropdownMenuItem>
-                      {/* Organization section - only show if user is part of an org and has appropriate role */}
-                      {orgData && isOrgOwnerOrAdmin && (
-                        <>
-                          <DropdownMenuSeparator />
-                          <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                            Organization
-                          </div>
-                          <DropdownMenuItem onClick={() => setLocation("/org/settings")} className="cursor-pointer">
-                            <Building2 className="h-4 w-4 mr-2" />
-                            Org Settings
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setLocation("/org/team")} className="cursor-pointer">
-                            <Users className="h-4 w-4 mr-2" />
-                            Team Members
-                          </DropdownMenuItem>
-                          {/* Billing - only for org owners */}
-                          {isOrgOwner && (
-                            <DropdownMenuItem onClick={() => setLocation("/org/billing")} className="cursor-pointer">
-                              <CreditCard className="h-4 w-4 mr-2" />
-                              Billing
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem onClick={() => setLocation("/org/analytics")} className="cursor-pointer">
-                            <BarChart3 className="h-4 w-4 mr-2" />
-                            Analytics
-                          </DropdownMenuItem>
-                        </>
-                      )}
-                    </>
-                  )}
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={handleLogout} className="cursor-pointer text-destructive">
-                    <LogOut className="h-4 w-4 mr-2" />
-                    Logout
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          </nav>
-        </header>
-      )}
+      {user && <QuickAccessBar />}
 
       {/* Header (for public pages or as fallback) */}
       {!user && (
@@ -691,12 +501,12 @@ const Layout = ({ children }: LayoutProps) => {
       )}
 
       {/* Main Content */}
-      <main className={user ? "pt-20" : "pt-20"}>
+      <main className="pt-20">
         {children}
       </main>
 
       {/* Footer */}
-      <Footer minimal={atsContext} />
+      <Footer />
     </div>
   );
 };
