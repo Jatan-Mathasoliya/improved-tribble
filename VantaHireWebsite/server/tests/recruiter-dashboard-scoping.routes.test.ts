@@ -374,6 +374,20 @@ describe('recruiter dashboard endpoint scoping', () => {
     expect(result.body.viewer.dashboardScope).toBe('recruiter');
   });
 
+  it('applies recruiter dashboard action filters for job and range', async () => {
+    const app = await buildApp();
+    selectQueue.push([]);
+
+    const result = await invokeRoute(app, 'get', '/api/recruiter-dashboard/actions', {
+      query: { jobId: '999', range: '7d' },
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body.range).toBe('7d');
+    expect(result.body.jobId).toBe(999);
+    expect(result.body.sections.every((section: any) => section.count === 0)).toBe(true);
+  });
+
   it('returns recruiter-scoped interview stage details for the selected range', async () => {
     storageMock.getPipelineStages.mockResolvedValue([
       { id: 1, name: 'Applied', order: 1, color: '#111111', organizationId: 2, isDefault: false },
@@ -486,7 +500,7 @@ describe('recruiter dashboard endpoint scoping', () => {
     expect(result.body.screeningToInterview.interviewCount).toBe(2);
   });
 
-  it("returns today's recruiter-scoped interviews with stable CTA links", async () => {
+  it("returns today's recruiter-scoped interviews with week counts, statuses, and stable CTA links", async () => {
     storageMock.getPipelineStages.mockResolvedValue([
       { id: 1, name: 'Applied', order: 1, color: '#111111', organizationId: 2, isDefault: false },
       { id: 2, name: 'Interview Scheduled', order: 2, color: '#222222', organizationId: 2, isDefault: false },
@@ -519,8 +533,8 @@ describe('recruiter dashboard endpoint scoping', () => {
         appliedAt: new Date('2026-03-18T00:00:00.000Z'),
         updatedAt: new Date('2026-03-18T00:00:00.000Z'),
         stageChangedAt: new Date('2026-03-18T00:00:00.000Z'),
-        interviewDate: new Date('2026-03-21T11:30:00.000Z'),
-        interviewTime: '11:30',
+        interviewDate: new Date('2026-03-21T13:30:00.000Z'),
+        interviewTime: '13:30',
         lastViewedAt: null,
         aiFitScore: 88,
         aiFitLabel: 'Good',
@@ -544,6 +558,23 @@ describe('recruiter dashboard endpoint scoping', () => {
         feedbackCount: 0,
         job: { id: 10, title: 'Backend Engineer', isActive: true },
       },
+      {
+        id: 104,
+        jobId: 10,
+        name: 'Rejected Candidate',
+        status: 'rejected',
+        currentStage: 2,
+        appliedAt: new Date('2026-03-20T00:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T00:00:00.000Z'),
+        stageChangedAt: new Date('2026-03-20T00:00:00.000Z'),
+        interviewDate: new Date('2026-03-21T15:00:00.000Z'),
+        interviewTime: '15:00',
+        lastViewedAt: null,
+        aiFitScore: 20,
+        aiFitLabel: 'Weak',
+        feedbackCount: 0,
+        job: { id: 10, title: 'Backend Engineer', isActive: true },
+      },
     ]);
 
     const app = await buildApp();
@@ -554,7 +585,14 @@ describe('recruiter dashboard endpoint scoping', () => {
     expect(storageMock.getRecruiterApplications).toHaveBeenCalledWith(4, 2);
     expect(storageMock.getPipelineStages).toHaveBeenCalledWith(2, 4);
     expect(result.body.viewer.dashboardScope).toBe('recruiter');
+    expect(result.body.interviewDate).toBe('2026-03-21');
     expect(result.body.count).toBe(2);
+    expect(result.body.week).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ date: '2026-03-21', count: 2, isSelected: true }),
+        expect.objectContaining({ date: '2026-03-22', count: 1, isSelected: false }),
+      ]),
+    );
     expect(result.body.items).toEqual([
       expect.objectContaining({
         id: 'interview-101',
@@ -564,6 +602,7 @@ describe('recruiter dashboard endpoint scoping', () => {
         interviewTime: '09:00',
         stageLabel: 'Interview Scheduled',
         aiFitLabel: 'Strong',
+        status: 'completed',
         ctaHref: '/jobs/10/applications?stage=2&applicationId=101',
       }),
       expect.objectContaining({
@@ -571,12 +610,55 @@ describe('recruiter dashboard endpoint scoping', () => {
         applicationId: 102,
         candidateName: 'Alex Kim',
         jobTitle: 'Backend Engineer',
-        interviewTime: '11:30',
+        interviewTime: '13:30',
         stageLabel: 'Final Interview',
         aiFitLabel: 'Good',
+        status: 'upcoming',
         ctaHref: '/jobs/10/applications?stage=3&applicationId=102',
       }),
     ]);
+  });
+
+  it('supports fetching scheduled interviews for another day', async () => {
+    storageMock.getPipelineStages.mockResolvedValue([
+      { id: 1, name: 'Applied', order: 1, color: '#111111', organizationId: 2, isDefault: false },
+      { id: 2, name: 'Interview Scheduled', order: 2, color: '#222222', organizationId: 2, isDefault: false },
+    ]);
+    storageMock.getRecruiterApplications.mockResolvedValue([
+      {
+        id: 201,
+        jobId: 10,
+        name: 'Future Candidate',
+        status: 'shortlisted',
+        currentStage: 2,
+        appliedAt: new Date('2026-03-20T00:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T00:00:00.000Z'),
+        stageChangedAt: new Date('2026-03-20T00:00:00.000Z'),
+        interviewDate: new Date('2026-03-22T09:30:00.000Z'),
+        interviewTime: '09:30',
+        lastViewedAt: null,
+        aiFitScore: 85,
+        aiFitLabel: 'Strong',
+        feedbackCount: 0,
+        job: { id: 10, title: 'Backend Engineer', isActive: true },
+      },
+    ]);
+
+    const app = await buildApp();
+    const result = await invokeRoute(app, 'get', '/api/recruiter-dashboard/todays-interviews', {
+      query: { interviewDate: '2026-03-22' },
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body.interviewDate).toBe('2026-03-22');
+    expect(result.body.count).toBe(1);
+    expect(result.body.items[0]).toEqual(
+      expect.objectContaining({
+        candidateName: 'Future Candidate',
+        interviewTime: '09:30',
+        status: 'scheduled',
+      }),
+    );
   });
 
   it('scopes /api/analytics/dropoff stage loading to the current org for super_admin users in an org', async () => {
