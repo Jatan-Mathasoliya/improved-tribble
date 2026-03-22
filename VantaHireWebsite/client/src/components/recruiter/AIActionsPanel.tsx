@@ -43,6 +43,11 @@ type RawActionsResponse = {
   generatedAt?: string;
 };
 
+type AIActionsPanelProps = {
+  range: string;
+  jobId: number | "all";
+};
+
 type TabKey =
   | "candidates_to_review"
   | "final_stage"
@@ -134,12 +139,25 @@ function normalizeSections(rawSections: RawActionSection[] | undefined): Normali
   });
 }
 
-export function AIActionsPanel() {
+export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<TabKey>("candidates_to_review");
 
   const { data, isLoading, error, refetch, isFetching } = useQuery<RawActionsResponse>({
-    queryKey: ["/api/recruiter-dashboard/actions"],
+    queryKey: ["/api/recruiter-dashboard/actions", range, jobId],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        range,
+        jobId: jobId === "all" ? "all" : String(jobId),
+      });
+      const response = await fetch(`/api/recruiter-dashboard/actions?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch recruiter actions");
+      }
+      return response.json();
+    },
   });
 
   const sections = useMemo(() => normalizeSections(data?.sections), [data?.sections]);

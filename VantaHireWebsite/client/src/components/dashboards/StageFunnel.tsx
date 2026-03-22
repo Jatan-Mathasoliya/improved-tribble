@@ -145,12 +145,11 @@ function buildSummary(
   const currentRate = details?.screeningToInterview?.currentRate ?? null;
   const periodLabel = details?.periodLabel ?? "\u2014";
   const comparisonLabel = details?.comparisonLabel ?? "\u2014";
-  const stageLabel = hoveredStage?.name ?? "pipeline";
   const subjectCount =
     hoveredStage != null ? formatCompactNumber(stageCandidateCount ?? hoveredStage.count) : formatCompactNumber(details?.activeInterviewLoops ?? 0);
   const prefix = hoveredStage
-    ? `In ${periodLabel}, ${subjectCount} candidates are currently in ${stageLabel}. Screening to Interview conversion is ${formatNullablePercent(currentRate)} and has `
-    : `In ${periodLabel}, ${subjectCount} candidates are in active interview loops. Screening to Interview conversion is ${formatNullablePercent(currentRate)} and has `;
+    ? `In ${periodLabel}, ${subjectCount} candidates are currently in ${hoveredStage.name}. Recruiter-wide screening to interview conversion is ${formatNullablePercent(currentRate)} and has `
+    : `In ${periodLabel}, ${subjectCount} candidates are in active interview loops. Recruiter-wide screening to interview conversion is ${formatNullablePercent(currentRate)} and has `;
 
   if (direction === "up" && (delta ?? 0) > 0) {
     return {
@@ -264,9 +263,6 @@ export function StageFunnel({
         range: rangePreset,
         jobId: selectedJobId === "all" ? "all" : String(selectedJobId),
       });
-      if (hoveredStage?.name) {
-        params.set("stage", hoveredStage.name);
-      }
       const response = await fetch(`/api/recruiter-dashboard/interview-stage-details?${params.toString()}`, {
         credentials: "include",
       });
@@ -274,7 +270,7 @@ export function StageFunnel({
         throw new Error("Failed to fetch interview stage details");
       }
       const payload = await response.json();
-      return normalizeInterviewDetails(payload, hoveredStage?.name ?? null);
+      return normalizeInterviewDetails(payload);
     },
     staleTime: 0,
     refetchOnMount: "always",
@@ -321,79 +317,16 @@ export function StageFunnel({
   }, [hoveredStageIndex, data.length]);
 
   const details = detailsQuery.data;
-  const appliedStageCount = useMemo(
-    () => data.find((stage) => normalizeStageKey(stage.name) === "applied")?.count ?? null,
-    [data],
-  );
-  const hiredStageCount = useMemo(
-    () => data.find((stage) => normalizeStageKey(stage.name) === "hired")?.count ?? null,
-    [data],
-  );
-  const rejectedStageCount = useMemo(
-    () => data.find((stage) => normalizeStageKey(stage.name) === "rejected")?.count ?? null,
-    [data],
-  );
   const effectiveAvgTimeInStageDays =
     hoveredStage != null && stageDerivedMetrics.avgTimeInStageDays != null
       ? stageDerivedMetrics.avgTimeInStageDays
       : details?.avgTimeInStageDays ?? null;
   const summary = buildSummary(details, hoveredStage, stageDerivedMetrics.stageCandidateCount);
   const rightStat = useMemo(() => {
-    const stageName = hoveredStage?.name.toLowerCase() ?? "";
-    const currentRate = details?.screeningToInterview.currentRate ?? null;
-
-    if (!hoveredStage) {
+    if (hoveredStage) {
       return {
-        label: "Interviews Today",
-        value: formatScheduledToday(details?.interviewsScheduledToday),
-      };
-    }
-
-    if (stageName.includes("applied")) {
-      return {
-        label: "Screening Rate",
-        value: formatNullablePercent(currentRate),
-      };
-    }
-
-    if (stageName.includes("screen")) {
-      return {
-        label: "Active Loops",
-        value:
-          details?.activeInterviewLoops != null ? formatCompactNumber(details.activeInterviewLoops) : "\u2014",
-      };
-    }
-
-    if (stageName.includes("interview")) {
-      return {
-        label: "Interviews Today",
-        value: formatScheduledToday(details?.interviewsScheduledToday),
-      };
-    }
-
-    if (stageName.includes("offer")) {
-      return {
-        label: "Conversion Rate",
-        value: formatNullablePercent(currentRate),
-      };
-    }
-
-    if (stageName.includes("hired")) {
-      return {
-        label: "Total Hired",
-        value: hiredStageCount != null ? formatCompactNumber(hiredStageCount) : "\u2014",
-      };
-    }
-
-    if (stageName.includes("reject")) {
-      const rejectionRate =
-        rejectedStageCount != null && appliedStageCount != null && appliedStageCount > 0
-          ? (rejectedStageCount / appliedStageCount) * 100
-          : null;
-
-      return {
-        label: "Rejection Rate",
-        value: formatNullablePercent(rejectionRate),
+        label: "Candidates In Stage",
+        value: formatCompactNumber(stageDerivedMetrics.stageCandidateCount ?? hoveredStage.count),
       };
     }
 
@@ -401,7 +334,7 @@ export function StageFunnel({
       label: "Interviews Today",
       value: formatScheduledToday(details?.interviewsScheduledToday),
     };
-  }, [appliedStageCount, data, details, hiredStageCount, hoveredStage, rejectedStageCount]);
+  }, [details, hoveredStage, stageDerivedMetrics.stageCandidateCount]);
 
   return (
     <Card className="overflow-hidden rounded-[28px] border-0 bg-white shadow-none">
@@ -502,14 +435,14 @@ export function StageFunnel({
                       background: "linear-gradient(90deg, #4D41DF 0%, #675DF9 100%)",
                     }}
                   >
-                    Interview Stage Details
+                    Interview Pipeline Details
                   </div>
 
                   <h3
                     className="mt-9 text-[24px] font-[700] leading-tight text-[#191C1E]"
                     style={{ fontFamily: "Manrope, sans-serif" }}
                   >
-                    {hoveredStage ? `${hoveredStage.name} Efficiency` : "Pipeline Overview"}
+                    {hoveredStage ? `${hoveredStage.name} Snapshot` : "Pipeline Overview"}
                   </h3>
 
                   <p

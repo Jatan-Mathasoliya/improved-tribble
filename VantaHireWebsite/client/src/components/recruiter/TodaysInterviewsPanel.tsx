@@ -5,7 +5,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type InterviewStatus = "live" | "soon" | "scheduled";
+type InterviewStatus = "scheduled" | "upcoming" | "completed";
 
 type InterviewItem = {
   id: string;
@@ -17,8 +17,7 @@ type InterviewItem = {
   interviewTime: string | null;
   stageLabel: string;
   aiFitLabel: string | null;
-  avatarUrl: string | null;
-  resumeHref: string;
+  avatarUrl?: string | null;
   status: InterviewStatus;
   ctaLabel: string;
   ctaHref: string;
@@ -27,14 +26,20 @@ type InterviewItem = {
 type InterviewWeekDay = {
   date: string;
   count: number;
-  hasInterviews: boolean;
+  dayLabel?: string;
+  isSelected?: boolean;
   isToday: boolean;
 };
 
 type TodaysInterviewsResponse = {
   count: number;
-  selectedDate: string;
-  weekDays?: InterviewWeekDay[];
+  interviewDate?: string;
+  week?: Array<{
+    date: string;
+    dayLabel: string;
+    count: number;
+    isSelected: boolean;
+  }>;
   items: InterviewItem[];
 };
 
@@ -71,7 +76,7 @@ function getCurrentWeekDays(): InterviewWeekDay[] {
     return {
       date: dateKey,
       count: 0,
-      hasInterviews: false,
+      dayLabel: date.toLocaleDateString("en-US", { weekday: "short" }),
       isToday: dateKey === formatDateKey(today),
     };
   });
@@ -96,8 +101,8 @@ function splitInterviewTime(value: string | null): { time: string; meridiem: str
 }
 
 function statusDotClass(status: InterviewStatus): string {
-  if (status === "live") return "bg-[#22C55E]";
-  if (status === "soon") return "bg-[#F59E0B]";
+  if (status === "completed") return "bg-[#22C55E]";
+  if (status === "upcoming") return "bg-[#F59E0B]";
   return "bg-[#4F46E5]";
 }
 
@@ -128,7 +133,17 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
     },
   });
 
-  const weekDays = data?.weekDays?.length ? data.weekDays : getCurrentWeekDays();
+  const weekDays = useMemo(() => {
+    const fallback = getCurrentWeekDays();
+    if (!data?.week?.length) return fallback;
+    return data.week.map((day) => ({
+      date: day.date,
+      dayLabel: day.dayLabel,
+      count: day.count,
+      isSelected: day.isSelected,
+      isToday: day.date === todayKey,
+    }));
+  }, [data?.week, todayKey]);
   const items = data?.items ?? [];
   const count = data?.count ?? 0;
 
@@ -163,10 +178,10 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
                 className={cn(
                   "text-[10px] font-medium uppercase tracking-[0.12em]",
                   isWeekend ? "text-[#D0D4DE]" : "text-[#B3B8C4]",
-                  isSelected && "text-[#8E93A3]",
+                  (day.isSelected ?? isSelected) && "text-[#8E93A3]",
                 )}
               >
-                {date.toLocaleDateString("en-US", { weekday: "short" })}
+                {day.dayLabel ?? date.toLocaleDateString("en-US", { weekday: "short" })}
               </span>
               <span
                 className={cn(
@@ -180,7 +195,7 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
               >
                 {date.getDate()}
               </span>
-              <span className={cn("h-1 w-1 rounded-full", day.hasInterviews ? "bg-[#5B4FF7]" : "bg-transparent")} />
+              <span className={cn("h-1 w-1 rounded-full", day.count > 0 ? "bg-[#5B4FF7]" : "bg-transparent")} />
             </button>
           );
         })}
@@ -258,14 +273,6 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
                 </div>
 
                 <div className="flex shrink-0 items-center justify-end gap-4 sm:gap-5">
-                  <a
-                    href={item.resumeHref}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-[13px] font-medium text-[#5B4FF7] transition-colors hover:text-[#4F46E5]"
-                  >
-                    View Resume
-                  </a>
                   <Button
                     asChild
                     className={cn(

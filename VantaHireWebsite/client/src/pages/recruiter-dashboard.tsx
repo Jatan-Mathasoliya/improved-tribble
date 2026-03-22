@@ -569,7 +569,7 @@ export default function RecruiterDashboard() {
               <TodaysInterviewsPanel jobId={selectedJobId} />
             </div>
             <div data-tour="pipeline-checklist">
-              <AIActionsPanel />
+              <AIActionsPanel range={rangePreset} jobId={selectedJobId} />
             </div>
           </div>
 
