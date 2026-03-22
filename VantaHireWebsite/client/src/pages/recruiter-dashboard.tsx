@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import Layout from "@/components/Layout";
 import type { Job, Application, PipelineStage } from "@shared/schema";
-import { TimeSeriesChart } from "@/components/dashboards/TimeSeriesChart";
 import { StageFunnel } from "@/components/dashboards/StageFunnel";
 import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -12,12 +11,11 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useAiCreditExhaustionToast } from "@/hooks/use-ai-credit-exhaustion";
 import { apiRequest } from "@/lib/queryClient";
-import { Mail, Send, Loader2 } from "lucide-react";
+import { Mail, Send, Loader2, ChevronDown } from "lucide-react";
 import { RecruiterKpiRibbon } from "@/components/recruiter/RecruiterKpiRibbon";
-import { RecruiterActionsBoard } from "@/components/recruiter/RecruiterActionsBoard";
-import { AiPipelineSummary } from "@/components/recruiter/AiPipelineSummary";
+import { AIActionsPanel } from "@/components/recruiter/AIActionsPanel";
+import { TodaysInterviewsPanel } from "@/components/recruiter/TodaysInterviewsPanel";
 import { ProfileCompletionBanner } from "@/components/ProfileCompletionBanner";
 import { useSubscription } from "@/hooks/use-subscription";
 // Extended types for API responses with relations
@@ -36,13 +34,6 @@ type RecruiterJobHealth = {
   jobTitle: string;
   status: "green" | "amber" | "red";
   reason: string;
-};
-
-type DashboardAiInsights = {
-  summary: string;
-  dropoffExplanation: string;
-  jobs: Array<{ jobId: number; nextAction: string }>;
-  generatedAt: string;
 };
 
 const RANGE_PRESETS: Record<string, number> = {
@@ -73,9 +64,7 @@ function firstRecruiterActionAt(app: ApplicationWithJob): Date | null {
 
 export default function RecruiterDashboard() {
   const { toast } = useToast();
-  const { showAiCreditExhaustionToast } = useAiCreditExhaustionToast();
   const [, setLocation] = useLocation();
-  const aiInsightsErrorKeyRef = useRef<string | null>(null);
   const [rangePreset, setRangePreset] = useState<keyof typeof RANGE_PRESETS>("30d");
   const [selectedJobId, setSelectedJobId] = useState<number | "all">("all");
 
@@ -397,29 +386,38 @@ export default function RecruiterDashboard() {
         value: pipelineHealthScore.isEmpty ? "—" : `${pipelineHealthScore.score}%`,
         hint: pipelineHealthScore.isEmpty ? "Post a job to get started" : pipelineHealthScore.tag,
         trend: pipelineHealthScore.isEmpty ? "flat" as const : pipelineHealthScore.score >= 70 ? "up" as const : pipelineHealthScore.score >= 50 ? "flat" as const : "down" as const,
+        tooltip: "Score based on stage movement, time in stage, drop-offs, and candidates that are stuck in the pipeline.",
+        variant: "pipeline" as const,
       },
       {
         label: "Active Roles",
         value: stats.activeJobs,
         secondary: "Open positions",
+        tooltip: "Active job requisitions in scope for the current dashboard filter.",
+        variant: "roles" as const,
       },
       {
         label: "Today's Apps",
         value: stats.newToday ?? 0,
         trend: appsTrend.trend,
         trendValue: appsTrend.value || undefined,
-        secondary: "vs same day last week",
+        tooltip: "Applications received today for the selected jobs, compared with the existing weekly baseline already used by this dashboard.",
+        variant: "apps" as const,
       },
       {
         label: "First Review",
         value: stats.avgFirstReview != null ? `${stats.avgFirstReview}d` : "—",
         trend: stats.avgFirstReview != null && stats.avgFirstReview <= 2 ? "up" as const : stats.avgFirstReview != null && stats.avgFirstReview > 4 ? "down" as const : "flat" as const,
         secondary: "Avg response time",
+        tooltip: "Average time from application submitted to the first recruiter action.",
+        variant: "review" as const,
       },
       {
         label: "To Interview",
         value: `${stats.interviewConv}%`,
         trend: stats.interviewConv >= 30 ? "up" as const : stats.interviewConv >= 15 ? "flat" as const : "down" as const,
+        tooltip: "Conversion rate from screening to interview for applications in the current range.",
+        variant: "interview" as const,
         secondary: "Screen → Interview",
       },
     ],
@@ -455,62 +453,6 @@ export default function RecruiterDashboard() {
     [pipelineStages, currentActivePipelineApplications],
   );
 
-  // Batched AI insights - one call per day, cached server-side
-  const aiPayload = useMemo(() => {
-    if (!filteredJobs.length) return null;
-    return {
-      pipelineHealthScore,
-      timeRangeLabel: `Last ${RANGE_PRESETS[rangePreset]} days`,
-      applicationsOverTime: timeSeriesData.slice(-14),
-      stageDistribution: funnelData.map((f) => ({ name: f.name, count: f.count })),
-      dropoff: dropoffSteps,
-      timeInStage: timeInStageSnapshot,
-      jobsNeedingAttention: jobsNeedingAttention
-        .filter((job) => job.status !== "green")
-        .map((job) => ({
-        jobId: job.jobId,
-        title: job.jobTitle,
-        severity: job.status === "red" ? "high" as const : job.status === "amber" ? "medium" as const : "low" as const,
-        reason: job.reason || "Needs movement",
-      })),
-    };
-  }, [filteredJobs.length, pipelineHealthScore, rangePreset, timeSeriesData, funnelData, dropoffSteps, timeInStageSnapshot, jobsNeedingAttention]);
-
-  const { data: aiInsights, isLoading: aiLoading, error: aiInsightsError } = useQuery<DashboardAiInsights>({
-    queryKey: ["/api/ai/dashboard-insights", aiPayload],
-    queryFn: async () => {
-      if (!aiPayload) throw new Error("No payload");
-      const res = await apiRequest("POST", "/api/ai/dashboard-insights", aiPayload);
-      return res.json();
-    },
-    enabled: !!aiPayload,
-    staleTime: 1000 * 60 * 60 * 24, // 24 hours client-side
-    retry: false,
-  });
-
-  useEffect(() => {
-    if (!aiInsightsError) {
-      aiInsightsErrorKeyRef.current = null;
-      return;
-    }
-
-    const errorKey = aiInsightsError.message;
-    if (aiInsightsErrorKeyRef.current === errorKey) {
-      return;
-    }
-    aiInsightsErrorKeyRef.current = errorKey;
-
-    if (showAiCreditExhaustionToast(aiInsightsError)) {
-      return;
-    }
-
-    toast({
-      title: "AI insights unavailable",
-      description: aiInsightsError.message,
-      variant: "destructive",
-    });
-  }, [aiInsightsError, showAiCreditExhaustionToast, toast]);
-
   const handleStageClick = (stage: { stageId?: number; name: string }) => {
     const params = new URLSearchParams();
     if (stage.stageId) {
@@ -538,10 +480,10 @@ export default function RecruiterDashboard() {
 
   return (
     <Layout>
-      <div className="container mx-auto px-4 py-8">
+      <div className="container mx-auto mt-7 px-4 pb-8 pt-0">
         <div className="space-y-8">
           {/* Header + filters + KPIs */}
-          <div className="space-y-3 pt-8">
+          <div className="mt-0 space-y-3 pt-5">
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
               <div>
                 <div className="flex items-center gap-3">
@@ -568,8 +510,8 @@ export default function RecruiterDashboard() {
             {/* Profile Completion Banner */}
             <ProfileCompletionBanner />
 
-            <Card className="shadow-sm border-border" data-tour="dashboard-metrics">
-              <CardContent className="pt-4">
+            <Card className="border-0 bg-transparent shadow-none" data-tour="dashboard-metrics">
+              <CardContent className="px-0 pt-4">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
                   <div className="text-sm text-muted-foreground">
                     KPIs filtered by{" "}
@@ -583,8 +525,9 @@ export default function RecruiterDashboard() {
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
                     <Select value={rangePreset} onValueChange={(val) => setRangePreset(val as keyof typeof RANGE_PRESETS)}>
-                      <SelectTrigger className="w-40">
+                      <SelectTrigger className="h-11 w-[164px] rounded-2xl border-[#E5E7EB] bg-[#FAFAFB] px-5 text-[0.95rem] font-semibold text-[#111827] shadow-[0_3px_10px_rgba(15,23,42,0.04)] [&>svg]:hidden">
                         <SelectValue placeholder="Date range" />
+                        <ChevronDown className="h-4 w-4 text-[#4B5563]" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="7d">Last 7 days</SelectItem>
@@ -596,8 +539,9 @@ export default function RecruiterDashboard() {
                       value={selectedJobId === "all" ? "all" : String(selectedJobId)}
                       onValueChange={(val) => setSelectedJobId(val === "all" ? "all" : Number(val))}
                     >
-                      <SelectTrigger className="w-52">
+                      <SelectTrigger className="h-11 w-[154px] rounded-2xl border-[#E5E7EB] bg-[#FAFAFB] px-5 text-[0.95rem] font-semibold text-[#111827] shadow-[0_3px_10px_rgba(15,23,42,0.04)] [&>svg]:hidden">
                         <SelectValue placeholder="All jobs" />
+                        <ChevronDown className="h-4 w-4 text-[#4B5563]" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="all">All jobs</SelectItem>
@@ -619,39 +563,29 @@ export default function RecruiterDashboard() {
             </Card>
           </div>
 
-          {/* Charts Row */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <TimeSeriesChart
-                title="Applications over time"
-                description={`Applications over time — last ${RANGE_PRESETS[rangePreset]} days (filters applied)`}
-                data={timeSeriesData}
-                isLoading={applicationsLoading}
-              />
-              <p className="text-xs text-muted-foreground">Hover to see exact values by day.</p>
+          {/* Interviews + AI Actions */}
+          <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
+            <div>
+              <TodaysInterviewsPanel jobId={selectedJobId} />
             </div>
-            <div data-tour="stage-funnel">
-              <StageFunnel
-                title="Stage distribution"
-                description={`Applications by pipeline stage — last ${RANGE_PRESETS[rangePreset]} days (filters applied)`}
-                data={funnelData}
-                isLoading={applicationsLoading || stagesLoading}
-                onStageClick={handleStageClick}
-              />
+            <div data-tour="pipeline-checklist">
+              <AIActionsPanel range={rangePreset} jobId={selectedJobId} />
             </div>
           </div>
 
-          {/* AI Summary + Insights */}
-          <div data-tour="recent-activity">
-            <AiPipelineSummary
-              pipelineHealthScore={pipelineHealthScore}
-              preGeneratedSummary={aiInsights?.summary}
-              aiLoading={aiLoading}
-              generatedAt={aiInsights?.generatedAt}
-            />
-          </div>
-          <div data-tour="pipeline-checklist">
-            <RecruiterActionsBoard range={rangePreset} jobId={selectedJobId} />
+          <div className="grid gri  d-cols-1 gap-6">
+            <div data-tour="stage-funnel">
+              <StageFunnel
+                title="Pipeline Stage Distribution"
+                data={funnelData}
+                isLoading={applicationsLoading || stagesLoading}
+                onStageClick={handleStageClick}
+                rangePreset={rangePreset}
+                selectedJobId={selectedJobId}
+                applications={currentApplications}
+                pipelineStages={pipelineStages}
+              />
+            </div>
           </div>
         </div>
       </div>

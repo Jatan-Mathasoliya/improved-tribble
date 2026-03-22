@@ -1,0 +1,295 @@
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+type InterviewStatus = "scheduled" | "upcoming" | "completed";
+
+type InterviewItem = {
+  id: string;
+  applicationId: number;
+  jobId: number;
+  candidateName: string;
+  jobTitle: string;
+  interviewDate: string;
+  interviewTime: string | null;
+  stageLabel: string;
+  aiFitLabel: string | null;
+  avatarUrl?: string | null;
+  status: InterviewStatus;
+  ctaLabel: string;
+  ctaHref: string;
+};
+
+type InterviewWeekDay = {
+  date: string;
+  count: number;
+  dayLabel?: string;
+  isSelected?: boolean;
+  isToday: boolean;
+};
+
+type TodaysInterviewsResponse = {
+  count: number;
+  interviewDate?: string;
+  week?: Array<{
+    date: string;
+    dayLabel: string;
+    count: number;
+    isSelected: boolean;
+  }>;
+  items: InterviewItem[];
+};
+
+type TodaysInterviewsPanelProps = {
+  jobId: number | "all";
+};
+
+function formatDateKey(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateKey(value: string): Date {
+  const [rawYear = "0", rawMonth = "1", rawDay = "1"] = value.split("-");
+  const year = Number(rawYear);
+  const month = Number(rawMonth);
+  const day = Number(rawDay);
+  return new Date(year, month - 1, day);
+}
+
+function getCurrentWeekDays(): InterviewWeekDay[] {
+  const today = new Date();
+  const weekStart = new Date(today);
+  const dayOffset = (weekStart.getDay() + 6) % 7;
+  weekStart.setDate(weekStart.getDate() - dayOffset);
+  weekStart.setHours(0, 0, 0, 0);
+
+  return Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + index);
+    const dateKey = formatDateKey(date);
+    return {
+      date: dateKey,
+      count: 0,
+      dayLabel: date.toLocaleDateString("en-US", { weekday: "short" }),
+      isToday: dateKey === formatDateKey(today),
+    };
+  });
+}
+
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("");
+}
+
+function splitInterviewTime(value: string | null): { time: string; meridiem: string } {
+  if (!value) {
+    return { time: "TBD", meridiem: "" };
+  }
+
+  const [time = value, meridiem = ""] = value.split(" ");
+  return { time, meridiem };
+}
+
+function statusDotClass(status: InterviewStatus): string {
+  if (status === "completed") return "bg-[#22C55E]";
+  if (status === "upcoming") return "bg-[#F59E0B]";
+  return "bg-[#4F46E5]";
+}
+
+function avatarFallbackClass(name: string): string {
+  const palette = [
+    "from-[#D7D2FE] to-[#B9AEFF]",
+    "from-[#C8E7FF] to-[#9BD0FF]",
+    "from-[#FBD3E9] to-[#E8B8FF]",
+    "from-[#FFE5BD] to-[#FFD194]",
+  ] as const;
+  const index = name.length % palette.length;
+  return `bg-gradient-to-br ${palette[index]} text-[#1F2937]`;
+}
+
+export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
+  const todayKey = useMemo(() => formatDateKey(new Date()), []);
+  const [selectedDate, setSelectedDate] = useState(todayKey);
+
+  const { data, isLoading } = useQuery<TodaysInterviewsResponse>({
+    queryKey: ["/api/recruiter-dashboard/todays-interviews", jobId, selectedDate],
+    queryFn: async () => {
+      const params = new URLSearchParams({
+        jobId: jobId === "all" ? "all" : String(jobId),
+        interviewDate: selectedDate,
+      });
+      const response = await apiRequest("GET", `/api/recruiter-dashboard/todays-interviews?${params.toString()}`);
+      return response.json();
+    },
+  });
+
+  const weekDays = useMemo(() => {
+    const fallback = getCurrentWeekDays();
+    if (!data?.week?.length) return fallback;
+    return data.week.map((day) => ({
+      date: day.date,
+      dayLabel: day.dayLabel,
+      count: day.count,
+      isSelected: day.isSelected,
+      isToday: day.date === todayKey,
+    }));
+  }, [data?.week, todayKey]);
+  const items = data?.items ?? [];
+  const count = data?.count ?? 0;
+
+  return (
+    <section className="interview-panel h-[492px] w-full rounded-[12px] border border-[#ECECF3] bg-white px-5 py-5 shadow-[0_4px_14px_rgba(15,23,42,0.04)] sm:px-6 sm:py-6">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <h2 className="text-[18px] font-bold tracking-[-0.02em] text-[#0F172A] sm:text-[19px]">Today&apos;s Interviews</h2>
+          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#F1EEFF] px-2 text-[11px] font-medium text-[#5B4FF7]">
+            {count}
+          </span>
+        </div>
+        <a href="/applications" className="text-[14px] font-normal text-[#5B4FF7] transition-colors hover:text-[#4F46E5]">
+          View Calendar
+        </a>
+      </div>
+
+      <div className="mt-7 grid grid-cols-4 gap-x-4 gap-y-4 sm:grid-cols-7 sm:gap-x-5">
+        {weekDays.map((day) => {
+          const date = parseDateKey(day.date);
+          const isSelected = day.date === selectedDate;
+          const isWeekend = date.getDay() === 0 || date.getDay() === 6;
+
+          return (
+            <button
+              key={day.date}
+              type="button"
+              onClick={() => setSelectedDate(day.date)}
+              className="flex flex-col items-center gap-3 text-center"
+            >
+              <span
+                className={cn(
+                  "text-[10px] font-medium uppercase tracking-[0.12em]",
+                  isWeekend ? "text-[#D0D4DE]" : "text-[#B3B8C4]",
+                  (day.isSelected ?? isSelected) && "text-[#8E93A3]",
+                )}
+              >
+                {day.dayLabel ?? date.toLocaleDateString("en-US", { weekday: "short" })}
+              </span>
+              <span
+                className={cn(
+                  "flex h-[42px] w-[42px] items-center justify-center rounded-full border text-[14px] font-medium leading-none transition-all",
+                  isSelected
+                    ? "border-[#5B4FF7] bg-[#5B4FF7] text-white shadow-[0_8px_18px_rgba(91,79,247,0.22)]"
+                    : "border-[#ECEEF3] bg-[#FAFAFC] text-[#B8BDC8]",
+                  !isSelected && isWeekend && "text-[#CDD1DA]",
+                  isSelected && "font-semibold",
+                )}
+              >
+                {date.getDate()}
+              </span>
+              <span className={cn("h-1 w-1 rounded-full", day.count > 0 ? "bg-[#5B4FF7]" : "bg-transparent")} />
+            </button>
+          );
+        })}
+      </div>
+
+      <div
+        className="interview-list mt-6 h-[286px] space-y-4 overflow-y-hidden pr-1 transition-[overflow] duration-150 hover:[scrollbar-color:#C4C0FF_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-[4px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#C4C0FF] [&::-webkit-scrollbar-thumb:hover]:bg-[#6C63FF] [&::-webkit-scrollbar-track]:bg-transparent [.interview-panel:hover_&]:overflow-y-auto"
+      >
+        {isLoading ? (
+          Array.from({ length: 2 }).map((_, index) => (
+            <div key={index} className="flex items-center gap-4 rounded-[12px] border border-[#EEF0F4] bg-[#F8F8FA] px-4 py-4">
+              <div className="w-[56px] animate-pulse">
+                <div className="h-5 rounded bg-[#E5E7EB]" />
+                <div className="mt-2 h-4 w-8 rounded bg-[#E5E7EB]" />
+              </div>
+              <div className="h-12 w-12 animate-pulse rounded-full bg-[#E5E7EB]" />
+              <div className="flex-1">
+                <div className="h-5 w-36 animate-pulse rounded bg-[#E5E7EB]" />
+                <div className="mt-2 h-4 w-28 animate-pulse rounded bg-[#E5E7EB]" />
+              </div>
+            </div>
+          ))
+        ) : items.length === 0 ? (
+          <div className="flex min-h-[180px] items-center justify-center rounded-[12px] border border-dashed border-[#E7E9F0] bg-[#FBFBFD] px-6 text-center">
+            <p className="max-w-sm text-sm font-medium text-[#9AA1AF]">
+              No interviews scheduled for this day.
+            </p>
+          </div>
+        ) : (
+          items.map((item) => {
+            const { time, meridiem } = splitInterviewTime(item.interviewTime);
+            const isPrimaryAction = item.ctaLabel === "Join Meeting";
+
+            return (
+              <div
+                key={item.id}
+                className="flex flex-col gap-3 rounded-[12px] border border-[#EEF0F4] bg-[#F8F8FA] px-4 py-3.5 sm:flex-row sm:items-center sm:gap-4 sm:px-5"
+              >
+                <div className="w-[58px] shrink-0 text-center sm:text-left">
+                  <div className="text-[13px] font-semibold leading-[1.05] tracking-[-0.01em] text-[#374151]">
+                    {time}
+                  </div>
+                  <div className="mt-1 text-[13px] font-medium leading-none text-[#6B7280]">{meridiem}</div>
+                </div>
+
+                <div className="flex min-w-0 flex-1 items-center gap-4">
+                  <div className="relative shrink-0">
+                    <Avatar className="h-[46px] w-[46px] border border-[#E5E7EB]">
+                      <AvatarImage src={item.avatarUrl ?? undefined} alt={item.candidateName} className="object-cover" />
+                      <AvatarFallback className={cn("text-[13px] font-semibold", avatarFallbackClass(item.candidateName))}>
+                        {getInitials(item.candidateName)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span
+                      className={cn(
+                        "absolute bottom-0 right-0 h-2 w-2 rounded-full border border-white",
+                        statusDotClass(item.status),
+                      )}
+                    />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[16px] font-semibold leading-[1.25] tracking-[-0.02em] text-[#0F172A]">
+                      {item.candidateName}
+                    </div>
+                    <div className="mt-0.5 truncate text-[13px] font-normal leading-[1.35] text-[#6B7280]">
+                      {item.jobTitle}
+                    </div>
+                    {item.aiFitLabel && (
+                      <span className="mt-2 inline-flex rounded-[6px] bg-[#EEEBFF] px-2.5 py-1 text-[11px] font-medium leading-none text-[#5B4FF7]">
+                        {item.aiFitLabel}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 items-center justify-end gap-4 sm:gap-5">
+                  <Button
+                    asChild
+                    className={cn(
+                      "h-auto rounded-[10px] px-4 py-2 text-[13px] font-semibold leading-none shadow-none",
+                      isPrimaryAction
+                        ? "bg-[#5B4FF7] text-white hover:bg-[#4F46E5]"
+                        : "border-0 bg-[#F0F0F0] text-[#4B5563] hover:bg-[#E9E9E9]",
+                    )}
+                  >
+                    <a href={item.ctaHref}>{item.ctaLabel}</a>
+                  </Button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </section>
+  );
+}

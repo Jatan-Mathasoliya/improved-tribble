@@ -222,6 +222,32 @@
 }
 
 @layer components {
+  .font-manrope {
+    font-family: "Manrope", sans-serif;
+  }
+
+  .font-inter {
+    font-family: "Inter", sans-serif;
+  }
+
+  .ai-actions-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(156, 163, 175, 0.55) transparent;
+  }
+
+  .ai-actions-scroll::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .ai-actions-scroll::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .ai-actions-scroll::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: rgba(156, 163, 175, 0.55);
+  }
+
   .gradient-btn {
     @apply bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] hover:shadow-lg hover:shadow-purple-500/20 transition-all duration-300 hover:-translate-y-0.5;
   }
