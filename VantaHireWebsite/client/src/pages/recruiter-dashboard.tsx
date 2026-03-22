@@ -573,8 +573,7 @@ export default function RecruiterDashboard() {
             </div>
           </div>
 
-<<<<<<< HEAD
-          <div className="grid grid-cols-1 gap-6">
+          <div className="grid gri  d-cols-1 gap-6">
             <div data-tour="stage-funnel">
               <StageFunnel
                 title="Pipeline Stage Distribution"
@@ -587,19 +586,6 @@ export default function RecruiterDashboard() {
                 pipelineStages={pipelineStages}
               />
             </div>
-=======
-          {/* AI Summary + Insights */}
-          <div data-tour="recent-activity">
-            <AiPipelineSummary
-              pipelineHealthScore={pipelineHealthScore}
-              preGeneratedSummary={aiInsights?.summary}
-              aiLoading={aiLoading}
-              generatedAt={aiInsights?.generatedAt}
-            />
-          </div>
-          <div data-tour="pipeline-checklist">
-            <RecruiterActionsBoard range={rangePreset} jobId={selectedJobId} />
->>>>>>> ews/ews-dashboard-handoff
           </div>
         </div>
       </div>
