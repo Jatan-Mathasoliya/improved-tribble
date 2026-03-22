@@ -651,7 +651,7 @@ export default function RecruiterDashboard() {
             />
           </div>
           <div data-tour="pipeline-checklist">
-            <RecruiterActionsBoard />
+            <RecruiterActionsBoard range={rangePreset} jobId={selectedJobId} />
           </div>
         </div>
       </div>

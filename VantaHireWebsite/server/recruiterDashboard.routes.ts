@@ -57,6 +57,7 @@ const sectionOrder: DashboardActionSectionId[] = [
 ];
 
 type InterviewStageRangePreset = keyof typeof RANGE_PRESETS;
+type TodayInterviewStatus = "scheduled" | "upcoming" | "completed";
 
 function daysBetween(dateLike?: string | Date | null): number | null {
   if (!dateLike) return null;
@@ -114,6 +115,74 @@ function formatInterviewTime(value?: string | null): string | null {
   return normalized.length > 0 ? normalized : null;
 }
 
+function parseJobIdParam(value: unknown): number | null {
+  if (typeof value !== "string" || value === "all") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function resolveInterviewDate(value: unknown): Date {
+  const parsed = typeof value === "string" ? clampDate(value) : null;
+  return parsed ?? new Date();
+}
+
+function startOfDay(date: Date): Date {
+  const result = new Date(date);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+function endOfDay(date: Date): Date {
+  const result = new Date(date);
+  result.setHours(23, 59, 59, 999);
+  return result;
+}
+
+function addDays(date: Date, days: number): Date {
+  const result = new Date(date);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+function startOfWeekMonday(date: Date): Date {
+  const result = startOfDay(date);
+  const day = result.getDay();
+  const offset = day === 0 ? -6 : 1 - day;
+  result.setDate(result.getDate() + offset);
+  return result;
+}
+
+function parseTimeToMinutes(value?: string | null): number | null {
+  const normalized = formatInterviewTime(value);
+  if (!normalized) return null;
+  const parts = normalized.split(":");
+  if (parts.length !== 2) return null;
+  const hours = Number(parts[0]);
+  const minutes = Number(parts[1]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return hours * 60 + minutes;
+}
+
+function resolveInterviewStatus(
+  interviewDate: Date | null,
+  interviewTime?: string | null,
+  now = new Date(),
+): TodayInterviewStatus {
+  if (!interviewDate) return "scheduled";
+
+  const interviewDay = startOfDay(interviewDate).getTime();
+  const today = startOfDay(now).getTime();
+
+  if (interviewDay > today) return "scheduled";
+  if (interviewDay < today) return "completed";
+
+  const scheduledMinutes = parseTimeToMinutes(interviewTime);
+  if (scheduledMinutes == null) return "upcoming";
+
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  return scheduledMinutes > currentMinutes ? "upcoming" : "completed";
+}
+
 async function getRecruiterDashboardContext(user: NonNullable<Request["user"]>) {
   const orgResult = await getUserOrganization(user.id);
   const organizationId =
@@ -144,10 +213,15 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         const user = req.user!;
+        const rangePreset = resolveRangePreset(req.query.range);
+        const rangeDays = RANGE_PRESETS[rangePreset];
+        const rangeStart = addDays(new Date(), -rangeDays);
+        const selectedJobId = parseJobIdParam(req.query.jobId);
         const { orgResult, jobs, applications, stages } = await getRecruiterDashboardContext(user);
+        const jobsInScope = jobs.filter((job) => selectedJobId == null || job.id === selectedJobId);
 
         const jobMeta = new Map(
-          jobs.map((job) => [
+          jobsInScope.map((job) => [
             job.id,
             {
               title: job.title,
@@ -171,7 +245,7 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
         );
 
         const activeJobIds = new Set(
-          jobs.filter((job) => job.isActive).map((job) => job.id),
+          jobsInScope.filter((job) => job.isActive).map((job) => job.id),
         );
         const recruiterScopedApplications = applications.filter((app) => activeJobIds.has(app.jobId));
 
@@ -195,12 +269,18 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
           }
         }
 
+        const applicationListHref =
+          selectedJobId == null ? "/applications" : `/jobs/${selectedJobId}/applications`;
+        const sourcingListHref =
+          selectedJobId == null ? "/my-jobs" : `/jobs/${selectedJobId}/sourcing`;
+
         const candidatesToReview = recruiterScopedApplications
           .filter((app) => {
             const currentStage = app.currentStage ? stageMeta.get(app.currentStage) : undefined;
             const isAppliedStage =
               currentStage?.nameLower === "applied" || app.currentStage == null;
             if (isClosedApplication(app.status, currentStage?.nameLower)) return false;
+            if (!isWithinWindow(app.appliedAt, rangeStart, new Date())) return false;
             return app.status === "submitted" || (!app.lastViewedAt && isAppliedStage);
           })
           .sort((a, b) => {
@@ -213,7 +293,7 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
             return new Date(a.appliedAt).getTime() - new Date(b.appliedAt).getTime();
           });
 
-        const jobsLowOnPipeline = jobs
+        const jobsLowOnPipeline = jobsInScope
           .filter((job) => job.isActive)
           .map((job) => {
             const activeCount = recruiterScopedApplications.filter((app) => {
@@ -251,7 +331,9 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
 
             const hmPending = meta.hiringManagerAssigned && (app.feedbackCount ?? 0) === 0;
             const clientPending = meta.clientAssigned && (clientFeedbackCounts[app.id] ?? 0) === 0;
-            const waitDays = daysBetween(app.stageChangedAt ?? app.appliedAt) ?? 0;
+            const anchor = clampDate(app.stageChangedAt ?? app.appliedAt);
+            if (!anchor || anchor < rangeStart) return false;
+            const waitDays = daysBetween(anchor) ?? 0;
             return (hmPending || clientPending) && waitDays >= FEEDBACK_WAIT_DAYS;
           })
           .sort((a, b) => {
@@ -270,7 +352,9 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
               app.interviewDate !== null &&
               new Date(app.interviewDate).getTime() <= Date.now() &&
               stageName.includes("interview");
-            const waitDays = daysBetween(app.stageChangedAt ?? app.interviewDate ?? app.updatedAt ?? app.appliedAt) ?? 0;
+            const anchor = clampDate(app.stageChangedAt ?? app.interviewDate ?? app.updatedAt ?? app.appliedAt);
+            if (!anchor || anchor < rangeStart) return false;
+            const waitDays = daysBetween(anchor) ?? 0;
             return (
               stageName.includes("offer") ||
               stageName.includes("final") ||
@@ -291,7 +375,7 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
             description: "Fresh applicants and unreviewed candidates on active jobs.",
             count: candidatesToReview.length,
             emptyMessage: "No candidates waiting for first review.",
-            viewAllHref: "/applications?status=submitted",
+            viewAllHref: selectedJobId == null ? "/applications?status=submitted" : applicationListHref,
             items: candidatesToReview.slice(0, MAX_ITEMS_PER_SECTION).map((app) => {
               const ageDays = daysBetween(app.appliedAt) ?? 0;
               return {
@@ -314,7 +398,7 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
             description: "Active roles that need more candidate depth.",
             count: jobsLowOnPipeline.length,
             emptyMessage: "No active jobs are short on pipeline right now.",
-            viewAllHref: "/my-jobs",
+            viewAllHref: sourcingListHref,
             items: jobsLowOnPipeline.slice(0, MAX_ITEMS_PER_SECTION).map(({ job, activeCount, jobAgeDays }) => ({
               id: `pipeline-${job.id}`,
               type: "job_low_pipeline",
@@ -333,7 +417,7 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
             description: "Hiring manager or client decisions blocking progress.",
             count: feedbackPending.length,
             emptyMessage: "No hiring manager or client feedback is pending.",
-            viewAllHref: "/applications",
+            viewAllHref: applicationListHref,
             items: feedbackPending.slice(0, MAX_ITEMS_PER_SECTION).map((app) => {
               const meta = jobMeta.get(app.jobId);
               const hmPending = meta?.hiringManagerAssigned && (app.feedbackCount ?? 0) === 0;
@@ -360,7 +444,7 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
             description: "Candidates near close: final interviews done, offers out, or ready for decision.",
             count: finalStageCandidates.length,
             emptyMessage: "No candidates are in the final stretch right now.",
-            viewAllHref: "/applications",
+            viewAllHref: applicationListHref,
             items: finalStageCandidates.slice(0, MAX_ITEMS_PER_SECTION).map((app) => {
               const stage = app.currentStage ? stageMeta.get(app.currentStage) : undefined;
               const stageLabel = stage?.name ?? "Final stage";
@@ -394,6 +478,8 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
             organizationRole: orgResult?.membership.role ?? null,
             dashboardScope: "recruiter",
           },
+          range: rangePreset,
+          jobId: selectedJobId,
           sections: sectionOrder.map((id) => sectionsById[id]),
         });
         return;
@@ -553,11 +639,8 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
     async (req: Request, res: Response, next: NextFunction): Promise<void> => {
       try {
         const user = req.user!;
-        const parsedJobId =
-          typeof req.query.jobId === "string" && req.query.jobId !== "all"
-            ? Number(req.query.jobId)
-            : null;
-        const jobId = parsedJobId && Number.isFinite(parsedJobId) && parsedJobId > 0 ? parsedJobId : null;
+        const jobId = parseJobIdParam(req.query.jobId);
+        const selectedInterviewDate = resolveInterviewDate(req.query.interviewDate);
 
         const { orgResult, jobs, applications, stages } = await getRecruiterDashboardContext(user);
         const jobIdsInScope = new Set(
@@ -576,28 +659,49 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
         );
 
         const now = new Date();
-        const dayStart = new Date(now);
-        dayStart.setHours(0, 0, 0, 0);
-        const dayEnd = new Date(now);
-        dayEnd.setHours(23, 59, 59, 999);
+        const dayStart = startOfDay(selectedInterviewDate);
+        const dayEnd = endOfDay(selectedInterviewDate);
+        const weekStart = startOfWeekMonday(selectedInterviewDate);
+        const weekDays = Array.from({ length: 7 }, (_, index) => addDays(weekStart, index));
+        const weekCounts = new Map<string, number>(
+          weekDays.map((date) => [startOfDay(date).toISOString().slice(0, 10), 0]),
+        );
 
-        const items = applications
+        const scopedApplications = applications
           .filter((app) => jobIdsInScope.has(app.jobId))
+          .filter((app) => {
+            const stage = app.currentStage ? stageMeta.get(app.currentStage) : undefined;
+            const stageName = stage?.nameLower ?? "";
+            return !isClosedApplication(app.status, stageName);
+          });
+
+        scopedApplications.forEach((app) => {
+          const interviewDate = clampDate(app.interviewDate);
+          if (!interviewDate) return;
+          const key = startOfDay(interviewDate).toISOString().slice(0, 10);
+          if (weekCounts.has(key)) {
+            weekCounts.set(key, (weekCounts.get(key) ?? 0) + 1);
+          }
+        });
+
+        const items = scopedApplications
           .filter((app) => isWithinWindow(app.interviewDate, dayStart, dayEnd))
           .map((app) => {
             const stage = app.currentStage ? stageMeta.get(app.currentStage) : undefined;
             const stageLabel = stage?.name ?? "Interview";
             const timeLabel = formatInterviewTime(app.interviewTime);
+            const interviewDate = clampDate(app.interviewDate);
             return {
               id: `interview-${app.id}`,
               applicationId: app.id,
               jobId: app.jobId,
               candidateName: app.name,
               jobTitle: app.job.title,
-              interviewDate: clampDate(app.interviewDate)?.toISOString() ?? null,
+              interviewDate: interviewDate?.toISOString() ?? null,
               interviewTime: timeLabel,
               stageLabel,
               aiFitLabel: app.aiFitLabel ?? null,
+              status: resolveInterviewStatus(interviewDate, timeLabel, now),
               ctaLabel: "Open Candidate",
               ctaHref: applicationHref(app.jobId, app.id, app.currentStage),
             };
@@ -618,8 +722,18 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
             dashboardScope: "recruiter",
           },
           jobId,
-          dateLabel: "Today",
+          interviewDate: dayStart.toISOString().slice(0, 10),
+          dateLabel: dayStart.toDateString() === startOfDay(now).toDateString() ? "Today" : dayStart.toLocaleDateString(),
           count: items.length,
+          week: weekDays.map((date) => {
+            const isoDate = startOfDay(date).toISOString().slice(0, 10);
+            return {
+              date: isoDate,
+              dayLabel: date.toLocaleDateString(undefined, { weekday: "short" }),
+              count: weekCounts.get(isoDate) ?? 0,
+              isSelected: isoDate === dayStart.toISOString().slice(0, 10),
+            };
+          }),
           items,
         });
         return;

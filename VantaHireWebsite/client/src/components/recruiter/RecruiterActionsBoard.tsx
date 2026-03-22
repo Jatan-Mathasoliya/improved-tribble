@@ -53,7 +53,14 @@ type RecruiterActionsResponse = {
     organizationRole: string | null;
     dashboardScope: "recruiter";
   };
+  range?: "7d" | "30d" | "90d";
+  jobId?: number | null;
   sections: RecruiterActionSection[];
+};
+
+type RecruiterActionsBoardProps = {
+  range: string;
+  jobId: number | "all";
 };
 
 const sectionIconMap = {
@@ -69,11 +76,23 @@ const urgencyBadgeClass = {
   low: "bg-muted text-muted-foreground border-border",
 } satisfies Record<RecruiterActionUrgency, string>;
 
-export function RecruiterActionsBoard() {
+export function RecruiterActionsBoard({ range, jobId }: RecruiterActionsBoardProps) {
   const [, setLocation] = useLocation();
 
   const { data, isLoading, error } = useQuery<RecruiterActionsResponse>({
-    queryKey: ["/api/recruiter-dashboard/actions"],
+    queryKey: ["/api/recruiter-dashboard/actions", range, jobId],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      params.set("range", range);
+      params.set("jobId", jobId === "all" ? "all" : String(jobId));
+      const response = await fetch(`/api/recruiter-dashboard/actions?${params.toString()}`, {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch recruiter actions");
+      }
+      return response.json();
+    },
   });
 
   const generatedLabel = useMemo(() => {
