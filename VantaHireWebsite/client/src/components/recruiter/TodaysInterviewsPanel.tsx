@@ -3,6 +3,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { DASHBOARD_EYEBROW, DASHBOARD_PANEL, DASHBOARD_PANEL_MUTED, DASHBOARD_TITLE } from "@/lib/dashboard-theme";
 import { cn } from "@/lib/utils";
 
 type InterviewStatus = "scheduled" | "upcoming" | "completed";
@@ -149,17 +150,41 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
   const count = data?.count ?? 0;
 
   return (
-    <section className="interview-panel h-[492px] w-full rounded-[12px] border border-[#ECECF3] bg-white px-5 py-5 shadow-[0_4px_14px_rgba(15,23,42,0.04)] sm:px-6 sm:py-6">
+    <section
+      className={cn(
+        DASHBOARD_PANEL,
+        "interview-panel h-[492px] w-full rounded-[26px] bg-white/95 px-5 py-5 sm:px-6 sm:py-6",
+      )}
+    >
       <div className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <h2 className="text-[18px] font-bold tracking-[-0.02em] text-[#0F172A] sm:text-[19px]">Today&apos;s Interviews</h2>
-          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#F1EEFF] px-2 text-[11px] font-medium text-[#5B4FF7]">
-            {count}
-          </span>
+        <div className="space-y-2">
+          <p className={DASHBOARD_EYEBROW}>Interview Calendar</p>
+          <div className="flex items-center gap-3">
+            <h2 className={cn(DASHBOARD_TITLE, "text-[20px] sm:text-[21px]")}>Today&apos;s Interviews</h2>
+            <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#F1EEFF] px-2 text-[11px] font-medium text-[#5B4FF7]">
+              {count}
+            </span>
+          </div>
         </div>
         <a href="/applications" className="text-[14px] font-normal text-[#5B4FF7] transition-colors hover:text-[#4F46E5]">
           View Calendar
         </a>
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-medium text-[#7B8497]">
+        <span className="rounded-full bg-[#F3F4F8] px-3 py-1">Pick a day to inspect upcoming interviews</span>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F8F9FC] px-3 py-1">
+          <span className="h-2 w-2 rounded-full bg-[#4F46E5]" />
+          Scheduled
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF6E8] px-3 py-1">
+          <span className="h-2 w-2 rounded-full bg-[#F59E0B]" />
+          Upcoming
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EEF8F1] px-3 py-1">
+          <span className="h-2 w-2 rounded-full bg-[#22C55E]" />
+          Completed
+        </span>
       </div>
 
       <div className="mt-7 grid grid-cols-4 gap-x-4 gap-y-4 sm:grid-cols-7 sm:gap-x-5">
@@ -204,7 +229,7 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
 
       <div
         className={cn(
-          "interview-list mt-6 h-[286px] space-y-4 overflow-y-hidden pr-1 transition-[overflow,opacity] duration-150 hover:[scrollbar-color:#C4C0FF_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-[4px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#C4C0FF] [&::-webkit-scrollbar-thumb:hover]:bg-[#6C63FF] [&::-webkit-scrollbar-track]:bg-transparent [.interview-panel:hover_&]:overflow-y-auto",
+          "interview-list mt-6 h-[248px] space-y-4 overflow-y-hidden pr-1 transition-[overflow,opacity] duration-150 hover:[scrollbar-color:#C4C0FF_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-[4px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#C4C0FF] [&::-webkit-scrollbar-thumb:hover]:bg-[#6C63FF] [&::-webkit-scrollbar-track]:bg-transparent [.interview-panel:hover_&]:overflow-y-auto md:h-[272px] xl:h-[248px]",
           isFetching && !isLoading && "opacity-70",
         )}
       >
@@ -236,7 +261,10 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
             return (
               <div
                 key={item.id}
-                className="flex flex-col gap-3 rounded-[12px] border border-[#EEF0F4] bg-[#F8F8FA] px-4 py-3.5 sm:flex-row sm:items-center sm:gap-4 sm:px-5"
+                className={cn(
+                  DASHBOARD_PANEL_MUTED,
+                  "flex flex-col gap-3 px-4 py-3.5 transition-colors hover:bg-[#F3F4F8] sm:flex-row sm:items-center sm:gap-4 sm:px-5",
+                )}
               >
                 <div className="w-[58px] shrink-0 text-center sm:text-left">
                   <div className="text-[13px] font-semibold leading-[1.05] tracking-[-0.01em] text-[#374151]">

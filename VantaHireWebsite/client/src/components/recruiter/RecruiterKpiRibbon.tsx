@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { DASHBOARD_PANEL, DASHBOARD_PANEL_SOFT, DASHBOARD_EYEBROW } from "@/lib/dashboard-theme";
 import { cn } from "@/lib/utils";
 import { ArrowUpRight, HelpCircle } from "lucide-react";
 
@@ -192,11 +193,14 @@ export function RecruiterKpiRibbon({ items, heroLabel, heroTooltip, className }:
           return (
             <Card
               key={idx}
-              className="rounded-[18px] border border-[#EEEEEE] bg-white shadow-[0_2px_8px_rgba(15,23,42,0.04)]"
+              className={cn(
+                DASHBOARD_PANEL,
+                "group rounded-[24px] transition-transform duration-200 hover:-translate-y-0.5",
+              )}
             >
-              <div className="flex h-full min-h-[150px] flex-col px-5 py-4">
+              <div className="flex h-full min-h-[158px] flex-col px-5 py-5">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="text-[12px] font-semibold uppercase tracking-[0.2em] text-[#6B7280]">
+                  <div className={cn(DASHBOARD_EYEBROW, "text-[10px] tracking-[0.22em]")}>
                     {item.label}
                   </div>
                   {tooltipText ? (
@@ -224,7 +228,7 @@ export function RecruiterKpiRibbon({ items, heroLabel, heroTooltip, className }:
                     </div>
                     {getBottomContent(item)}
                   </div>
-                  <div className="shrink-0">{renderVisual(item)}</div>
+                  <div className={cn(DASHBOARD_PANEL_SOFT, "shrink-0 p-2.5")}>{renderVisual(item)}</div>
                 </div>
               </div>
             </Card>

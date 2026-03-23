@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DASHBOARD_EYEBROW, DASHBOARD_PANEL, DASHBOARD_PANEL_SOFT, DASHBOARD_TITLE } from "@/lib/dashboard-theme";
 import { cn } from "@/lib/utils";
 
 type StageSegment = {
@@ -337,14 +338,18 @@ export function StageFunnel({
   }, [details, hoveredStage, stageDerivedMetrics.stageCandidateCount]);
 
   return (
-    <Card className="overflow-hidden rounded-[28px] border-0 bg-white shadow-none">
-      <CardHeader className="pb-4">
+    <Card className={cn(DASHBOARD_PANEL, "rounded-[28px] bg-white/95")}>
+      <CardHeader className="pb-2">
+        <p className={cn(DASHBOARD_EYEBROW, "mb-3")}>Pipeline Overview</p>
         <CardTitle
-          className="text-[20px] font-[700] leading-tight text-[#0F172A]"
+          className={cn(DASHBOARD_TITLE, "text-[22px] leading-tight")}
           style={{ fontFamily: "Manrope, sans-serif" }}
         >
           {title}
         </CardTitle>
+        <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-[#6B7280]">
+          Hover each stage to inspect momentum, bottlenecks, and interview throughput for the current pipeline slice.
+        </p>
       </CardHeader>
       <CardContent className="px-6 pb-6 pt-0 lg:px-8 lg:pb-8">
         {isLoading ? (
@@ -355,7 +360,7 @@ export function StageFunnel({
           </div>
         ) : (
           <div ref={containerRef} className="relative">
-            <div className="grid items-center gap-8 lg:grid-cols-[minmax(0,55%)_minmax(0,45%)]">
+            <div className="grid items-center gap-8 xl:grid-cols-[minmax(0,55%)_minmax(0,45%)]">
               <div className="min-w-0">
                 <div className="space-y-1">
                   {data.map((stage, index) => {
@@ -419,7 +424,7 @@ export function StageFunnel({
 
               <div
                 ref={detailPanelRef}
-                className="relative rounded-[16px] bg-[#F2F4F6] p-6 shadow-[0_10px_30px_rgba(77,65,223,0.08)]"
+                className={cn(DASHBOARD_PANEL_SOFT, "relative p-6 shadow-[0_10px_30px_rgba(77,65,223,0.08)]")}
               >
                 <div
                   className={cn(
@@ -429,7 +434,7 @@ export function StageFunnel({
                   style={{ transitionDuration: `${CONTENT_FADE_MS}ms` }}
                 >
                   <div
-                    className="inline-flex rounded-full px-4 py-2 text-[10px] font-[700] uppercase tracking-[0.08em] text-white"
+                    className="inline-flex rounded-full px-4 py-2 text-[10px] font-[700] uppercase tracking-[0.08em] text-white shadow-[0_10px_24px_rgba(77,65,223,0.18)]"
                     style={{
                       fontFamily: "Inter, sans-serif",
                       background: "linear-gradient(90deg, #4D41DF 0%, #675DF9 100%)",
@@ -484,6 +489,15 @@ export function StageFunnel({
                         {rightStat.value}
                       </div>
                     </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <span className="rounded-full bg-white px-3 py-1 text-[11px] font-medium text-[#768094] shadow-[0_4px_12px_rgba(15,23,42,0.04)]">
+                      {hoveredStage ? "Stage snapshot" : "Recruiter-wide view"}
+                    </span>
+                    <span className="rounded-full bg-white px-3 py-1 text-[11px] font-medium text-[#768094] shadow-[0_4px_12px_rgba(15,23,42,0.04)]">
+                      {details?.periodLabel ?? "Current period"}
+                    </span>
                   </div>
                 </div>
               </div>

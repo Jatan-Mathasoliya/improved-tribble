@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { AlertCircle, ArrowRight, Loader2, RefreshCcw, Zap } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { DASHBOARD_EYEBROW, DASHBOARD_PANEL, DASHBOARD_PANEL_MUTED, DASHBOARD_TITLE } from "@/lib/dashboard-theme";
 import { cn } from "@/lib/utils";
 
 type RawSectionKey =
@@ -167,19 +168,25 @@ export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
 
   return (
     <section
-      className="actions-panel flex h-[492px] min-h-[492px] max-h-[492px] w-full flex-col overflow-hidden rounded-[20px] bg-[#FFFFFF] shadow-[0_18px_45px_rgba(15,23,42,0.08)]"
+      className={cn(
+        DASHBOARD_PANEL,
+        "actions-panel flex h-[492px] min-h-[492px] max-h-[492px] w-full flex-col rounded-[26px] bg-white/95",
+      )}
       data-testid="ai-actions-panel"
     >
-      <div className="flex items-center justify-between gap-4 px-8 pb-5 pt-8">
+      <div className="flex items-center justify-between gap-4 px-8 pb-5 pt-7">
         <div className="flex items-center gap-4">
-          <Zap className="h-[22px] w-[22px] fill-[#4D41DF] text-[#4D41DF]" />
-          <div className="flex items-center gap-3">
-            <h2 className="font-manrope text-[18px] font-bold leading-none text-[#191C1E]">
-              AI Actions
-            </h2>
-            <span className="inline-flex items-center rounded-[20px] bg-[#EEF0FF] px-2 py-1 font-inter text-[12px] font-semibold leading-none text-[#4D41DF]">
-              {totalCount}
-            </span>
+          <div className="flex h-11 w-11 items-center justify-center rounded-[16px] bg-[linear-gradient(135deg,#4D41DF_0%,#6F64FF_100%)] shadow-[0_12px_24px_rgba(77,65,223,0.24)]">
+            <Zap className="h-[22px] w-[22px] fill-white text-white" />
+          </div>
+          <div className="space-y-2">
+            <p className={DASHBOARD_EYEBROW}>Recommended Actions</p>
+            <div className="flex items-center gap-3">
+              <h2 className={cn(DASHBOARD_TITLE, "text-[20px] leading-none")}>AI Actions</h2>
+              <span className="inline-flex items-center rounded-[20px] bg-[#EEF0FF] px-2 py-1 font-inter text-[12px] font-semibold leading-none text-[#4D41DF]">
+                {totalCount}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -244,7 +251,7 @@ export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
               const cardKey = item.id ?? `${item.title}-${item.ctaHref}-${index}`;
 
               return (
-                <article key={cardKey} className="rounded-[12px] bg-[#F2F4F6] p-4">
+                <article key={cardKey} className={cn(DASHBOARD_PANEL_MUTED, "p-4 transition-colors hover:bg-[#F3F4F8]")}>
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <h3 className="truncate font-manrope text-[15px] font-semibold leading-[1.25] text-[#191C1E]">

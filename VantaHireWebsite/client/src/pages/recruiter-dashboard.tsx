@@ -4,7 +4,6 @@ import { useLocation } from "wouter";
 import Layout from "@/components/Layout";
 import type { Job, Application, PipelineStage } from "@shared/schema";
 import { StageFunnel } from "@/components/dashboards/StageFunnel";
-import { Card, CardContent } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { DASHBOARD_EYEBROW, DASHBOARD_PAGE_BACKGROUND, DASHBOARD_SHELL_PANEL, DASHBOARD_TITLE } from "@/lib/dashboard-theme";
+import { cn } from "@/lib/utils";
 import { Mail, Send, Loader2, ChevronDown } from "lucide-react";
 import { RecruiterKpiRibbon } from "@/components/recruiter/RecruiterKpiRibbon";
 import { AIActionsPanel } from "@/components/recruiter/AIActionsPanel";
@@ -469,7 +470,7 @@ export default function RecruiterDashboard() {
   if (jobsLoading || applicationsLoading) {
     return (
       <Layout>
-        <div className="container mx-auto px-4 py-16">
+        <div className={cn(DASHBOARD_PAGE_BACKGROUND, "min-h-screen px-4 py-16 md:px-8")}>
           <div className="flex items-center justify-center h-64">
             <div className="text-muted-foreground">Loading...</div>
           </div>
@@ -480,46 +481,50 @@ export default function RecruiterDashboard() {
 
   return (
     <Layout>
-      <div className="container mx-auto mt-7 px-4 pb-8 pt-0">
-        <div className="space-y-8">
+      <div className={cn(DASHBOARD_PAGE_BACKGROUND, "min-h-screen px-4 pb-10 pt-6 md:px-8")}>
+        <div className="mx-auto max-w-[1500px] space-y-8">
           {/* Header + filters + KPIs */}
-          <div className="mt-0 space-y-3 pt-5">
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-3">
-                  <h1 className="text-2xl md:text-3xl font-semibold text-foreground">Recruiter Dashboard</h1>
-                  <Badge variant="outline" className="text-xs font-medium">
+          <div className="mt-0 space-y-6 pt-3">
+            <div className={cn(DASHBOARD_SHELL_PANEL, "relative px-6 py-6 md:px-8 md:py-8")} data-tour="dashboard-metrics">
+              <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-[radial-gradient(circle_at_top_left,_rgba(196,192,255,0.42),_transparent_55%),radial-gradient(circle_at_top_right,_rgba(193,227,255,0.24),_transparent_45%)]" />
+              <div className="relative space-y-6">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                  <div className="space-y-3">
+                    <p className={DASHBOARD_EYEBROW}>Recruiting Performance</p>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h1 className={cn(DASHBOARD_TITLE, "text-[28px] md:text-[34px]")}>Recruiter Dashboard</h1>
+                      <Badge variant="outline" className="rounded-full border-[#D8DBE6] bg-white/80 px-3 py-1 text-xs font-semibold text-[#5B4FF7]">
                     {planName} Plan
                   </Badge>
+                    </div>
+                    <p className="max-w-2xl text-sm text-[#5F6675] md:text-[15px]">
+                      Action-first view of your live pipeline, interviews, and hiring momentum.
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowInviteHMDialog(true)}
+                      data-tour="invite-hiring-manager-btn"
+                      className="h-11 rounded-2xl border-[#D9DDEA] bg-white px-5 text-[13px] font-semibold text-[#1F2937] shadow-[0_8px_18px_rgba(15,23,42,0.05)] hover:bg-[#F7F8FC]"
+                    >
+                      <Mail className="mr-2 h-4 w-4" />
+                      Invite Hiring Manager
+                    </Button>
+                  </div>
                 </div>
-                <p className="text-muted-foreground text-sm md:text-base">
-                  Overview of jobs, applications, and hiring performance
-                </p>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowInviteHMDialog(true)}
-                data-tour="invite-hiring-manager-btn"
-              >
-                <Mail className="h-4 w-4 mr-2" />
-                Invite Hiring Manager
-              </Button>
-            </div>
 
-            {/* Profile Completion Banner */}
-            <ProfileCompletionBanner />
+                <ProfileCompletionBanner />
 
-            <Card className="border-0 bg-transparent shadow-none" data-tour="dashboard-metrics">
-              <CardContent className="px-0 pt-4">
-                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
-                  <div className="text-sm text-muted-foreground">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                  <div className="text-sm text-[#687182]">
                     KPIs filtered by{" "}
-                    <span className="font-semibold text-foreground">
+                    <span className="font-semibold text-[#111827]">
                       Last {RANGE_PRESETS[rangePreset]} days
                     </span>{" "}
                     ·{" "}
-                    <span className="font-semibold text-foreground">
+                    <span className="font-semibold text-[#111827]">
                       {selectedJobId === "all" ? "All jobs" : `Job #${selectedJobId}`}
                     </span>
                   </div>
@@ -554,17 +559,18 @@ export default function RecruiterDashboard() {
                     </Select>
                   </div>
                 </div>
+
                 <RecruiterKpiRibbon
                   items={kpiItems}
                   heroLabel="Pipeline Health"
                   heroTooltip="Score based on stage movement, time in stage, drop-offs and stuck candidates."
                 />
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           </div>
 
           {/* Interviews + AI Actions */}
-          <div className="grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2">
+          <div className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-2">
             <div>
               <TodaysInterviewsPanel jobId={selectedJobId} />
             </div>
