@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -121,7 +121,7 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
   const todayKey = useMemo(() => formatDateKey(new Date()), []);
   const [selectedDate, setSelectedDate] = useState(todayKey);
 
-  const { data, isLoading } = useQuery<TodaysInterviewsResponse>({
+  const { data, isLoading, isFetching } = useQuery<TodaysInterviewsResponse>({
     queryKey: ["/api/recruiter-dashboard/todays-interviews", jobId, selectedDate],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -131,6 +131,7 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
       const response = await apiRequest("GET", `/api/recruiter-dashboard/todays-interviews?${params.toString()}`);
       return response.json();
     },
+    placeholderData: keepPreviousData,
   });
 
   const weekDays = useMemo(() => {
@@ -202,7 +203,10 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
       </div>
 
       <div
-        className="interview-list mt-6 h-[286px] space-y-4 overflow-y-hidden pr-1 transition-[overflow] duration-150 hover:[scrollbar-color:#C4C0FF_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-[4px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#C4C0FF] [&::-webkit-scrollbar-thumb:hover]:bg-[#6C63FF] [&::-webkit-scrollbar-track]:bg-transparent [.interview-panel:hover_&]:overflow-y-auto"
+        className={cn(
+          "interview-list mt-6 h-[286px] space-y-4 overflow-y-hidden pr-1 transition-[overflow,opacity] duration-150 hover:[scrollbar-color:#C4C0FF_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-[4px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#C4C0FF] [&::-webkit-scrollbar-thumb:hover]:bg-[#6C63FF] [&::-webkit-scrollbar-track]:bg-transparent [.interview-panel:hover_&]:overflow-y-auto",
+          isFetching && !isLoading && "opacity-70",
+        )}
       >
         {isLoading ? (
           Array.from({ length: 2 }).map((_, index) => (
@@ -218,7 +222,7 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
               </div>
             </div>
           ))
-        ) : items.length === 0 ? (
+        ) : count === 0 || items.length === 0 ? (
           <div className="flex min-h-[180px] items-center justify-center rounded-[12px] border border-dashed border-[#E7E9F0] bg-[#FBFBFD] px-6 text-center">
             <p className="max-w-sm text-sm font-medium text-[#9AA1AF]">
               No interviews scheduled for this day.
