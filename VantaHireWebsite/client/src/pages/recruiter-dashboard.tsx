@@ -582,8 +582,6 @@ export default function RecruiterDashboard() {
                 onStageClick={handleStageClick}
                 rangePreset={rangePreset}
                 selectedJobId={selectedJobId}
-                applications={currentApplications}
-                pipelineStages={pipelineStages}
               />
             </div>
           </div>

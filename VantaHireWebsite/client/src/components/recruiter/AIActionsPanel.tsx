@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { AlertCircle, ArrowRight, RefreshCcw, Zap } from "lucide-react";
+import { AlertCircle, ArrowRight, Loader2, RefreshCcw, Zap } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 
 type RawSectionKey =
@@ -150,14 +151,10 @@ export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
         range,
         jobId: jobId === "all" ? "all" : String(jobId),
       });
-      const response = await fetch(`/api/recruiter-dashboard/actions?${params.toString()}`, {
-        credentials: "include",
-      });
-      if (!response.ok) {
-        throw new Error("Failed to fetch recruiter actions");
-      }
+      const response = await apiRequest("GET", `/api/recruiter-dashboard/actions?${params.toString()}`);
       return response.json();
     },
+    placeholderData: (previousData) => previousData,
   });
 
   const sections = useMemo(() => normalizeSections(data?.sections), [data?.sections]);
@@ -186,8 +183,9 @@ export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
           </div>
         </div>
 
-        <div className="font-inter text-[12px] font-normal leading-none text-[#9CA3AF]">
-          {updatedLabel ? `Updated ${updatedLabel}` : "Updated --"}
+        <div className="flex items-center gap-2 font-inter text-[12px] font-normal leading-none text-[#9CA3AF]">
+          {isFetching && !isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[#C4C0FF]" /> : null}
+          <span>{updatedLabel ? `Updated ${updatedLabel}` : "Updated --"}</span>
         </div>
       </div>
 
@@ -217,7 +215,7 @@ export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col bg-[#FFFFFF] px-8 pt-8">
+      <div className={cn("flex min-h-0 flex-1 flex-col bg-[#FFFFFF] px-8 pt-8 transition-opacity", isFetching && !isLoading && "opacity-70")}>
         {isLoading ? (
           <div className="flex flex-1 items-center justify-center">
             <p className="font-inter text-[13px] text-[#9CA3AF]">Loading AI actions...</p>

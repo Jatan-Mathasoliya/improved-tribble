@@ -1,23 +1,19 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 type InterviewStatus = "scheduled" | "upcoming" | "completed";
 
 type InterviewItem = {
-  id: string;
-  applicationId: number;
-  jobId: number;
   candidateName: string;
   jobTitle: string;
   interviewDate: string;
-  interviewTime: string | null;
+  interviewTime: string;
   stageLabel: string;
-  aiFitLabel: string | null;
-  avatarUrl?: string | null;
+  aiFitLabel: string;
   status: InterviewStatus;
   ctaLabel: string;
   ctaHref: string;
@@ -26,20 +22,11 @@ type InterviewItem = {
 type InterviewWeekDay = {
   date: string;
   count: number;
-  dayLabel?: string;
-  isSelected?: boolean;
-  isToday: boolean;
 };
 
 type TodaysInterviewsResponse = {
   count: number;
-  interviewDate?: string;
-  week?: Array<{
-    date: string;
-    dayLabel: string;
-    count: number;
-    isSelected: boolean;
-  }>;
+  week: InterviewWeekDay[];
   items: InterviewItem[];
 };
 
@@ -62,26 +49,6 @@ function parseDateKey(value: string): Date {
   return new Date(year, month - 1, day);
 }
 
-function getCurrentWeekDays(): InterviewWeekDay[] {
-  const today = new Date();
-  const weekStart = new Date(today);
-  const dayOffset = (weekStart.getDay() + 6) % 7;
-  weekStart.setDate(weekStart.getDate() - dayOffset);
-  weekStart.setHours(0, 0, 0, 0);
-
-  return Array.from({ length: 7 }, (_, index) => {
-    const date = new Date(weekStart);
-    date.setDate(weekStart.getDate() + index);
-    const dateKey = formatDateKey(date);
-    return {
-      date: dateKey,
-      count: 0,
-      dayLabel: date.toLocaleDateString("en-US", { weekday: "short" }),
-      isToday: dateKey === formatDateKey(today),
-    };
-  });
-}
-
 function getInitials(name: string): string {
   return name
     .split(" ")
@@ -101,7 +68,7 @@ function splitInterviewTime(value: string | null): { time: string; meridiem: str
 }
 
 function statusDotClass(status: InterviewStatus): string {
-  if (status === "completed") return "bg-[#22C55E]";
+  if (status === "completed") return "bg-[#9CA3AF]";
   if (status === "upcoming") return "bg-[#F59E0B]";
   return "bg-[#4F46E5]";
 }
@@ -121,7 +88,7 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
   const todayKey = useMemo(() => formatDateKey(new Date()), []);
   const [selectedDate, setSelectedDate] = useState(todayKey);
 
-  const { data, isLoading } = useQuery<TodaysInterviewsResponse>({
+  const { data, isLoading, isFetching } = useQuery<TodaysInterviewsResponse>({
     queryKey: ["/api/recruiter-dashboard/todays-interviews", jobId, selectedDate],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -131,19 +98,10 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
       const response = await apiRequest("GET", `/api/recruiter-dashboard/todays-interviews?${params.toString()}`);
       return response.json();
     },
+    placeholderData: keepPreviousData,
   });
 
-  const weekDays = useMemo(() => {
-    const fallback = getCurrentWeekDays();
-    if (!data?.week?.length) return fallback;
-    return data.week.map((day) => ({
-      date: day.date,
-      dayLabel: day.dayLabel,
-      count: day.count,
-      isSelected: day.isSelected,
-      isToday: day.date === todayKey,
-    }));
-  }, [data?.week, todayKey]);
+  const weekDays = data?.week ?? [];
   const items = data?.items ?? [];
   const count = data?.count ?? 0;
 
@@ -178,10 +136,10 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
                 className={cn(
                   "text-[10px] font-medium uppercase tracking-[0.12em]",
                   isWeekend ? "text-[#D0D4DE]" : "text-[#B3B8C4]",
-                  (day.isSelected ?? isSelected) && "text-[#8E93A3]",
+                  isSelected && "text-[#8E93A3]",
                 )}
               >
-                {day.dayLabel ?? date.toLocaleDateString("en-US", { weekday: "short" })}
+                {date.toLocaleDateString("en-US", { weekday: "short" })}
               </span>
               <span
                 className={cn(
@@ -202,7 +160,10 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
       </div>
 
       <div
-        className="interview-list mt-6 h-[286px] space-y-4 overflow-y-hidden pr-1 transition-[overflow] duration-150 hover:[scrollbar-color:#C4C0FF_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-[4px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#C4C0FF] [&::-webkit-scrollbar-thumb:hover]:bg-[#6C63FF] [&::-webkit-scrollbar-track]:bg-transparent [.interview-panel:hover_&]:overflow-y-auto"
+        className={cn(
+          "interview-list mt-6 h-[286px] space-y-4 overflow-y-hidden pr-1 transition-[overflow,opacity] duration-150 hover:[scrollbar-color:#C4C0FF_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-[4px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#C4C0FF] [&::-webkit-scrollbar-thumb:hover]:bg-[#6C63FF] [&::-webkit-scrollbar-track]:bg-transparent [.interview-panel:hover_&]:overflow-y-auto",
+          isFetching && data ? "opacity-50" : "opacity-100",
+        )}
       >
         {isLoading ? (
           Array.from({ length: 2 }).map((_, index) => (
@@ -218,10 +179,10 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
               </div>
             </div>
           ))
-        ) : items.length === 0 ? (
+        ) : count === 0 || items.length === 0 ? (
           <div className="flex min-h-[180px] items-center justify-center rounded-[12px] border border-dashed border-[#E7E9F0] bg-[#FBFBFD] px-6 text-center">
             <p className="max-w-sm text-sm font-medium text-[#9AA1AF]">
-              No interviews scheduled for this day.
+              No interviews scheduled
             </p>
           </div>
         ) : (
@@ -231,7 +192,7 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
 
             return (
               <div
-                key={item.id}
+                key={`${item.candidateName}-${item.interviewDate}-${item.interviewTime}-${item.ctaHref}`}
                 className="flex flex-col gap-3 rounded-[12px] border border-[#EEF0F4] bg-[#F8F8FA] px-4 py-3.5 sm:flex-row sm:items-center sm:gap-4 sm:px-5"
               >
                 <div className="w-[58px] shrink-0 text-center sm:text-left">
@@ -244,7 +205,6 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
                 <div className="flex min-w-0 flex-1 items-center gap-4">
                   <div className="relative shrink-0">
                     <Avatar className="h-[46px] w-[46px] border border-[#E5E7EB]">
-                      <AvatarImage src={item.avatarUrl ?? undefined} alt={item.candidateName} className="object-cover" />
                       <AvatarFallback className={cn("text-[13px] font-semibold", avatarFallbackClass(item.candidateName))}>
                         {getInitials(item.candidateName)}
                       </AvatarFallback>
@@ -272,7 +232,7 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
                   </div>
                 </div>
 
-                <div className="flex shrink-0 items-center justify-end gap-4 sm:gap-5">
+                <div className="flex shrink-0 items-center justify-end">
                   <Button
                     asChild
                     className={cn(
