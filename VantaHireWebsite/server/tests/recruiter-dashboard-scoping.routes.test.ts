@@ -374,6 +374,131 @@ describe('recruiter dashboard endpoint scoping', () => {
     expect(result.body.viewer.dashboardScope).toBe('recruiter');
   });
 
+  it('returns recruiter-scoped dashboard kpis with a consistent card contract', async () => {
+    storageMock.getJobsByUser.mockResolvedValue([
+      {
+        id: 10,
+        title: 'Backend Engineer',
+        isActive: true,
+        createdAt: new Date('2026-03-01T00:00:00.000Z'),
+        deadline: new Date('2026-03-24T00:00:00.000Z'),
+        hiringManager: null,
+        clientName: null,
+      },
+    ]);
+    storageMock.getPipelineStages.mockResolvedValue([
+      { id: 1, name: 'Applied', order: 1, color: '#111111', organizationId: 2, isDefault: false },
+      { id: 2, name: 'Screening', order: 2, color: '#222222', organizationId: 2, isDefault: false },
+      { id: 3, name: 'Interview Scheduled', order: 3, color: '#333333', organizationId: 2, isDefault: false },
+    ]);
+    storageMock.getRecruiterApplications.mockResolvedValue([
+      {
+        id: 101,
+        jobId: 10,
+        name: 'Priya Sharma',
+        status: 'submitted',
+        currentStage: 2,
+        appliedAt: new Date('2026-03-21T00:00:00.000Z'),
+        updatedAt: new Date('2026-03-21T00:00:00.000Z'),
+        stageChangedAt: new Date('2026-03-22T00:00:00.000Z'),
+        lastViewedAt: new Date('2026-03-22T12:00:00.000Z'),
+        downloadedAt: null,
+        interviewDate: null,
+        interviewTime: null,
+        aiFitScore: 90,
+        aiFitLabel: 'Strong',
+        feedbackCount: 0,
+        job: { id: 10, title: 'Backend Engineer', isActive: true },
+      },
+      {
+        id: 102,
+        jobId: 10,
+        name: 'Alex Kim',
+        status: 'shortlisted',
+        currentStage: 3,
+        appliedAt: new Date('2026-03-20T00:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T00:00:00.000Z'),
+        stageChangedAt: new Date('2026-03-20T00:00:00.000Z'),
+        lastViewedAt: new Date('2026-03-20T10:00:00.000Z'),
+        downloadedAt: null,
+        interviewDate: new Date('2026-03-21T13:30:00.000Z'),
+        interviewTime: '13:30',
+        aiFitScore: 88,
+        aiFitLabel: 'Good',
+        feedbackCount: 0,
+        job: { id: 10, title: 'Backend Engineer', isActive: true },
+      },
+      {
+        id: 103,
+        jobId: 10,
+        name: 'Jordan Lee',
+        status: 'submitted',
+        currentStage: 1,
+        appliedAt: new Date('2026-03-14T00:00:00.000Z'),
+        updatedAt: new Date('2026-03-14T00:00:00.000Z'),
+        stageChangedAt: new Date('2026-03-14T00:00:00.000Z'),
+        lastViewedAt: null,
+        downloadedAt: null,
+        interviewDate: null,
+        interviewTime: null,
+        aiFitScore: 70,
+        aiFitLabel: 'Good',
+        feedbackCount: 0,
+        job: { id: 10, title: 'Backend Engineer', isActive: true },
+      },
+    ]);
+
+    const app = await buildApp();
+    const result = await invokeRoute(app, 'get', '/api/recruiter-dashboard/kpis', {
+      query: { range: '30d' },
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body.range).toBe('30d');
+    expect(result.body.comparisonLabel).toBe('vs previous 30 days');
+    expect(result.body.cards.pipelineHealth).toEqual(
+      expect.objectContaining({
+        id: 'pipelineHealth',
+        label: 'Pipeline Health',
+        status: expect.stringMatching(/healthy|needs_attention|at_risk/),
+        displayValue: expect.stringMatching(/%$/),
+        trendDirection: expect.stringMatching(/up|down|flat/),
+      }),
+    );
+    expect(result.body.cards.activeRoles).toEqual(
+      expect.objectContaining({
+        id: 'activeRoles',
+        label: 'Active Roles',
+        value: 1,
+        comparisonLabel: null,
+        trendDirection: 'flat',
+      }),
+    );
+    expect(result.body.cards.todaysApplications).toEqual(
+      expect.objectContaining({
+        id: 'todaysApplications',
+        label: "Today's Applications",
+        value: 1,
+        comparisonLabel: 'vs last week',
+      }),
+    );
+    expect(result.body.cards.firstReviewTime).toEqual(
+      expect.objectContaining({
+        id: 'firstReviewTime',
+        label: 'First Review Time',
+        unit: 'hours',
+        comparisonLabel: 'vs previous 30 days',
+      }),
+    );
+    expect(result.body.cards.screenToInterview).toEqual(
+      expect.objectContaining({
+        id: 'screenToInterview',
+        label: 'Screen → Interview',
+        comparisonLabel: 'vs previous 30 days',
+      }),
+    );
+  });
+
   it('applies recruiter dashboard action filters for job and range', async () => {
     const app = await buildApp();
     selectQueue.push([]);

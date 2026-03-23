@@ -58,6 +58,8 @@ const sectionOrder: DashboardActionSectionId[] = [
 
 type InterviewStageRangePreset = keyof typeof RANGE_PRESETS;
 type TodayInterviewStatus = "scheduled" | "upcoming" | "completed";
+type DashboardKpiStatus = "healthy" | "needs_attention" | "at_risk";
+type DashboardTrendDirection = "up" | "down" | "flat";
 
 function daysBetween(dateLike?: string | Date | null): number | null {
   if (!dateLike) return null;
@@ -183,6 +185,93 @@ function resolveInterviewStatus(
   return scheduledMinutes > currentMinutes ? "upcoming" : "completed";
 }
 
+function firstRecruiterActionAt(
+  app: {
+    appliedAt: string | Date;
+    lastViewedAt?: string | Date | null;
+    downloadedAt?: string | Date | null;
+    stageChangedAt?: string | Date | null;
+  },
+): Date | null {
+  const appliedAtMs = new Date(app.appliedAt).getTime();
+  const candidates = [app.lastViewedAt, app.downloadedAt, app.stageChangedAt]
+    .filter((value): value is NonNullable<typeof value> => value != null)
+    .map((value) => new Date(value))
+    .filter((value) => !Number.isNaN(value.getTime()) && value.getTime() >= appliedAtMs)
+    .sort((a, b) => a.getTime() - b.getTime());
+
+  return candidates[0] ?? null;
+}
+
+function averageFirstReviewDays(
+  apps: Array<{
+    appliedAt: string | Date;
+    lastViewedAt?: string | Date | null;
+    downloadedAt?: string | Date | null;
+    stageChangedAt?: string | Date | null;
+  }>,
+): number | null {
+  const durations = apps
+    .map((app) => {
+      const firstActionAt = firstRecruiterActionAt(app);
+      if (!firstActionAt) return null;
+      const delta =
+        (firstActionAt.getTime() - new Date(app.appliedAt).getTime()) /
+        (1000 * 60 * 60 * 24);
+      return delta >= 0 ? delta : null;
+    })
+    .filter((value): value is number => value != null);
+
+  if (durations.length === 0) return null;
+  return Math.round((durations.reduce((sum, value) => sum + value, 0) / durations.length) * 10) / 10;
+}
+
+function averageFirstReviewHours(
+  apps: Array<{
+    appliedAt: string | Date;
+    lastViewedAt?: string | Date | null;
+    downloadedAt?: string | Date | null;
+    stageChangedAt?: string | Date | null;
+  }>,
+): number | null {
+  const days = averageFirstReviewDays(apps);
+  return days == null ? null : Math.round(days * 24 * 10) / 10;
+}
+
+function formatDaysDisplay(days: number | null): string {
+  return days == null ? "—" : `${days}d`;
+}
+
+function roundDelta(value: number | null): number | null {
+  if (value == null || Number.isNaN(value)) return null;
+  return Math.round(value * 10) / 10;
+}
+
+function percentDelta(current: number, previous: number): number | null {
+  if (previous === 0) return current === 0 ? 0 : null;
+  return roundDelta(((current - previous) / previous) * 100);
+}
+
+function deltaDirection(delta: number | null, invert = false): DashboardTrendDirection {
+  if (delta == null) return "flat";
+  const normalized = invert ? -delta : delta;
+  if (normalized > 0) return "up";
+  if (normalized < 0) return "down";
+  return "flat";
+}
+
+function pipelineStatusForScore(score: number): DashboardKpiStatus {
+  if (score >= 80) return "healthy";
+  if (score >= 60) return "needs_attention";
+  return "at_risk";
+}
+
+function pipelineContextForScore(score: number): string {
+  if (score >= 80) return "Healthy";
+  if (score >= 60) return "Needs attention";
+  return "At risk";
+}
+
 async function getRecruiterDashboardContext(user: NonNullable<Request["user"]>) {
   const orgResult = await getUserOrganization(user.id);
   const organizationId =
@@ -206,6 +295,376 @@ async function getRecruiterDashboardContext(user: NonNullable<Request["user"]>) 
 }
 
 export function registerRecruiterDashboardRoutes(app: Express): void {
+  app.get(
+    "/api/recruiter-dashboard/kpis",
+    requireRole(["recruiter", "super_admin"]),
+    requireSeat({ allowNoOrg: true }),
+    async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+      try {
+        const user = req.user!;
+        const rangePreset = resolveRangePreset(req.query.range);
+        const rangeDays = RANGE_PRESETS[rangePreset];
+        const selectedJobId = parseJobIdParam(req.query.jobId);
+        const now = new Date();
+        const currentEnd = now;
+        const currentStart = addDays(new Date(now), -rangeDays);
+        const previousEnd = new Date(currentStart.getTime() - 1);
+        const previousStart = addDays(new Date(currentStart), -rangeDays);
+        const todayStart = startOfDay(now);
+        const todayEnd = endOfDay(now);
+
+        const { orgResult, jobs, applications, stages } = await getRecruiterDashboardContext(user);
+        const jobsInScope = jobs.filter((job) => selectedJobId == null || job.id === selectedJobId);
+        const activeJobsInScope = jobsInScope.filter((job) => job.isActive);
+        const jobIdsInScope = new Set(jobsInScope.map((job) => job.id));
+        const scopedApplications = applications.filter((app) => jobIdsInScope.has(app.jobId));
+        const currentApplications = scopedApplications;
+        const currentRangeApplications = scopedApplications.filter((app) =>
+          isWithinWindow(app.appliedAt, currentStart, currentEnd),
+        );
+        const previousRangeApplications = scopedApplications.filter((app) =>
+          isWithinWindow(app.appliedAt, previousStart, previousEnd),
+        );
+
+        const stageMeta = new Map(
+          stages.map((stage) => [
+            stage.id,
+            {
+              id: stage.id,
+              name: stage.name,
+              nameLower: stage.name.toLowerCase(),
+              order: stage.order,
+            },
+          ]),
+        );
+        const sortedStages = [...stages].sort((a, b) => (a.order - b.order) || (a.id - b.id));
+        const stageById = new Map(sortedStages.map((stage) => [stage.id, stage]));
+
+        const currentActivePipelineApplications = currentApplications.filter((app) => {
+          const stageName = stageMeta.get(app.currentStage ?? -1)?.nameLower ?? "";
+          return !isClosedApplication(app.status, stageName);
+        });
+        const previousActivePipelineApplications = previousRangeApplications.filter((app) => {
+          const stageName = stageMeta.get(app.currentStage ?? -1)?.nameLower ?? "";
+          return !isClosedApplication(app.status, stageName);
+        });
+
+        const computeJobHealth = (
+          appsForRange: typeof scopedApplications,
+          activeApps: typeof scopedApplications,
+        ) => {
+          const jobsNeedingAttention = activeJobsInScope.map((job) => {
+            const jobApplications = activeApps.filter((app) => app.jobId === job.id);
+            const rangeApplications = appsForRange.filter((app) => app.jobId === job.id);
+            const activeCount = jobApplications.length;
+            const staleCount = jobApplications.filter((app) => {
+              const referenceTime = app.stageChangedAt ?? app.appliedAt;
+              const waitDays =
+                (Date.now() - new Date(referenceTime).getTime()) / (1000 * 60 * 60 * 24);
+              return waitDays >= 5;
+            }).length;
+
+            let status: "green" | "amber" | "red" = "green";
+            const reasons: string[] = [];
+
+            if (activeCount === 0) {
+              status = "red";
+              reasons.push("No active candidates left");
+            } else if (activeCount < 3) {
+              status = "amber";
+              reasons.push(`Only ${activeCount} active candidate${activeCount === 1 ? "" : "s"} left`);
+            }
+
+            if (staleCount >= 3) {
+              status = "red";
+              reasons.push(`${staleCount} candidates stalled in stage`);
+            } else if (staleCount > 0 && status === "green") {
+              status = "amber";
+              reasons.push(`${staleCount} candidate${staleCount === 1 ? "" : "s"} need movement`);
+            }
+
+            if (rangeApplications.length === 0 && status !== "red") {
+              status = "amber";
+              reasons.push(`No new applicants in last ${rangeDays}d`);
+            }
+
+            return {
+              jobId: job.id,
+              jobTitle: job.title,
+              status,
+              reason: reasons[0] ?? "Healthy pipeline",
+            };
+          });
+
+          if (!activeJobsInScope.length) {
+            return { jobsNeedingAttention, score: 0 };
+          }
+
+          const weight = { green: 95, amber: 68, red: 38 } as const;
+          const avg =
+            jobsNeedingAttention.reduce((sum, job) => sum + (weight[job.status] ?? 70), 0) /
+            jobsNeedingAttention.length;
+
+          return {
+            jobsNeedingAttention,
+            score: Math.round(avg),
+          };
+        };
+
+        const currentHealth = computeJobHealth(currentRangeApplications, currentActivePipelineApplications);
+        const previousHealth = computeJobHealth(previousRangeApplications, previousActivePipelineApplications);
+        const pipelineHealthDelta = roundDelta(currentHealth.score - previousHealth.score);
+
+        const stuckCandidates = sortedStages
+          .map((stage) => {
+            const count = currentActivePipelineApplications.filter((app) => {
+              if (app.currentStage !== stage.id) return false;
+              const referenceTime = app.stageChangedAt ?? app.appliedAt;
+              const waitDays =
+                (Date.now() - new Date(referenceTime).getTime()) / (1000 * 60 * 60 * 24);
+              return waitDays >= 5;
+            }).length;
+            return count > 0 ? { stage: stage.name, count } : null;
+          })
+          .filter((value): value is { stage: string; count: number } => value !== null)
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 3);
+
+        const stageCounts = sortedStages.map((stage) => ({
+          stage,
+          count: currentRangeApplications.filter((app) => app.currentStage === stage.id).length,
+        }));
+
+        const stageRates = stageCounts
+          .map((entry, index) => {
+            if (index === 0) return null;
+            const previous = stageCounts[index - 1];
+            if (!previous || previous.count <= 0) return null;
+            return {
+              label: `${previous.stage.name} → ${entry.stage.name}`,
+              rate: roundRate(entry.count, previous.count),
+            };
+          })
+          .filter((value): value is { label: string; rate: number } => value !== null);
+
+        const strongestConvertingStage = [...stageRates].sort((a, b) => b.rate - a.rate)[0] ?? null;
+        const weakestConvertingStage = [...stageRates].sort((a, b) => a.rate - b.rate)[0] ?? null;
+
+        const activeRolesCount = activeJobsInScope.length;
+        const rolesByDemand = jobsInScope.map((job) => ({
+          jobId: job.id,
+          jobTitle: job.title,
+          applications: currentRangeApplications.filter((app) => app.jobId === job.id).length,
+          activeCandidates: currentActivePipelineApplications.filter((app) => app.jobId === job.id).length,
+          deadline: clampDate(job.deadline ?? job.expiresAt ?? null),
+        }));
+
+        const highestDemandRole = [...rolesByDemand]
+          .sort((a, b) => b.applications - a.applications)[0] ?? null;
+        const lowestCandidateVolumeRole = [...rolesByDemand]
+          .filter((job) => activeJobsInScope.some((activeJob) => activeJob.id === job.jobId))
+          .sort((a, b) => a.activeCandidates - b.activeCandidates)[0] ?? null;
+        const closingSoonRole = [...rolesByDemand]
+          .filter((job) => job.deadline && job.deadline.getTime() >= todayStart.getTime())
+          .sort((a, b) => (a.deadline!.getTime() - b.deadline!.getTime()))[0];
+
+        const todaysCount = currentApplications.filter((app) =>
+          isWithinWindow(app.appliedAt, todayStart, todayEnd),
+        ).length;
+        const lastWeekStart = addDays(new Date(todayStart), -7);
+        const lastWeekEnd = addDays(new Date(todayEnd), -7);
+        const sameDayLastWeekCount = currentApplications.filter((app) =>
+          isWithinWindow(app.appliedAt, lastWeekStart, lastWeekEnd),
+        ).length;
+        const todaysTrendDelta = percentDelta(todaysCount, sameDayLastWeekCount);
+        const topJobToday = jobsInScope
+          .map((job) => ({
+            jobId: job.id,
+            jobTitle: job.title,
+            applications: currentApplications.filter((app) =>
+              app.jobId === job.id && isWithinWindow(app.appliedAt, todayStart, todayEnd),
+            ).length,
+          }))
+          .sort((a, b) => b.applications - a.applications)[0] ?? null;
+        const sevenDayAverage =
+          Math.round(
+            (currentApplications.filter((app) =>
+              isWithinWindow(app.appliedAt, addDays(new Date(todayStart), -6), todayEnd),
+            ).length / 7) * 10,
+          ) / 10;
+
+        const currentFirstReviewDays = averageFirstReviewDays(currentRangeApplications);
+        const previousFirstReviewDays = averageFirstReviewDays(previousRangeApplications);
+        const firstReviewDelta =
+          currentFirstReviewDays != null && previousFirstReviewDays != null
+            ? roundDelta(currentFirstReviewDays - previousFirstReviewDays)
+            : null;
+        const progressionRate = roundRate(
+          currentRangeApplications.filter((app) => app.status !== "submitted" || app.currentStage != null).length,
+          currentRangeApplications.length,
+        );
+
+        const screeningStage = sortedStages.find((stage) => stage.name.toLowerCase().includes("screen"));
+        const interviewStage = sortedStages.find((stage) => stage.name.toLowerCase().includes("interview"));
+        const screeningOrder = screeningStage?.order ?? null;
+        const interviewOrder = interviewStage?.order ?? null;
+
+        const hasReachedStage = (
+          app: (typeof scopedApplications)[number],
+          thresholdOrder: number | null,
+        ): boolean => {
+          if (thresholdOrder == null || app.currentStage == null) return false;
+          const stage = stageById.get(app.currentStage);
+          if (!stage) return false;
+          if (stage.name.toLowerCase().includes("rejected") || app.status === "rejected") return false;
+          return (stage.order ?? -1) >= thresholdOrder;
+        };
+
+        const currentScreeningCount = currentRangeApplications.filter((app) =>
+          hasReachedStage(app, screeningOrder),
+        ).length;
+        const currentInterviewCount = currentRangeApplications.filter((app) =>
+          hasReachedStage(app, interviewOrder),
+        ).length;
+        const previousScreeningCount = previousRangeApplications.filter((app) =>
+          hasReachedStage(app, screeningOrder),
+        ).length;
+        const previousInterviewCount = previousRangeApplications.filter((app) =>
+          hasReachedStage(app, interviewOrder),
+        ).length;
+        const currentInterviewRate = roundRate(currentInterviewCount, currentScreeningCount);
+        const previousInterviewRate = roundRate(previousInterviewCount, previousScreeningCount);
+        const screenToInterviewDelta = roundDelta(currentInterviewRate - previousInterviewRate);
+
+        const activeInterviewLoops = currentApplications.filter((app) => {
+          const stageName = stageMeta.get(app.currentStage ?? -1)?.nameLower ?? "";
+          return !isClosedApplication(app.status, stageName) && stageName.includes("interview");
+        }).length;
+        const interviewsScheduledToday = currentApplications.filter((app) =>
+          isWithinWindow(app.interviewDate, todayStart, todayEnd),
+        ).length;
+
+        const pipelineStatus = pipelineStatusForScore(currentHealth.score);
+        const firstReviewHours = averageFirstReviewHours(currentRangeApplications);
+        const firstReviewStatus: DashboardKpiStatus =
+          currentFirstReviewDays == null
+            ? "needs_attention"
+            : currentFirstReviewDays <= 1
+              ? "healthy"
+              : currentFirstReviewDays <= 3
+                ? "needs_attention"
+                : "at_risk";
+        const screenToInterviewStatus: DashboardKpiStatus =
+          currentInterviewRate >= 30 ? "healthy" : currentInterviewRate >= 15 ? "needs_attention" : "at_risk";
+
+        res.json({
+          generatedAt: new Date().toISOString(),
+          range: rangePreset,
+          jobId: selectedJobId,
+          comparisonLabel: `vs previous ${rangeDays} days`,
+          cards: {
+            pipelineHealth: {
+              id: "pipelineHealth",
+              label: "Pipeline Health",
+              status: pipelineStatus,
+              value: currentHealth.score,
+              displayValue: `${currentHealth.score}%`,
+              trendDelta: pipelineHealthDelta,
+              trendDirection: deltaDirection(pipelineHealthDelta),
+              comparisonLabel: `vs previous ${rangeDays} days`,
+              contextLine: pipelineContextForScore(currentHealth.score),
+              insights: {
+                stuckCandidates,
+                strongestConvertingStage,
+                weakestConvertingStage,
+              },
+            },
+            activeRoles: {
+              id: "activeRoles",
+              label: "Active Roles",
+              status: "healthy" as DashboardKpiStatus,
+              value: activeRolesCount,
+              displayValue: String(activeRolesCount),
+              trendDelta: null,
+              trendDirection: "flat" as DashboardTrendDirection,
+              comparisonLabel: null,
+              contextLine: "Open positions",
+              insights: {
+                highestDemandRole,
+                lowestCandidateVolumeRole,
+                closingSoonRole: closingSoonRole
+                  ? {
+                      jobId: closingSoonRole.jobId,
+                      jobTitle: closingSoonRole.jobTitle,
+                      daysToClose: Math.max(
+                        0,
+                        Math.ceil((closingSoonRole.deadline!.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24)),
+                      ),
+                    }
+                  : null,
+              },
+            },
+            todaysApplications: {
+              id: "todaysApplications",
+              label: "Today's Applications",
+              status: todaysCount >= Math.max(1, sevenDayAverage) ? "healthy" : "needs_attention",
+              value: todaysCount,
+              displayValue: String(todaysCount),
+              trendDelta: todaysTrendDelta,
+              trendDirection: deltaDirection(todaysTrendDelta),
+              comparisonLabel: "vs last week",
+              contextLine:
+                todaysTrendDelta == null
+                  ? "Today pulse"
+                  : `${todaysTrendDelta >= 0 ? "↑" : "↓"} ${Math.abs(todaysTrendDelta)}% vs last week`,
+              insights: {
+                newApplicationsToday: todaysCount,
+                topJobToday,
+                sevenDayAverage,
+              },
+            },
+            firstReviewTime: {
+              id: "firstReviewTime",
+              label: "First Review Time",
+              status: firstReviewStatus,
+              value: firstReviewHours,
+              displayValue: formatDaysDisplay(currentFirstReviewDays),
+              unit: "hours",
+              trendDelta: firstReviewDelta,
+              trendDirection: deltaDirection(firstReviewDelta, true),
+              comparisonLabel: `vs previous ${rangeDays} days`,
+              contextLine: "Avg response time",
+              insights: {
+                benchmark: "< 24 hours is healthy",
+                progressionRate,
+                comparisonDelta: firstReviewDelta,
+              },
+            },
+            screenToInterview: {
+              id: "screenToInterview",
+              label: "Screen → Interview",
+              status: screenToInterviewStatus,
+              value: currentInterviewRate,
+              displayValue: `${currentInterviewRate}%`,
+              trendDelta: screenToInterviewDelta,
+              trendDirection: deltaDirection(screenToInterviewDelta),
+              comparisonLabel: `vs previous ${rangeDays} days`,
+              contextLine: "Conversion",
+              insights: {
+                activeInterviewLoops,
+                interviewsScheduledToday,
+                comparisonDelta: screenToInterviewDelta,
+              },
+            },
+          },
+        });
+        return;
+      } catch (error) {
+        next(error);
+      }
+    },
+  );
+
   app.get(
     "/api/recruiter-dashboard/actions",
     requireRole(["recruiter", "super_admin"]),
