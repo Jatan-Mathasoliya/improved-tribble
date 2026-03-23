@@ -42,7 +42,6 @@ import {
   FileText,
   Home,
   LogOut,
-  Plus,
   Search,
   Settings,
   Shield,
@@ -234,7 +233,6 @@ export default function AtsSidebar({
   );
   const initials = `${user?.firstName?.[0] ?? ""}${user?.lastName?.[0] ?? user?.username?.[0] ?? "U"}`.toUpperCase();
   const accountSubtitle = user?.username ?? "";
-  const canPostJobs = isRecruiter || isAdmin;
 
   return (
     <Sidebar
@@ -267,16 +265,6 @@ export default function AtsSidebar({
             className="mt-1 shrink-0 rounded-xl border border-transparent text-[#8D94A7] transition-colors hover:border-[#E6E9F4] hover:bg-[#FFFFFF] hover:text-[#6C63FF] group-data-[collapsible=icon]:mt-0 group-data-[collapsible=icon]:h-10 group-data-[collapsible=icon]:w-10"
           />
         </div>
-        {canPostJobs ? (
-          <button
-            type="button"
-            onClick={() => navigate("/jobs/post")}
-            className="group flex h-12 items-center justify-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#4D41DF_0%,#675DF9_100%)] px-4 text-sm font-semibold text-white shadow-[0_18px_36px_rgba(77,65,223,0.24)] transition-all duration-200 hover:-translate-y-0.5 hover:shadow-[0_22px_40px_rgba(77,65,223,0.28)] group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:h-11 group-data-[collapsible=icon]:w-11 group-data-[collapsible=icon]:rounded-2xl group-data-[collapsible=icon]:px-0"
-          >
-            <Plus className="h-4 w-4 shrink-0" />
-            <span className="group-data-[collapsible=icon]:hidden">Post New Job</span>
-          </button>
-        ) : null}
       </SidebarHeader>
 
       <SidebarContent
