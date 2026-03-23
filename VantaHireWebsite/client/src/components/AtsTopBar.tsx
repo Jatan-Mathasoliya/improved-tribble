@@ -1,8 +1,6 @@
 import * as React from "react";
 import {
-  Bell,
   Briefcase,
-  ChevronRight,
   Command as CommandIcon,
   CreditCard,
   FileText,
@@ -16,14 +14,6 @@ import {
   Users,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import {
   CommandDialog,
@@ -42,8 +32,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { SidebarTrigger } from "@/components/ui/sidebar";
-import { cn } from "@/lib/utils";
 import type { Organization, Membership } from "@/hooks/use-organization";
 import type { User as SelectUser } from "@shared/schema";
 
@@ -64,8 +52,8 @@ type RouteMeta = {
   label: string;
   description: string;
   icon: LucideIcon;
+  section: string;
   match: (location: string) => boolean;
-  breadcrumb?: string[];
 };
 
 const ATS_ROUTES: RouteMeta[] = [
@@ -74,112 +62,112 @@ const ATS_ROUTES: RouteMeta[] = [
     label: "Dashboard",
     description: "Recruiter performance, actions, and interview pipeline",
     icon: Home,
+    section: "Workspace",
     match: (location) => location === "/recruiter-dashboard",
-    breadcrumb: ["Workspace", "Dashboard"],
   },
   {
     path: "/applications",
     label: "Applications",
     description: "Review and move candidates through the pipeline",
     icon: Briefcase,
+    section: "Workspace",
     match: (location) => location === "/applications" || location.startsWith("/jobs/") && location.includes("/applications"),
-    breadcrumb: ["Workspace", "Applications"],
   },
   {
     path: "/candidates",
     label: "Talent Search",
     description: "Search your talent pool and rediscover candidates",
     icon: Search,
+    section: "Workspace",
     match: (location) => location.startsWith("/candidates"),
-    breadcrumb: ["Workspace", "Talent Search"],
   },
   {
     path: "/my-jobs",
     label: "My Jobs",
     description: "Open roles, sourcing, and job operations",
     icon: Briefcase,
+    section: "Workspace",
     match: (location) => location === "/my-jobs" || /^\/jobs\/\d+/.test(location),
-    breadcrumb: ["Workspace", "My Jobs"],
   },
   {
     path: "/clients",
     label: "Clients",
     description: "Manage client relationships and shared hiring workflows",
     icon: Users,
+    section: "Workspace",
     match: (location) => location.startsWith("/clients"),
-    breadcrumb: ["Workspace", "Clients"],
   },
   {
     path: "/admin/forms",
     label: "Forms",
     description: "Application forms and intake flows",
     icon: FileText,
+    section: "Workspace",
     match: (location) => location.startsWith("/admin/forms"),
-    breadcrumb: ["Workspace", "Forms"],
   },
   {
     path: "/admin/email-templates",
     label: "Email",
     description: "Templates and outreach assets",
     icon: Sparkles,
+    section: "Workspace",
     match: (location) => location.startsWith("/admin/email-templates"),
-    breadcrumb: ["Workspace", "Email"],
   },
   {
     path: "/profile/settings",
     label: "Profile Settings",
     description: "Personal recruiter profile and preferences",
     icon: Settings,
+    section: "Account",
     match: (location) => location.startsWith("/profile/settings"),
-    breadcrumb: ["Account", "Profile Settings"],
   },
   {
     path: "/org/settings",
     label: "Org Settings",
     description: "Organization setup and permissions",
     icon: Settings,
+    section: "Organization",
     match: (location) => location.startsWith("/org/settings"),
-    breadcrumb: ["Organization", "Settings"],
   },
   {
     path: "/org/team",
     label: "Team Members",
     description: "Seats, roles, and collaborator access",
     icon: Users,
+    section: "Organization",
     match: (location) => location.startsWith("/org/team"),
-    breadcrumb: ["Organization", "Team Members"],
   },
   {
     path: "/org/billing",
     label: "Billing",
     description: "Subscription and payment settings",
     icon: CreditCard,
+    section: "Organization",
     match: (location) => location.startsWith("/org/billing"),
-    breadcrumb: ["Organization", "Billing"],
   },
   {
     path: "/org/analytics",
     label: "Organization Analytics",
     description: "Org-level performance analytics",
     icon: Shield,
+    section: "Organization",
     match: (location) => location.startsWith("/org/analytics"),
-    breadcrumb: ["Organization", "Analytics"],
   },
   {
     path: "/admin",
     label: "Admin Dashboard",
     description: "Platform-level controls and oversight",
     icon: Shield,
+    section: "Admin",
     match: (location) => location === "/admin",
-    breadcrumb: ["Admin", "Dashboard"],
   },
   {
     path: "/pricing",
     label: "Pricing",
     description: "Plans, entitlements, and upgrade options",
     icon: CreditCard,
+    section: "Workspace",
     match: (location) => location === "/pricing",
-    breadcrumb: ["Workspace", "Pricing"],
   },
 ];
 
@@ -234,37 +222,15 @@ export function AtsTopBar({
 
   return (
     <>
-      <header className="sticky top-0 z-20 border-b border-[#E6E9F2] bg-[rgba(248,249,252,0.82)] backdrop-blur-xl">
+      <header className="sticky top-0 z-20 overflow-x-hidden border-b border-[#E6E9F2] bg-[rgba(248,249,252,0.82)] backdrop-blur-xl">
         <div className="relative">
           <div className="absolute inset-x-0 top-0 h-full bg-[radial-gradient(circle_at_top_left,_rgba(196,192,255,0.26),_transparent_35%),radial-gradient(circle_at_top_right,_rgba(196,236,255,0.18),_transparent_32%)]" />
-          <div className="relative flex h-[76px] items-center justify-between gap-4 px-4 md:px-6">
+          <div className="relative flex h-[76px] min-w-0 items-center justify-between gap-4 px-4 md:px-6">
             <div className="flex min-w-0 items-center gap-3 md:gap-4">
-              <SidebarTrigger className="hidden h-10 w-10 rounded-2xl border border-[#E6E9F2] bg-white text-[#5F6B85] shadow-[0_8px_24px_rgba(15,23,42,0.04)] hover:bg-[#F5F7FB] md:flex" />
               <div className="min-w-0">
-                <Breadcrumb className="hidden md:block">
-                  <BreadcrumbList className="text-[12px] font-medium text-[#8891A5]">
-                    {(currentRoute.breadcrumb ?? ["Workspace", currentRoute.label]).map((crumb, index, arr) => (
-                      <React.Fragment key={`${crumb}-${index}`}>
-                        <BreadcrumbItem>
-                          {index === arr.length - 1 ? (
-                            <BreadcrumbPage className="font-semibold text-[#1D2433]">{crumb}</BreadcrumbPage>
-                          ) : (
-                            <BreadcrumbLink asChild>
-                              <button type="button" onClick={() => navigate("/recruiter-dashboard")}>
-                                {crumb}
-                              </button>
-                            </BreadcrumbLink>
-                          )}
-                        </BreadcrumbItem>
-                        {index < arr.length - 1 ? (
-                          <BreadcrumbSeparator>
-                            <ChevronRight className="h-3.5 w-3.5" />
-                          </BreadcrumbSeparator>
-                        ) : null}
-                      </React.Fragment>
-                    ))}
-                  </BreadcrumbList>
-                </Breadcrumb>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#8B93A6]">
+                  {currentRoute.section}
+                </div>
                 <div className="truncate text-[20px] font-extrabold tracking-[-0.03em] text-[#111827]">
                   {currentRoute.label}
                 </div>
@@ -274,11 +240,11 @@ export function AtsTopBar({
               </div>
             </div>
 
-            <div className="flex items-center gap-2 md:gap-3">
+            <div className="flex min-w-0 items-center gap-2 md:gap-3">
               <button
                 type="button"
                 onClick={() => setCommandOpen(true)}
-                className="hidden min-w-[260px] items-center gap-3 rounded-[18px] border border-[#E6E9F2] bg-white/92 px-4 py-3 text-left shadow-[0_10px_24px_rgba(15,23,42,0.05)] transition-colors hover:bg-[#FCFCFE] lg:flex"
+                className="hidden w-[220px] items-center gap-3 rounded-[18px] border border-[#E6E9F2] bg-white/92 px-4 py-3 text-left shadow-[0_10px_24px_rgba(15,23,42,0.05)] transition-colors hover:bg-[#FCFCFE] xl:flex"
               >
                 <Search className="h-4 w-4 text-[#81889A]" />
                 <span className="truncate text-sm text-[#81889A]">Jump to pages, workflows, and settings…</span>
@@ -296,19 +262,10 @@ export function AtsTopBar({
                 <CommandIcon className="h-4 w-4" />
               </button>
 
-              <button
-                type="button"
-                className="relative flex h-10 w-10 items-center justify-center rounded-2xl border border-[#E6E9F2] bg-white text-[#5F6B85] shadow-[0_8px_24px_rgba(15,23,42,0.04)] hover:bg-[#F5F7FB]"
-                aria-label="Notifications"
-              >
-                <Bell className="h-4 w-4" />
-                <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#5B4FF7]" />
-              </button>
-
               {primaryAction ? (
                 <Button
                   onClick={() => navigate(primaryAction.path)}
-                  className="hidden rounded-[18px] bg-[linear-gradient(135deg,#4D41DF_0%,#675DF9_100%)] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_16px_30px_rgba(77,65,223,0.26)] hover:opacity-95 xl:inline-flex"
+                  className="hidden rounded-[18px] bg-[linear-gradient(135deg,#4D41DF_0%,#675DF9_100%)] px-5 py-2.5 text-sm font-semibold text-white shadow-[0_16px_30px_rgba(77,65,223,0.26)] hover:opacity-95 lg:inline-flex"
                 >
                   {primaryAction.label}
                 </Button>

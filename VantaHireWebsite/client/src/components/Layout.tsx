@@ -105,9 +105,10 @@ const Layout = ({ children }: LayoutProps) => {
 
   if (atsContext) {
     return (
-      <div className="min-h-screen bg-[linear-gradient(180deg,#F4F6FA_0%,#EEF2F6_100%)] text-foreground ats-theme">
+      <div className="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,#F4F6FA_0%,#EEF2F6_100%)] text-foreground ats-theme">
         <SidebarProvider
           defaultOpen
+          className="overflow-x-hidden"
           style={
             {
               "--sidebar-width": "16.5rem",
@@ -128,7 +129,7 @@ const Layout = ({ children }: LayoutProps) => {
             displayName={displayName}
           />
 
-          <SidebarInset className="min-h-svh bg-transparent transition-[width] duration-200 ease-linear">
+          <SidebarInset className="min-h-svh overflow-x-hidden bg-transparent transition-[width] duration-200 ease-linear">
             <div className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-border/70 bg-background/95 px-4 backdrop-blur md:hidden">
               <SidebarTrigger className="-ml-1" />
               <div className="flex min-w-0 items-center gap-2">
@@ -137,7 +138,7 @@ const Layout = ({ children }: LayoutProps) => {
               </div>
             </div>
 
-            <div className="flex min-h-[calc(100svh-3.5rem)] flex-1 flex-col md:min-h-svh">
+            <div className="flex min-h-[calc(100svh-3.5rem)] min-w-0 flex-1 flex-col overflow-x-hidden md:min-h-svh">
               <AtsTopBar
                 location={location}
                 navigate={setLocation}
@@ -149,7 +150,7 @@ const Layout = ({ children }: LayoutProps) => {
                 isOrgOwnerOrAdmin={isOrgOwnerOrAdmin}
                 displayName={displayName}
               />
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 overflow-x-hidden">
                 {children}
               </div>
               <Footer minimal />
