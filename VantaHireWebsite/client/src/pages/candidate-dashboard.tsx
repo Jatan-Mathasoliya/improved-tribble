@@ -47,6 +47,7 @@ import Layout from "@/components/Layout";
 import { KpiCard } from "@/components/dashboards/KpiCard";
 import { CandidateTimeline } from "@/components/dashboards/CandidateTimeline";
 import { ProfileCompletionBanner } from "@/components/ProfileCompletionBanner";
+import { candidateDashboardCopy } from "@/lib/internal-copy";
 
 type ApplicationWithJob = Application & {
   job: Job;
@@ -641,12 +642,12 @@ export default function CandidateDashboard() {
               <div className="flex items-center gap-3 mb-4">
                 <Target className="h-8 w-8 text-[#7B38FB]" />
                 <h1 className="text-4xl md:text-5xl font-bold">
-                  <span className="animate-gradient-text">Candidate</span>
-                  <span className="text-foreground ml-3">Dashboard</span>
+                  <span className="animate-gradient-text">{candidateDashboardCopy.header.titlePrimary}</span>
+                  <span className="text-foreground ml-3">{candidateDashboardCopy.header.titleSecondary}</span>
                 </h1>
               </div>
               <p className="text-lg md:text-xl text-muted-foreground max-w-2xl leading-relaxed animate-slide-up" style={{ animationDelay: '0.3s' }}>
-                Manage your profile and track your job applications with AI-powered insights
+                {candidateDashboardCopy.header.subtitle}
               </p>
             </div>
 
@@ -658,7 +659,7 @@ export default function CandidateDashboard() {
               <Alert className="mb-6 bg-warning/10 border-warning/30 text-warning">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  AI-powered job fit scoring is currently unavailable. You can still view and manage your applications.
+                  {candidateDashboardCopy.alerts.fitUnavailable}
                 </AlertDescription>
               </Alert>
             )}
@@ -666,7 +667,7 @@ export default function CandidateDashboard() {
               <Alert className="mb-6 bg-info/10 border-info/30 text-info">
                 <AlertCircle className="h-4 w-4" />
                 <AlertDescription>
-                  AI resume advisor is currently unavailable. Standard resume uploads are still available.
+                  {candidateDashboardCopy.alerts.resumeUnavailable}
                 </AlertDescription>
               </Alert>
             )}
@@ -681,7 +682,7 @@ export default function CandidateDashboard() {
                         <Sparkles className="w-5 h-5 text-primary" />
                       </div>
                       <div>
-                        <h3 className="text-foreground font-medium">Free AI Fit Computations</h3>
+                        <h3 className="text-foreground font-medium">{candidateDashboardCopy.alerts.fitComputations}</h3>
                         <p className="text-muted-foreground text-sm">
                           {aiLimits.fitRemainingThisMonth} of {aiLimits.fitLimitPerMonth} remaining this month
                         </p>

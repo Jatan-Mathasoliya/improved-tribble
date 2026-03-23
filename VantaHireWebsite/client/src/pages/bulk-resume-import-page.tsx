@@ -16,6 +16,7 @@ import {
   useBulkImportReprocess,
 } from '@/hooks/use-bulk-import';
 import type { FinalizeResponse, PatchItemRequest } from '@/lib/bulkImportApi';
+import { bulkResumeImportPageCopy } from '@/lib/internal-copy';
 
 function useBatchIdFromSearch(): number | null {
   if (typeof window === 'undefined') return null;
@@ -159,7 +160,7 @@ export default function BulkResumeImportPage() {
         {/* Page header */}
         <div className="flex items-center justify-between mt-6 mb-4">
           <div>
-            <h1 className="text-xl font-semibold">Bulk Resume Import</h1>
+            <h1 className="text-xl font-semibold">{bulkResumeImportPageCopy.header.title}</h1>
             <p className="text-sm text-muted-foreground">
               Batch #{batchId} &middot; {batch.fileCount} file{batch.fileCount !== 1 ? 's' : ''}
             </p>
@@ -178,12 +179,12 @@ export default function BulkResumeImportPage() {
                 ) : (
                   <RefreshCw className="h-4 w-4 mr-2" />
                 )}
-                Re-parse
+                {bulkResumeImportPageCopy.header.reparse}
               </Button>
             )}
             <Button variant="outline" size="sm" onClick={() => setLocation(`/jobs/${jobId}/applications`)}>
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Applications
+              {bulkResumeImportPageCopy.header.applications}
             </Button>
           </div>
         </div>

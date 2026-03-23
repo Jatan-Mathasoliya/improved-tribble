@@ -19,6 +19,7 @@ import Layout from "@/components/Layout";
 import { JobSubNav } from "@/components/JobSubNav";
 import { PageHeaderSkeleton } from "@/components/skeletons";
 import { CoRecruiterManagement } from "@/components/CoRecruiterManagement";
+import { jobEditPageCopy } from "@/lib/internal-copy";
 
 const MIN_DESCRIPTION_WORDS = 200;
 const countWords = (value: string): number =>
@@ -126,13 +127,13 @@ export default function JobEditPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId] });
       queryClient.invalidateQueries({ queryKey: ["/api/my-jobs"] });
       toast({
-        title: "Job updated",
-        description: "Job details have been saved successfully.",
+        title: jobEditPageCopy.toasts.successTitle,
+        description: jobEditPageCopy.toasts.successDescription,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Update failed",
+        title: jobEditPageCopy.toasts.errorTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -192,8 +193,8 @@ export default function JobEditPage() {
         <div className="container mx-auto px-4 py-8">
           <Card className="shadow-sm">
             <CardContent className="p-8 text-center">
-              <h3 className="text-xl font-semibold text-foreground mb-2">Job Not Found</h3>
-              <p className="text-muted-foreground">The requested job could not be found.</p>
+              <h3 className="text-xl font-semibold text-foreground mb-2">{jobEditPageCopy.empty.title}</h3>
+              <p className="text-muted-foreground">{jobEditPageCopy.empty.description}</p>
             </CardContent>
           </Card>
         </div>
@@ -214,7 +215,7 @@ export default function JobEditPage() {
               className="text-muted-foreground hover:text-foreground hover:bg-muted"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Job
+              {jobEditPageCopy.empty.back}
             </Button>
           </div>
 
@@ -224,8 +225,8 @@ export default function JobEditPage() {
           {/* Edit Form */}
           <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle className="text-foreground">Edit Job Details</CardTitle>
-              <CardDescription>Update the job posting information</CardDescription>
+              <CardTitle className="text-foreground">{jobEditPageCopy.form.title}</CardTitle>
+              <CardDescription>{jobEditPageCopy.form.description}</CardDescription>
             </CardHeader>
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-6">

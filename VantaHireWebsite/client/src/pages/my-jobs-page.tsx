@@ -12,6 +12,7 @@ import { Eye, Briefcase, Plus, Play, Search, Edit, LayoutGrid, CheckCircle, Cloc
 import Layout from "@/components/Layout";
 import { PageHeaderSkeleton, FilterBarSkeleton, JobListSkeleton } from "@/components/skeletons";
 import { SubNav, type SubNavItem } from "@/components/SubNav";
+import { myJobsPageCopy } from "@/lib/internal-copy";
 import type { Job } from "@shared/schema";
 
 type JobWithCounts = Job & {
@@ -43,10 +44,10 @@ export default function MyJobsPage() {
   const pendingCount = jobs.filter(j => j.status === 'pending').length;
 
   const subNavItems: SubNavItem[] = [
-    { id: "all", label: "All Jobs", count: jobs.length, icon: <LayoutGrid className="h-4 w-4" /> },
-    { id: "active", label: "Active", count: activeCount, icon: <CheckCircle className="h-4 w-4" /> },
-    { id: "inactive", label: "Inactive", count: inactiveCount, icon: <Archive className="h-4 w-4" /> },
-    { id: "pending", label: "Pending Review", count: pendingCount, icon: <Clock className="h-4 w-4" /> },
+    { id: "all", label: myJobsPageCopy.tabs.all, count: jobs.length, icon: <LayoutGrid className="h-4 w-4" /> },
+    { id: "active", label: myJobsPageCopy.tabs.active, count: activeCount, icon: <CheckCircle className="h-4 w-4" /> },
+    { id: "inactive", label: myJobsPageCopy.tabs.inactive, count: inactiveCount, icon: <Archive className="h-4 w-4" /> },
+    { id: "pending", label: myJobsPageCopy.tabs.pending, count: pendingCount, icon: <Clock className="h-4 w-4" /> },
   ];
 
   // Publish job mutation
@@ -58,13 +59,13 @@ export default function MyJobsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/my-jobs"] });
       toast({
-        title: "Job Published",
-        description: "Your job is now live and accepting applications!",
+        title: myJobsPageCopy.toasts.publishSuccessTitle,
+        description: myJobsPageCopy.toasts.publishSuccessDescription,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Publish Failed",
+        title: myJobsPageCopy.toasts.publishErrorTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -119,12 +120,12 @@ export default function MyJobsPage() {
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl md:text-3xl font-semibold text-foreground">My Jobs</h1>
-              <p className="text-muted-foreground text-sm md:text-base">Manage your job postings, status, and applications</p>
+              <h1 className="text-2xl md:text-3xl font-semibold text-foreground">{myJobsPageCopy.header.title}</h1>
+              <p className="text-muted-foreground text-sm md:text-base">{myJobsPageCopy.header.subtitle}</p>
             </div>
             <Button onClick={() => setLocation("/jobs/post")} data-tour="post-job-button">
               <Plus className="h-4 w-4 mr-2" />
-              Post New Job
+              {myJobsPageCopy.header.primaryAction}
             </Button>
           </div>
 
@@ -140,7 +141,7 @@ export default function MyJobsPage() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
             <Input
-              placeholder="Search by title, company, or location..."
+              placeholder={myJobsPageCopy.searchPlaceholder}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="pl-10"
@@ -151,10 +152,10 @@ export default function MyJobsPage() {
           <Card className="shadow-sm" data-tour="jobs-list">
             <CardHeader>
               <CardTitle className="text-foreground text-lg">
-                Job Postings ({filteredJobs.length})
+                {myJobsPageCopy.list.title} ({filteredJobs.length})
               </CardTitle>
               <CardDescription>
-                Manage your posted job opportunities
+                {myJobsPageCopy.list.description}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -167,20 +168,20 @@ export default function MyJobsPage() {
                         <Clock className="h-12 w-12 text-warning/50 mx-auto mb-4" />
                         <p className="text-foreground font-medium mb-2">
                           {pendingCount === 1
-                            ? "Your job is pending approval"
-                            : `You have ${pendingCount} jobs pending approval`}
+                            ? myJobsPageCopy.empty.pendingSingle
+                            : `${myJobsPageCopy.empty.pendingMultiplePrefix} ${pendingCount} ${myJobsPageCopy.empty.pendingMultipleSuffix}`}
                         </p>
                         <p className="text-muted-foreground text-sm mb-4">
-                          Jobs will appear here once approved by an admin. You'll be notified when they're ready.
+                          {myJobsPageCopy.empty.pendingDescription}
                         </p>
                         <div className="flex gap-3 justify-center">
                           <Button variant="outline" onClick={() => setActiveTab("pending")}>
                             <Clock className="h-4 w-4 mr-2" />
-                            View Pending Jobs
+                            {myJobsPageCopy.empty.viewPending}
                           </Button>
                           <Button onClick={() => setLocation("/jobs/post")}>
                             <Plus className="h-4 w-4 mr-2" />
-                            Post Another Job
+                            {myJobsPageCopy.empty.postAnother}
                           </Button>
                         </div>
                       </>
@@ -189,13 +190,13 @@ export default function MyJobsPage() {
                         <Briefcase className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
                         <p className="text-muted-foreground mb-2">
                           {searchQuery || activeTab !== "all"
-                            ? "No jobs match your filters"
-                            : "No job postings yet"}
+                            ? myJobsPageCopy.empty.filtered
+                            : myJobsPageCopy.empty.none}
                         </p>
                         {!searchQuery && activeTab === "all" && (
                           <Button className="mt-4" onClick={() => setLocation("/jobs/post")}>
                             <Plus className="h-4 w-4 mr-2" />
-                            Post Your First Job
+                            {myJobsPageCopy.empty.firstJob}
                           </Button>
                         )}
                       </>
@@ -213,13 +214,13 @@ export default function MyJobsPage() {
                           <p className="text-muted-foreground">{job.company} • {job.location}</p>
                           {job.hiringManager && (
                             <p className="text-muted-foreground text-sm mt-1">
-                              Hiring Manager: {job.hiringManager.firstName && job.hiringManager.lastName
+                              {myJobsPageCopy.empty.hiringManager}: {job.hiringManager.firstName && job.hiringManager.lastName
                                 ? `${job.hiringManager.firstName} ${job.hiringManager.lastName}`
                                 : job.hiringManager.username}
                             </p>
                           )}
                           {!job.hiringManager && (
-                            <p className="text-muted-foreground text-sm mt-1">Hiring Manager: —</p>
+                            <p className="text-muted-foreground text-sm mt-1">{myJobsPageCopy.empty.hiringManager}: —</p>
                           )}
                           <p className="text-muted-foreground text-sm mt-1">{job.type}</p>
                         </div>

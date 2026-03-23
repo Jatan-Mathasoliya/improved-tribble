@@ -12,6 +12,7 @@ import { Eye, Users, Search, Sparkles, Brain, AlertCircle, MessageCircle } from 
 import Layout from "@/components/Layout";
 import { PageHeaderSkeleton, FilterBarSkeleton, ApplicationListSkeleton } from "@/components/skeletons";
 import { ResumePreviewModal } from "@/components/ResumePreviewModal";
+import { applicationsPageCopy } from "@/lib/internal-copy";
 import type { Application, PipelineStage } from "@shared/schema";
 
 // Extended types for API responses with relations
@@ -91,13 +92,13 @@ export default function ApplicationsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/my-applications-received"] });
       toast({
-        title: "Application Updated",
-        description: "Application status has been updated successfully.",
+        title: applicationsPageCopy.toasts.statusUpdatedTitle,
+        description: applicationsPageCopy.toasts.statusUpdatedDescription,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Update Failed",
+        title: applicationsPageCopy.toasts.updateFailedTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -126,13 +127,13 @@ export default function ApplicationsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/my-applications-received"] });
       toast({
-        title: "Stage updated",
-        description: "Application moved to new stage successfully.",
+        title: applicationsPageCopy.toasts.stageUpdatedTitle,
+        description: applicationsPageCopy.toasts.stageUpdatedDescription,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Stage update failed",
+        title: applicationsPageCopy.toasts.stageUpdateFailedTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -244,8 +245,8 @@ export default function ApplicationsPage() {
         <div className="space-y-6 pt-8">
           {/* Header */}
           <div>
-            <h1 className="text-2xl md:text-3xl font-semibold text-foreground">Applications</h1>
-            <p className="text-muted-foreground text-sm md:text-base">Review and manage candidate applications across all jobs</p>
+            <h1 className="text-2xl md:text-3xl font-semibold text-foreground">{applicationsPageCopy.header.title}</h1>
+            <p className="text-muted-foreground text-sm md:text-base">{applicationsPageCopy.header.subtitle}</p>
           </div>
 
           {/* Filters */}
@@ -257,7 +258,7 @@ export default function ApplicationsPage() {
                   <div className="flex-1 relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                     <Input
-                      placeholder="Search by name, email, or job title..."
+                      placeholder={applicationsPageCopy.filters.searchPlaceholder}
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                       className="pl-10"
@@ -265,13 +266,13 @@ export default function ApplicationsPage() {
                   </div>
                   <Select value={statusFilter} onValueChange={setStatusFilter}>
                     <SelectTrigger className="w-full md:w-48">
-                      <SelectValue placeholder="Filter by status" />
+                      <SelectValue placeholder={applicationsPageCopy.filters.statusPlaceholder} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Status</SelectItem>
-                      <SelectItem value="submitted">Submitted</SelectItem>
-                      <SelectItem value="shortlisted">Shortlisted</SelectItem>
-                      <SelectItem value="rejected">Rejected</SelectItem>
+                      <SelectItem value="all">{applicationsPageCopy.filters.allStatus}</SelectItem>
+                      <SelectItem value="submitted">{applicationsPageCopy.filters.submitted}</SelectItem>
+                      <SelectItem value="shortlisted">{applicationsPageCopy.filters.shortlisted}</SelectItem>
+                      <SelectItem value="rejected">{applicationsPageCopy.filters.rejected}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -281,11 +282,11 @@ export default function ApplicationsPage() {
                   {/* Stage Filter */}
                   <Select value={stageFilter} onValueChange={setStageFilter}>
                     <SelectTrigger className="w-full md:w-56">
-                      <SelectValue placeholder="Filter by stage" />
+                      <SelectValue placeholder={applicationsPageCopy.filters.stagePlaceholder} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Stages</SelectItem>
-                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                      <SelectItem value="all">{applicationsPageCopy.filters.allStages}</SelectItem>
+                      <SelectItem value="unassigned">{applicationsPageCopy.filters.unassigned}</SelectItem>
                       {pipelineStages.map((stage) => (
                         <SelectItem key={stage.id} value={stage.id.toString()}>
                           {stage.name}
@@ -297,27 +298,27 @@ export default function ApplicationsPage() {
                   {/* Feedback Filter */}
                   <Select value={feedbackFilter} onValueChange={setFeedbackFilter}>
                     <SelectTrigger className="w-full md:w-56">
-                      <SelectValue placeholder="Filter by feedback" />
+                      <SelectValue placeholder={applicationsPageCopy.filters.feedbackPlaceholder} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Applications</SelectItem>
-                      <SelectItem value="with-feedback">With Feedback</SelectItem>
-                      <SelectItem value="without-feedback">No Feedback</SelectItem>
+                      <SelectItem value="all">{applicationsPageCopy.filters.allApplications}</SelectItem>
+                      <SelectItem value="with-feedback">{applicationsPageCopy.filters.withFeedback}</SelectItem>
+                      <SelectItem value="without-feedback">{applicationsPageCopy.filters.withoutFeedback}</SelectItem>
                     </SelectContent>
                   </Select>
 
                   {/* Rating Filter */}
                   <Select value={minRating} onValueChange={setMinRating}>
                     <SelectTrigger className="w-full md:w-48">
-                      <SelectValue placeholder="Min rating" />
+                      <SelectValue placeholder={applicationsPageCopy.filters.ratingPlaceholder} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="0">All Ratings</SelectItem>
-                      <SelectItem value="1">⭐ 1+</SelectItem>
-                      <SelectItem value="2">⭐ 2+</SelectItem>
-                      <SelectItem value="3">⭐ 3+</SelectItem>
-                      <SelectItem value="4">⭐ 4+</SelectItem>
-                      <SelectItem value="5">⭐ 5</SelectItem>
+                      <SelectItem value="0">{applicationsPageCopy.filters.allRatings}</SelectItem>
+                      <SelectItem value="1">{applicationsPageCopy.filters.ratingsPrefix} {applicationsPageCopy.filters.onePlus}</SelectItem>
+                      <SelectItem value="2">{applicationsPageCopy.filters.ratingsPrefix} {applicationsPageCopy.filters.twoPlus}</SelectItem>
+                      <SelectItem value="3">{applicationsPageCopy.filters.ratingsPrefix} {applicationsPageCopy.filters.threePlus}</SelectItem>
+                      <SelectItem value="4">{applicationsPageCopy.filters.ratingsPrefix} {applicationsPageCopy.filters.fourPlus}</SelectItem>
+                      <SelectItem value="5">{applicationsPageCopy.filters.ratingsPrefix} {applicationsPageCopy.filters.five}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -329,10 +330,10 @@ export default function ApplicationsPage() {
           <Card className="shadow-sm" data-tour="applications-list">
             <CardHeader>
               <CardTitle className="text-foreground text-lg">
-                All Applications ({filteredApplications.length})
+                {applicationsPageCopy.list.title} ({filteredApplications.length})
               </CardTitle>
               <CardDescription>
-                Review and manage candidate applications
+                {applicationsPageCopy.list.description}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -342,8 +343,8 @@ export default function ApplicationsPage() {
                     <Users className="h-12 w-12 text-muted-foreground/50 mx-auto mb-4" />
                     <p className="text-muted-foreground">
                       {searchQuery || statusFilter !== "all"
-                        ? "No applications match your filters"
-                        : "No applications received yet"}
+                        ? applicationsPageCopy.list.emptyFiltered
+                        : applicationsPageCopy.list.emptyNone}
                     </p>
                   </div>
                 ) : (
@@ -357,7 +358,7 @@ export default function ApplicationsPage() {
                         <div className="space-y-1">
                           <h3 className="text-foreground font-medium">{application.name}</h3>
                           <p className="text-muted-foreground text-sm">{application.email}</p>
-                          <p className="text-muted-foreground text-sm">Applied for: {application.job?.title}</p>
+                          <p className="text-muted-foreground text-sm">{applicationsPageCopy.list.appliedForPrefix} {application.job?.title}</p>
                         </div>
                         <div className="flex items-center space-x-2">
                           <Badge className={getStatusColor(application.status)}>
@@ -369,7 +370,7 @@ export default function ApplicationsPage() {
                               className="text-xs border-success/30 bg-success/10 text-success-foreground font-medium flex items-center gap-1"
                             >
                               <MessageCircle className="h-3 w-3" />
-                              {application.feedbackCount} {application.feedbackCount === 1 ? "feedback" : "feedback"}
+                              {application.feedbackCount} {applicationsPageCopy.list.feedbackLabel}
                             </Badge>
                           )}
                           {getFitBadge(application.aiFitScore, application.aiFitLabel)}
@@ -380,7 +381,7 @@ export default function ApplicationsPage() {
                             data-testid="review-application"
                           >
                             <Eye className="h-4 w-4 mr-1" />
-                            Review
+                            {applicationsPageCopy.list.review}
                           </Button>
                         </div>
                       </div>
@@ -388,7 +389,7 @@ export default function ApplicationsPage() {
                       {application.coverLetter && (
                         <div className="pt-2 border-t border-border">
                           <p className="text-muted-foreground text-sm">
-                            <strong>Cover Letter:</strong> {application.coverLetter}
+                            <strong>{applicationsPageCopy.list.coverLetter}</strong> {application.coverLetter}
                           </p>
                         </div>
                       )}
@@ -399,7 +400,7 @@ export default function ApplicationsPage() {
                           <div className="p-3 bg-primary/5 rounded-lg border-l-4 border-primary">
                             <div className="flex items-center gap-2 mb-2">
                               <Brain className="w-4 h-4 text-primary" />
-                              <span className="text-primary font-medium text-sm">AI Fit Analysis</span>
+                              <span className="text-primary font-medium text-sm">{applicationsPageCopy.list.aiFitAnalysis}</span>
                             </div>
                             <ul className="text-muted-foreground text-sm space-y-1">
                               {(application.aiFitReasons as string[]).slice(0, 3).map((reason: string, idx: number): JSX.Element => (
@@ -412,7 +413,7 @@ export default function ApplicationsPage() {
                             {application.aiStaleReason && (
                               <p className="text-warning-foreground text-xs mt-2 flex items-center gap-1">
                                 <AlertCircle className="w-3 h-3" />
-                                Score may be outdated ({application.aiStaleReason})
+                                {applicationsPageCopy.list.staleScorePrefix} ({application.aiStaleReason})
                               </p>
                             )}
                           </div>

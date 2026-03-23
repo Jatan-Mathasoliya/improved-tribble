@@ -11,6 +11,7 @@ import { Job, Application, PipelineStage } from "@shared/schema";
 import Layout from "@/components/Layout";
 import { JobSubNav } from "@/components/JobSubNav";
 import { PageHeaderSkeleton } from "@/components/skeletons";
+import { jobAnalyticsPageCopy } from "@/lib/internal-copy";
 import {
   BarChart,
   Bar,
@@ -205,10 +206,10 @@ export default function JobAnalyticsPage() {
   // Status breakdown for pie chart
   const statusData = [
     { name: "Submitted", value: applications.filter(a => a.status === 'submitted').length, color: "#3b82f6" },
-    { name: "Reviewed", value: applications.filter(a => a.status === 'reviewed').length, color: "#f59e0b" },
+    { name: jobAnalyticsPageCopy.sections.reviewed, value: applications.filter(a => a.status === 'reviewed').length, color: "#f59e0b" },
     { name: "Shortlisted", value: applications.filter(a => a.status === 'shortlisted').length, color: "#22c55e" },
     { name: "Downloaded", value: applications.filter(a => a.status === 'downloaded').length, color: "#8b5cf6" },
-    { name: "Rejected", value: applications.filter(a => a.status === 'rejected').length, color: "#ef4444" },
+    { name: jobAnalyticsPageCopy.sections.rejected, value: applications.filter(a => a.status === 'rejected').length, color: "#ef4444" },
   ].filter(d => d.value > 0);
 
   const isLoading = jobLoading || appsLoading;
@@ -231,8 +232,8 @@ export default function JobAnalyticsPage() {
         <div className="container mx-auto px-4 py-8">
           <Card className="shadow-sm">
             <CardContent className="p-8 text-center">
-              <h3 className="text-xl font-semibold text-foreground mb-2">Job Not Found</h3>
-              <p className="text-muted-foreground">The requested job could not be found.</p>
+              <h3 className="text-xl font-semibold text-foreground mb-2">{jobAnalyticsPageCopy.header.notFoundTitle}</h3>
+              <p className="text-muted-foreground">{jobAnalyticsPageCopy.header.notFoundDescription}</p>
             </CardContent>
           </Card>
         </div>
@@ -253,7 +254,7 @@ export default function JobAnalyticsPage() {
               className="text-muted-foreground hover:text-foreground hover:bg-muted"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Job
+              {jobAnalyticsPageCopy.header.backToJob}
             </Button>
           </div>
 
@@ -298,7 +299,7 @@ export default function JobAnalyticsPage() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-foreground">{reviewedApplications}</p>
-                    <p className="text-sm text-muted-foreground">Reviewed</p>
+                    <p className="text-sm text-muted-foreground">{jobAnalyticsPageCopy.sections.reviewed}</p>
                   </div>
                 </div>
               </CardContent>
@@ -312,7 +313,7 @@ export default function JobAnalyticsPage() {
                   </div>
                   <div>
                     <p className="text-2xl font-bold text-foreground">{rejectedApplications}</p>
-                    <p className="text-sm text-muted-foreground">Rejected</p>
+                    <p className="text-sm text-muted-foreground">{jobAnalyticsPageCopy.sections.rejected}</p>
                   </div>
                 </div>
               </CardContent>
@@ -325,7 +326,7 @@ export default function JobAnalyticsPage() {
               <CardHeader className="pb-3">
                 <CardTitle className="text-foreground flex items-center gap-2 text-base">
                   <Bell className="h-5 w-5 text-warning" />
-                  Attention Needed
+                  {jobAnalyticsPageCopy.sections.attentionNeeded}
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -621,9 +622,9 @@ export default function JobAnalyticsPage() {
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <Users className="h-5 w-5 text-primary" />
-                  Client Feedback
+                  {jobAnalyticsPageCopy.sections.clientFeedback}
                 </CardTitle>
-                <CardDescription>Shortlists shared with clients and their feedback</CardDescription>
+                <CardDescription>{jobAnalyticsPageCopy.sections.clientFeedbackDescription}</CardDescription>
               </CardHeader>
               <CardContent>
                 {/* Summary Stats */}
@@ -633,28 +634,28 @@ export default function JobAnalyticsPage() {
                       <Send className="h-5 w-5 text-info" />
                     </div>
                     <p className="text-2xl font-bold text-foreground">{clientAnalytics.totalCandidatesSent}</p>
-                    <p className="text-xs text-muted-foreground">Sent to Clients</p>
+                    <p className="text-xs text-muted-foreground">{jobAnalyticsPageCopy.sections.sentToClients}</p>
                   </div>
                   <div className="text-center p-4 bg-muted/50 rounded-lg">
                     <div className="flex items-center justify-center mb-2">
                       <ThumbsUp className="h-5 w-5 text-success" />
                     </div>
                     <p className="text-2xl font-bold text-foreground">{clientAnalytics.feedbackBreakdown.advance}</p>
-                    <p className="text-xs text-muted-foreground">Advanced</p>
+                    <p className="text-xs text-muted-foreground">{jobAnalyticsPageCopy.sections.advanced}</p>
                   </div>
                   <div className="text-center p-4 bg-muted/50 rounded-lg">
                     <div className="flex items-center justify-center mb-2">
                       <Pause className="h-5 w-5 text-warning" />
                     </div>
                     <p className="text-2xl font-bold text-foreground">{clientAnalytics.feedbackBreakdown.hold}</p>
-                    <p className="text-xs text-muted-foreground">On Hold</p>
+                    <p className="text-xs text-muted-foreground">{jobAnalyticsPageCopy.sections.onHold}</p>
                   </div>
                   <div className="text-center p-4 bg-muted/50 rounded-lg">
                     <div className="flex items-center justify-center mb-2">
                       <ThumbsDown className="h-5 w-5 text-destructive" />
                     </div>
                     <p className="text-2xl font-bold text-foreground">{clientAnalytics.feedbackBreakdown.reject}</p>
-                    <p className="text-xs text-muted-foreground">Rejected</p>
+                    <p className="text-xs text-muted-foreground">{jobAnalyticsPageCopy.sections.rejected}</p>
                   </div>
                 </div>
 
@@ -666,9 +667,9 @@ export default function JobAnalyticsPage() {
                         <PieChart>
                           <Pie
                             data={[
-                              { name: "Advanced", value: clientAnalytics.feedbackBreakdown.advance, color: COLORS.strong },
-                              { name: "On Hold", value: clientAnalytics.feedbackBreakdown.hold, color: COLORS.fair },
-                              { name: "Rejected", value: clientAnalytics.feedbackBreakdown.reject, color: COLORS.weak },
+                              { name: jobAnalyticsPageCopy.sections.advanced, value: clientAnalytics.feedbackBreakdown.advance, color: COLORS.strong },
+                              { name: jobAnalyticsPageCopy.sections.onHold, value: clientAnalytics.feedbackBreakdown.hold, color: COLORS.fair },
+                              { name: jobAnalyticsPageCopy.sections.rejected, value: clientAnalytics.feedbackBreakdown.reject, color: COLORS.weak },
                             ].filter(d => d.value > 0)}
                             cx="50%"
                             cy="50%"
@@ -699,7 +700,7 @@ export default function JobAnalyticsPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.strong }} />
-                          <span className="text-sm text-foreground">Advanced</span>
+                          <span className="text-sm text-foreground">{jobAnalyticsPageCopy.sections.advanced}</span>
                         </div>
                         <span className="text-sm font-medium text-foreground">
                           {clientAnalytics.feedbackBreakdown.advance} ({clientAnalytics.totalFeedback > 0 ? Math.round((clientAnalytics.feedbackBreakdown.advance / clientAnalytics.totalFeedback) * 100) : 0}%)
@@ -708,7 +709,7 @@ export default function JobAnalyticsPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.fair }} />
-                          <span className="text-sm text-foreground">On Hold</span>
+                          <span className="text-sm text-foreground">{jobAnalyticsPageCopy.sections.onHold}</span>
                         </div>
                         <span className="text-sm font-medium text-foreground">
                           {clientAnalytics.feedbackBreakdown.hold} ({clientAnalytics.totalFeedback > 0 ? Math.round((clientAnalytics.feedbackBreakdown.hold / clientAnalytics.totalFeedback) * 100) : 0}%)
@@ -717,7 +718,7 @@ export default function JobAnalyticsPage() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS.weak }} />
-                          <span className="text-sm text-foreground">Rejected</span>
+                          <span className="text-sm text-foreground">{jobAnalyticsPageCopy.sections.rejected}</span>
                         </div>
                         <span className="text-sm font-medium text-foreground">
                           {clientAnalytics.feedbackBreakdown.reject} ({clientAnalytics.totalFeedback > 0 ? Math.round((clientAnalytics.feedbackBreakdown.reject / clientAnalytics.totalFeedback) * 100) : 0}%)
@@ -729,7 +730,7 @@ export default function JobAnalyticsPage() {
 
                 {/* Shortlists List */}
                 <div className="border-t border-border pt-4">
-                  <h4 className="text-sm font-medium text-foreground mb-3">Shortlists ({clientAnalytics.totalShortlists})</h4>
+                  <h4 className="text-sm font-medium text-foreground mb-3">{jobAnalyticsPageCopy.sections.shortlists} ({clientAnalytics.totalShortlists})</h4>
                   <div className="space-y-2">
                     {clientAnalytics.shortlists.map((s) => (
                       <div

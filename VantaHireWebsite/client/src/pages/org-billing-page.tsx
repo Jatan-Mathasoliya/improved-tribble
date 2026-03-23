@@ -59,6 +59,7 @@ import {
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { useQueryClient } from "@tanstack/react-query";
+import { orgBillingPageCopy } from "@/lib/internal-copy";
 
 export default function OrgBillingPage() {
   const queryClient = useQueryClient();
@@ -329,9 +330,9 @@ export default function OrgBillingPage() {
     <Layout>
       <div className="max-w-7xl mx-auto p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Billing & Subscription</h1>
+        <h1 className="text-2xl font-bold">{orgBillingPageCopy.header.title}</h1>
         <p className="text-muted-foreground">
-          Manage your subscription, seats, and billing
+          {orgBillingPageCopy.header.subtitle}
         </p>
       </div>
 

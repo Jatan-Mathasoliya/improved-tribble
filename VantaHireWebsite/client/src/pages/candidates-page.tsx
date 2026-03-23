@@ -24,6 +24,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import Layout from "@/components/Layout";
 import { MoveCandidateToJobDialog } from "@/components/recruiter/MoveCandidateToJobDialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { talentSearchPageCopy } from "@/lib/internal-copy";
 
 interface SemanticResult {
   applicationId: number;
@@ -167,12 +168,11 @@ export default function CandidatesPage() {
           <div className="flex items-center gap-3 mb-2">
             <Sparkles className="h-7 w-7 text-primary" />
             <h1 className="text-2xl md:text-3xl font-semibold text-foreground">
-              Talent Search
+              {talentSearchPageCopy.header.title}
             </h1>
           </div>
           <p className="text-muted-foreground text-sm md:text-base max-w-2xl">
-            Search your candidate pool using natural language. Describe the skills,
-            experience, or qualifications you're looking for.
+            {talentSearchPageCopy.header.subtitle}
           </p>
         </div>
 
@@ -184,7 +184,7 @@ export default function CandidatesPage() {
                 <div className="relative">
                   <Sparkles className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
-                    placeholder="Describe the candidate you're looking for, e.g. 'React developer with 3+ years experience'..."
+                    placeholder={talentSearchPageCopy.search.placeholder}
                     value={semanticQuery}
                     onChange={(e) => setSemanticQuery(e.target.value)}
                     onKeyDown={(e) => {
@@ -203,7 +203,7 @@ export default function CandidatesPage() {
                 ) : (
                   <Search className="h-4 w-4 mr-2" />
                 )}
-                Search
+                {talentSearchPageCopy.search.buttonLabel}
               </Button>
             </div>
             {submittedQuery && semanticSearchQuery.isSuccess && (
@@ -213,7 +213,7 @@ export default function CandidatesPage() {
                 </p>
                 {semanticScoreType === "rrf_fused" && semanticDisplayScoreType === "cosine" && (
                   <p className="text-xs text-muted-foreground">
-                    Ranked by hybrid RRF, score shown as cosine semantic match.
+                    {talentSearchPageCopy.search.hybridScoreHint}
                   </p>
                 )}
               </div>
@@ -225,7 +225,7 @@ export default function CandidatesPage() {
         {semanticSearchQuery.isFetching && (
           <div className="text-center py-12">
             <Loader2 className="h-12 w-12 animate-spin text-primary mx-auto" />
-            <p className="text-muted-foreground mt-4">Searching candidates...</p>
+            <p className="text-muted-foreground mt-4">{talentSearchPageCopy.search.searchingLabel}</p>
           </div>
         )}
 
@@ -234,7 +234,7 @@ export default function CandidatesPage() {
             <CardContent className="p-6 text-center">
               <AlertCircle className="h-12 w-12 text-destructive/50 mx-auto mb-3" />
               <p className="text-muted-foreground">
-                {semanticSearchQuery.error?.message || "Search failed. Please try again."}
+                {semanticSearchQuery.error?.message || talentSearchPageCopy.search.errorFallback}
               </p>
             </CardContent>
           </Card>
@@ -244,9 +244,9 @@ export default function CandidatesPage() {
           <Card className="shadow-sm">
             <CardContent className="p-6 text-center">
               <Search className="h-16 w-16 text-muted-foreground/50 mx-auto mb-4" />
-              <p className="text-muted-foreground">No matching candidates found</p>
+              <p className="text-muted-foreground">{talentSearchPageCopy.search.noResultsTitle}</p>
               <p className="text-muted-foreground text-sm mt-2">
-                Try a different search query
+                {talentSearchPageCopy.search.noResultsHint}
               </p>
             </CardContent>
           </Card>
@@ -255,14 +255,14 @@ export default function CandidatesPage() {
         {semanticSearchQuery.isSuccess && semanticResults.length > 0 && (
           <div className="space-y-3">
             <p className="text-xs text-muted-foreground flex items-center gap-1">
-              Results are ranked using search that analyzes both keywords and the meaning of your query, helping surface the most relevant resumes—not just exact keyword matches.
+              {talentSearchPageCopy.search.rankingHint}
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Info className="h-3.5 w-3.5 shrink-0 cursor-help" />
                   </TooltipTrigger>
                   <TooltipContent side="bottom" className="max-w-xs">
-                    We combine keyword scoring with semantic search, then re-rank results using an AI model to find the most relevant matches.
+                    {talentSearchPageCopy.search.rankingTooltip}
                   </TooltipContent>
                 </Tooltip>
               </TooltipProvider>
@@ -292,7 +292,7 @@ export default function CandidatesPage() {
                       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground mb-2">
                         <span className="flex items-center gap-1">
                           <Mail className="h-3.5 w-3.5" />
-                          {result.email ?? "Email unavailable"}
+                          {result.email ?? talentSearchPageCopy.search.emailUnavailable}
                         </span>
                         {result.source && (
                           <Badge variant="secondary" className="text-xs">
@@ -301,7 +301,7 @@ export default function CandidatesPage() {
                         )}
                         {result.matchedChunks > 0 && (
                           <span className="text-xs text-muted-foreground">
-                            {result.matchedChunks} matching resume section{result.matchedChunks > 1 ? "s" : ""}
+                            {result.matchedChunks} {result.matchedChunks > 1 ? talentSearchPageCopy.search.matchingResumeSectionsSuffixPlural : talentSearchPageCopy.search.matchingResumeSectionsSuffixSingle}
                           </span>
                         )}
                         {result.currentJobTitle && (
@@ -320,7 +320,7 @@ export default function CandidatesPage() {
                       {result.highlights && result.highlights.length > 0 && (
                         <div className="mt-3 space-y-2">
                           <p className="text-xs font-medium text-muted-foreground">
-                            Why this matched
+                            {talentSearchPageCopy.search.whyMatched}
                           </p>
                           {result.highlights.slice(0, 3).map((highlight: string, idx: number) => (
                             <div
@@ -344,7 +344,7 @@ export default function CandidatesPage() {
                           onClick={() => handleOpenResume(result)}
                         >
                           <FileText className="h-4 w-4 mr-1" />
-                          Resume
+                          {talentSearchPageCopy.search.resume}
                         </Button>
                       )}
                       {result.canMoveToJob !== false && (
@@ -354,7 +354,7 @@ export default function CandidatesPage() {
                           onClick={() => handleMoveClick(result)}
                         >
                           <ArrowRightLeft className="h-4 w-4 mr-1" />
-                          Add to Job
+                          {talentSearchPageCopy.search.addToJob}
                         </Button>
                       )}
                     </div>
@@ -373,7 +373,7 @@ export default function CandidatesPage() {
             <CardContent className="p-12 text-center">
               <Sparkles className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
               <h3 className="text-lg font-medium text-foreground mb-2">
-                Talent Search
+                {talentSearchPageCopy.search.emptyTitle}
               </h3>
               <p className="text-muted-foreground text-sm max-w-md mx-auto">
                 Search your candidate pool using natural language. Describe the skills,
@@ -401,7 +401,7 @@ export default function CandidatesPage() {
           <DialogContent className="max-w-5xl w-[95vw] h-[90vh] max-h-[90vh] p-0 gap-0 flex flex-col">
             <DialogHeader className="px-6 py-4 border-b border-border shrink-0">
               <DialogTitle className="text-xl font-semibold text-foreground">
-                {resumePreviewCandidate?.name ?? "Resume Preview"}
+                {resumePreviewCandidate?.name ?? talentSearchPageCopy.search.resumePreviewFallback}
               </DialogTitle>
               {resumePreviewCandidate?.email && (
                 <p className="text-sm text-muted-foreground">{resumePreviewCandidate.email}</p>
@@ -424,7 +424,7 @@ export default function CandidatesPage() {
                       onClick={() => window.open(resumePreviewUrl, "_blank", "noopener")}
                     >
                       <ExternalLink className="h-4 w-4 mr-2" />
-                      Open in New Tab
+                      {talentSearchPageCopy.search.openInNewTab}
                     </Button>
                   )}
                   {resumeDownloadUrl && (
@@ -434,7 +434,7 @@ export default function CandidatesPage() {
                       onClick={() => window.open(resumeDownloadUrl, "_blank", "noopener")}
                     >
                       <Download className="h-4 w-4 mr-2" />
-                      Download
+                      {talentSearchPageCopy.search.download}
                     </Button>
                   )}
                 </div>
@@ -446,18 +446,18 @@ export default function CandidatesPage() {
                     <iframe
                       src={`${resumePreviewUrl}#toolbar=0&navpanes=0`}
                       className="w-full h-full"
-                      title="Resume Preview"
+                      title={talentSearchPageCopy.search.resumePreviewFrameTitle}
                     />
                   ) : (
                     <div className="flex flex-col items-center justify-center h-full p-8 text-center">
                       <FileText className="h-16 w-16 text-muted-foreground/50 mb-4" />
                       <p className="text-muted-foreground mb-4">
-                        Unable to preview this file type in browser.
+                        {talentSearchPageCopy.search.unsupportedPreview}
                       </p>
                       {resumeDownloadUrl && (
                         <Button onClick={() => window.open(resumeDownloadUrl, "_blank", "noopener")}>
                           <Download className="h-4 w-4 mr-2" />
-                          Download to View
+                          {talentSearchPageCopy.search.downloadToView}
                         </Button>
                       )}
                     </div>
@@ -465,7 +465,7 @@ export default function CandidatesPage() {
                 ) : (
                   <div className="flex flex-col items-center justify-center h-full p-8 text-center">
                     <AlertCircle className="h-16 w-16 text-muted-foreground/50 mb-4" />
-                    <p className="text-muted-foreground">No resume available</p>
+                    <p className="text-muted-foreground">{talentSearchPageCopy.search.noResume}</p>
                   </div>
                 )}
               </div>

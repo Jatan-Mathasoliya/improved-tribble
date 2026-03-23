@@ -12,6 +12,7 @@ import { Briefcase, Users, TrendingUp, Shield, Mail, CheckCircle, UserPlus } fro
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import type { OnboardingStatus } from "@/hooks/use-onboarding-status";
+import { recruiterAuthPageCopy } from "@/lib/internal-copy";
 
 // Type for invite details response
 interface InviteDetails {
@@ -192,13 +193,13 @@ export default function RecruiterAuth() {
         throw new Error(data?.error || "Failed to send verification email.");
       }
       toast({
-        title: "Verification email sent",
-        description: data.message || "Please check your inbox.",
+        title: recruiterAuthPageCopy.toasts.verificationSentTitle,
+        description: data.message || recruiterAuthPageCopy.toasts.verificationSentDescription,
       });
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error?.message || "Failed to send verification email. Please try again.",
+        title: recruiterAuthPageCopy.toasts.errorTitle,
+        description: error?.message || recruiterAuthPageCopy.toasts.verificationFailed,
         variant: "destructive",
       });
     } finally {
@@ -215,10 +216,10 @@ export default function RecruiterAuth() {
           <div className="space-y-8">
             <div className="space-y-4">
               <h1 className="text-4xl md:text-5xl font-bold text-foreground leading-tight">
-                Recruiter Portal
+                {recruiterAuthPageCopy.hero.title}
               </h1>
               <p className="text-xl text-muted-foreground leading-relaxed">
-                Access powerful tools to manage your job postings, review applications, and find the perfect candidates for your organization.
+                {recruiterAuthPageCopy.hero.subtitle}
               </p>
             </div>
 
@@ -228,8 +229,8 @@ export default function RecruiterAuth() {
                   <Briefcase className="h-8 w-8 text-[#7B38FB]" />
                 </div>
                 <div>
-                  <h3 className="text-foreground font-semibold mb-2">Job Management</h3>
-                  <p className="text-muted-foreground text-sm">Post, edit, and manage your job listings with ease</p>
+                  <h3 className="text-foreground font-semibold mb-2">{recruiterAuthPageCopy.hero.features[0].title}</h3>
+                  <p className="text-muted-foreground text-sm">{recruiterAuthPageCopy.hero.features[0].description}</p>
                 </div>
               </div>
 
@@ -238,8 +239,8 @@ export default function RecruiterAuth() {
                   <Users className="h-8 w-8 text-[#FF5BA8]" />
                 </div>
                 <div>
-                  <h3 className="text-foreground font-semibold mb-2">Application Review</h3>
-                  <p className="text-muted-foreground text-sm">Review, shortlist, and manage candidate applications</p>
+                  <h3 className="text-foreground font-semibold mb-2">{recruiterAuthPageCopy.hero.features[1].title}</h3>
+                  <p className="text-muted-foreground text-sm">{recruiterAuthPageCopy.hero.features[1].description}</p>
                 </div>
               </div>
 
@@ -248,8 +249,8 @@ export default function RecruiterAuth() {
                   <TrendingUp className="h-8 w-8 text-[#00D2FF]" />
                 </div>
                 <div>
-                  <h3 className="text-foreground font-semibold mb-2">Analytics</h3>
-                  <p className="text-muted-foreground text-sm">Track job performance and application metrics</p>
+                  <h3 className="text-foreground font-semibold mb-2">{recruiterAuthPageCopy.hero.features[2].title}</h3>
+                  <p className="text-muted-foreground text-sm">{recruiterAuthPageCopy.hero.features[2].description}</p>
                 </div>
               </div>
 
@@ -258,16 +259,16 @@ export default function RecruiterAuth() {
                   <Shield className="h-8 w-8 text-[#90EE90]" />
                 </div>
                 <div>
-                  <h3 className="text-foreground font-semibold mb-2">Secure Access</h3>
-                  <p className="text-muted-foreground text-sm">Enterprise-grade security for your recruitment data</p>
+                  <h3 className="text-foreground font-semibold mb-2">{recruiterAuthPageCopy.hero.features[3].title}</h3>
+                  <p className="text-muted-foreground text-sm">{recruiterAuthPageCopy.hero.features[3].description}</p>
                 </div>
               </div>
             </div>
 
             <div className="pt-4">
               <p className="text-muted-foreground text-sm">
-                Looking for candidate access? <Button variant="link" className="text-[#7B38FB] p-0 h-auto" onClick={() => setLocation("/candidate-auth")}>
-                  Go to Candidate Login
+                {recruiterAuthPageCopy.hero.candidatePrompt} <Button variant="link" className="text-[#7B38FB] p-0 h-auto" onClick={() => setLocation("/candidate-auth")}>
+                  {recruiterAuthPageCopy.hero.candidateLink}
                 </Button>
               </p>
             </div>
@@ -285,14 +286,14 @@ export default function RecruiterAuth() {
                         <CheckCircle className="h-8 w-8 text-success" />
                       </div>
                     </div>
-                    <CardTitle className="text-foreground text-2xl">Check Your Email</CardTitle>
+                    <CardTitle className="text-foreground text-2xl">{recruiterAuthPageCopy.verification.checkEmailTitle}</CardTitle>
                     <CardDescription className="text-muted-foreground">
-                      We've sent a verification link to <span className="text-foreground font-medium">{verificationEmail}</span>
+                      {recruiterAuthPageCopy.verification.checkEmailDescriptionPrefix} <span className="text-foreground font-medium">{verificationEmail}</span>
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <p className="text-muted-foreground text-sm text-center">
-                      Click the link in the email to verify your account and start using VantaHire.
+                      {recruiterAuthPageCopy.verification.checkEmailHint}
                     </p>
                     <div className="flex flex-col gap-3">
                       <Button
@@ -301,14 +302,14 @@ export default function RecruiterAuth() {
                         disabled={resendLoading}
                         className="w-full border-border text-foreground hover:bg-muted/50"
                       >
-                        {resendLoading ? "Sending..." : "Resend Verification Email"}
+                        {resendLoading ? recruiterAuthPageCopy.verification.sending : recruiterAuthPageCopy.verification.resend}
                       </Button>
                       <Button
                         variant="ghost"
                         onClick={() => { setRegistrationSuccess(false); setVerificationEmail(""); }}
                         className="w-full text-muted-foreground hover:text-foreground hover:bg-muted/30"
                       >
-                        Back to Login
+                        {recruiterAuthPageCopy.verification.backToLogin}
                       </Button>
                     </div>
                   </CardContent>
@@ -324,14 +325,14 @@ export default function RecruiterAuth() {
                         <Mail className="h-8 w-8 text-warning" />
                       </div>
                     </div>
-                    <CardTitle className="text-foreground text-2xl">Verify Your Email</CardTitle>
+                    <CardTitle className="text-foreground text-2xl">{recruiterAuthPageCopy.verification.verifyTitle}</CardTitle>
                     <CardDescription className="text-muted-foreground">
-                      Please verify your email address before signing in.
+                      {recruiterAuthPageCopy.verification.verifyDescription}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     <p className="text-muted-foreground text-sm text-center">
-                      Check your inbox at <span className="text-foreground font-medium">{verificationEmail}</span> for a verification link.
+                      {recruiterAuthPageCopy.verification.verifyHintPrefix} <span className="text-foreground font-medium">{verificationEmail}</span> {recruiterAuthPageCopy.verification.verifyHintSuffix}
                     </p>
                     <div className="flex flex-col gap-3">
                       <Button
@@ -340,14 +341,14 @@ export default function RecruiterAuth() {
                         disabled={resendLoading}
                         className="w-full border-border text-foreground hover:bg-muted/50"
                       >
-                        {resendLoading ? "Sending..." : "Resend Verification Email"}
+                        {resendLoading ? recruiterAuthPageCopy.verification.sending : recruiterAuthPageCopy.verification.resend}
                       </Button>
                       <Button
                         variant="ghost"
                         onClick={() => { setVerificationNeeded(false); setVerificationEmail(""); }}
                         className="w-full text-muted-foreground hover:text-foreground hover:bg-muted/30"
                       >
-                        Back to Login
+                        {recruiterAuthPageCopy.verification.backToLogin}
                       </Button>
                     </div>
                   </CardContent>
@@ -366,10 +367,10 @@ export default function RecruiterAuth() {
                     </div>
                     <div className="min-w-0">
                       <p className="text-sm font-medium text-foreground">
-                        You've been invited to join <span className="text-[#7B38FB]">{inviteDetails.organizationName}</span>
+                        {recruiterAuthPageCopy.invite.prefix} <span className="text-[#7B38FB]">{inviteDetails.organizationName}</span>
                       </p>
                       <p className="text-xs text-muted-foreground">
-                        Invited by {inviteDetails.inviterName} as {inviteDetails.role}
+                        {recruiterAuthPageCopy.invite.byPrefix} {inviteDetails.inviterName} as {inviteDetails.role}
                       </p>
                     </div>
                   </div>
@@ -380,19 +381,19 @@ export default function RecruiterAuth() {
               {inviteToken && inviteError && (
                 <div className="bg-destructive/10 border-b border-destructive/30 px-6 py-4">
                   <p className="text-sm text-destructive">
-                    {(inviteError as Error).message || "Invalid or expired invite link"}
+                    {(inviteError as Error).message || recruiterAuthPageCopy.invite.invalid}
                   </p>
                 </div>
               )}
 
               <CardHeader className="text-center">
                 <CardTitle className="text-foreground text-2xl">
-                  {inviteDetails ? "Create Your Account" : "Recruiter Access"}
+                  {inviteDetails ? recruiterAuthPageCopy.invite.createAccount : recruiterAuthPageCopy.card.title}
                 </CardTitle>
                 <CardDescription className="text-muted-foreground">
                   {inviteDetails
-                    ? `Register to join ${inviteDetails.organizationName}`
-                    : "Sign in to your recruiter account or create a new one"
+                    ? `${recruiterAuthPageCopy.invite.joinPrefix} ${inviteDetails.organizationName}`
+                    : recruiterAuthPageCopy.card.description
                   }
                 </CardDescription>
               </CardHeader>
@@ -400,29 +401,29 @@ export default function RecruiterAuth() {
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                   <TabsList className="grid w-full grid-cols-2 bg-muted/50">
                     <TabsTrigger value="login" className="data-[state=active]:bg-muted/60 text-foreground">
-                      Sign In
+                      {recruiterAuthPageCopy.card.signIn}
                     </TabsTrigger>
                     <TabsTrigger value="register" className="data-[state=active]:bg-muted/60 text-foreground">
-                      Register
+                      {recruiterAuthPageCopy.card.register}
                     </TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="login">
                     <form onSubmit={handleLogin} className="space-y-4">
                       <div className="space-y-2">
-                        <Label htmlFor="username" className="text-foreground">Username or Email</Label>
+                        <Label htmlFor="username" className="text-foreground">{recruiterAuthPageCopy.card.usernameOrEmail}</Label>
                         <Input
                           id="username"
                           type="text"
                           value={loginData.username}
                           onChange={(e) => setLoginData(prev => ({ ...prev, username: e.target.value }))}
                           className="bg-muted/30 border-border text-foreground placeholder:text-muted-foreground"
-                          placeholder="Enter your username or email"
+                          placeholder={recruiterAuthPageCopy.card.usernameOrEmailPlaceholder}
                           required
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="password" className="text-foreground">Password</Label>
+                        <Label htmlFor="password" className="text-foreground">{recruiterAuthPageCopy.card.password}</Label>
                         <Input
                           id="password"
                           type="password"
@@ -430,7 +431,7 @@ export default function RecruiterAuth() {
                           value={loginData.password}
                           onChange={(e) => setLoginData(prev => ({ ...prev, password: e.target.value }))}
                           className="bg-muted/30 border-border text-foreground placeholder:text-muted-foreground"
-                          placeholder="Enter your password"
+                          placeholder={recruiterAuthPageCopy.card.passwordPlaceholder}
                           required
                         />
                       </div>
@@ -439,7 +440,7 @@ export default function RecruiterAuth() {
                         className="w-full bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] hover:opacity-90"
                         disabled={loginMutation.isPending}
                       >
-                        {loginMutation.isPending ? "Signing in..." : "Sign In"}
+                        {loginMutation.isPending ? recruiterAuthPageCopy.card.signingIn : recruiterAuthPageCopy.card.signIn}
                       </Button>
                     </form>
                   </TabsContent>
@@ -448,51 +449,51 @@ export default function RecruiterAuth() {
                     <form onSubmit={handleRegister} className="space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <Label htmlFor="firstName" className="text-foreground">First Name</Label>
+                          <Label htmlFor="firstName" className="text-foreground">{recruiterAuthPageCopy.card.firstName}</Label>
                           <Input
                             id="firstName"
                             type="text"
                             value={registerData.firstName}
                             onChange={(e) => setRegisterData(prev => ({ ...prev, firstName: e.target.value }))}
                             className="bg-muted/30 border-border text-foreground placeholder:text-muted-foreground"
-                            placeholder="First name"
+                            placeholder={recruiterAuthPageCopy.card.firstNamePlaceholder}
                             required
                           />
                         </div>
                         <div className="space-y-2">
-                          <Label htmlFor="lastName" className="text-foreground">Last Name</Label>
+                          <Label htmlFor="lastName" className="text-foreground">{recruiterAuthPageCopy.card.lastName}</Label>
                           <Input
                             id="lastName"
                             type="text"
                             value={registerData.lastName}
                             onChange={(e) => setRegisterData(prev => ({ ...prev, lastName: e.target.value }))}
                             className="bg-muted/30 border-border text-foreground placeholder:text-muted-foreground"
-                            placeholder="Last name"
+                            placeholder={recruiterAuthPageCopy.card.lastNamePlaceholder}
                             required
                           />
                         </div>
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="regEmail" className="text-foreground">Email *</Label>
+                        <Label htmlFor="regEmail" className="text-foreground">{recruiterAuthPageCopy.card.email}</Label>
                         <Input
                           id="regEmail"
                           type="email"
                           value={registerData.username}
                           onChange={(e) => setRegisterData(prev => ({ ...prev, username: e.target.value }))}
                           className={`bg-muted/30 border-border text-foreground placeholder:text-muted-foreground ${inviteDetails ? 'bg-muted/50 cursor-not-allowed' : ''}`}
-                          placeholder="Enter your email address"
+                          placeholder={recruiterAuthPageCopy.card.emailPlaceholder}
                           required
                           readOnly={!!inviteDetails}
                           title={inviteDetails ? "Email is locked to the invite" : undefined}
                         />
                         {inviteDetails && (
                           <p className="text-xs text-muted-foreground">
-                            Email is locked to the invite
+                            {recruiterAuthPageCopy.invite.emailLocked}
                           </p>
                         )}
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="regPassword" className="text-foreground">Password *</Label>
+                        <Label htmlFor="regPassword" className="text-foreground">{recruiterAuthPageCopy.card.password}</Label>
                         <Input
                           id="regPassword"
                           type="password"
@@ -500,7 +501,7 @@ export default function RecruiterAuth() {
                           value={registerData.password}
                           onChange={(e) => setRegisterData(prev => ({ ...prev, password: e.target.value }))}
                           className="bg-muted/30 border-border text-foreground placeholder:text-muted-foreground"
-                          placeholder="Create a strong password"
+                          placeholder={recruiterAuthPageCopy.card.createPasswordPlaceholder}
                           required
                         />
                       </div>
@@ -509,7 +510,7 @@ export default function RecruiterAuth() {
                         className="w-full bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] hover:opacity-90"
                         disabled={registerMutation.isPending}
                       >
-                        {registerMutation.isPending ? "Creating account..." : "Create Recruiter Account"}
+                        {registerMutation.isPending ? recruiterAuthPageCopy.card.creatingAccount : recruiterAuthPageCopy.card.createRecruiterAccount}
                       </Button>
                     </form>
                   </TabsContent>

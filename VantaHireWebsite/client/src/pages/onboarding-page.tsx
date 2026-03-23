@@ -10,14 +10,15 @@ import Layout from "@/components/Layout";
 import OrgSetupStep from "@/components/onboarding/OrgSetupStep";
 import ProfileStep from "@/components/onboarding/ProfileStep";
 import PlanSelectionStep from "@/components/onboarding/PlanSelectionStep";
+import { onboardingPageCopy } from "@/lib/internal-copy";
 
 type OnboardingStep = 'org' | 'profile' | 'plan';
 
 const STEP_ORDER: OnboardingStep[] = ['org', 'profile', 'plan'];
 const STEP_LABELS: Record<OnboardingStep, string> = {
-  org: 'Organization',
-  profile: 'Profile',
-  plan: 'Plan',
+  org: onboardingPageCopy.steps.org,
+  profile: onboardingPageCopy.steps.profile,
+  plan: onboardingPageCopy.steps.plan,
 };
 
 export default function OnboardingPage() {
@@ -60,8 +61,8 @@ export default function OnboardingPage() {
   useEffect(() => {
     if (status?.creditsLazyInit && !creditsToastShown) {
       toast({
-        title: "Credits initialized",
-        description: "Your AI credits are ready to use.",
+        title: onboardingPageCopy.toasts.creditsTitle,
+        description: onboardingPageCopy.toasts.creditsDescription,
       });
       setCreditsToastShown(true);
     }
@@ -144,15 +145,15 @@ export default function OnboardingPage() {
           <div className="text-center max-w-md mx-auto px-4">
             <AlertCircle className="h-12 w-12 text-destructive mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-foreground mb-2">
-              Something went wrong
+              {onboardingPageCopy.error.title}
             </h2>
             <p className="text-muted-foreground mb-6">
-              We couldn't load your onboarding status. Please try again or contact support if the issue persists.
+              {onboardingPageCopy.error.description}
             </p>
             <div className="flex gap-3 justify-center">
               <Button onClick={() => refetch()}>
                 <RefreshCw className="h-4 w-4 mr-2" />
-                Try Again
+                {onboardingPageCopy.error.retry}
               </Button>
             </div>
           </div>
@@ -176,10 +177,10 @@ export default function OnboardingPage() {
           {/* Header */}
           <div className="text-center mb-8">
             <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">
-              Welcome to VantaHire
+              {onboardingPageCopy.header.title}
             </h1>
             <p className="text-muted-foreground">
-              Let's get you set up in just a few steps
+              {onboardingPageCopy.header.subtitle}
             </p>
           </div>
 

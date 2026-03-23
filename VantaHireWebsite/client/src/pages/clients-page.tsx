@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dialog";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Building2, Mail, Plus, Loader2, Search } from "lucide-react";
+import { clientsPageCopy } from "@/lib/internal-copy";
 
 export default function ClientsPage() {
   const { user } = useAuth();
@@ -132,16 +133,16 @@ export default function ClientsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       toast({
-        title: "Client Created",
-        description: "Client has been added successfully.",
+        title: clientsPageCopy.toasts.createdTitle,
+        description: clientsPageCopy.toasts.createdDescription,
       });
       setShowDialog(false);
       resetForm();
     },
     onError: (error: Error) => {
       toast({
-        title: "Failed to Create Client",
-        description: error.message || "An error occurred while creating the client.",
+        title: clientsPageCopy.toasts.createFailedTitle,
+        description: error.message || clientsPageCopy.toasts.createFailedDescription,
         variant: "destructive",
       });
     },
@@ -163,16 +164,16 @@ export default function ClientsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/clients"] });
       toast({
-        title: "Client Updated",
-        description: "Client details have been updated successfully.",
+        title: clientsPageCopy.toasts.updatedTitle,
+        description: clientsPageCopy.toasts.updatedDescription,
       });
       setShowDialog(false);
       resetForm();
     },
     onError: (error: Error) => {
       toast({
-        title: "Failed to Update Client",
-        description: error.message || "An error occurred while updating the client.",
+        title: clientsPageCopy.toasts.updateFailedTitle,
+        description: error.message || clientsPageCopy.toasts.updateFailedDescription,
         variant: "destructive",
       });
     },
@@ -181,8 +182,8 @@ export default function ClientsPage() {
   const handleSave = () => {
     if (!name.trim()) {
       toast({
-        title: "Missing name",
-        description: "Client name is required.",
+        title: clientsPageCopy.toasts.missingNameTitle,
+        description: clientsPageCopy.toasts.missingNameDescription,
         variant: "destructive",
       });
       return;
@@ -211,15 +212,15 @@ export default function ClientsPage() {
           <div>
             <h1 className="text-2xl md:text-3xl font-semibold text-foreground flex items-center gap-2">
               <Building2 className="w-7 h-7 text-primary" />
-              Clients
+              {clientsPageCopy.header.title}
             </h1>
             <p className="text-muted-foreground text-sm md:text-base">
-              Manage client organizations for agency and multi-company recruiting.
+              {clientsPageCopy.header.subtitle}
             </p>
           </div>
           <Button onClick={openCreateDialog} data-tour="add-client-button">
             <Plus className="w-4 h-4 mr-2" />
-            Add Client
+            {clientsPageCopy.header.addClient}
           </Button>
         </div>
 
@@ -230,7 +231,7 @@ export default function ClientsPage() {
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
                 <Input
-                  placeholder="Search by name, domain, or contact..."
+                  placeholder={clientsPageCopy.searchPlaceholder}
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 bg-card"
@@ -243,9 +244,9 @@ export default function ClientsPage() {
         {/* Clients Table */}
         <Card className="shadow-sm" data-tour="clients-list">
           <CardHeader>
-            <CardTitle className="text-foreground">Client List</CardTitle>
+            <CardTitle className="text-foreground">{clientsPageCopy.list.title}</CardTitle>
             <CardDescription className="text-muted-foreground">
-              All clients you manage for job postings and analytics.
+              {clientsPageCopy.list.description}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -256,30 +257,30 @@ export default function ClientsPage() {
             ) : filteredClients.length === 0 ? (
               <div className="text-center py-12">
                 <Building2 className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground mb-2">No clients yet</p>
+                <p className="text-muted-foreground mb-2">{clientsPageCopy.list.emptyTitle}</p>
                 <p className="text-muted-foreground text-sm">
-                  Add clients to organize roles by company and simplify reporting.
+                  {clientsPageCopy.list.emptyDescription}
                 </p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow className="border-border hover:bg-muted/50">
-                    <TableHead className="text-muted-foreground">Name</TableHead>
-                    <TableHead className="text-muted-foreground">Domain</TableHead>
-                    <TableHead className="text-muted-foreground">Primary Contact</TableHead>
-                    <TableHead className="text-muted-foreground">Email</TableHead>
+                    <TableHead className="text-muted-foreground">{clientsPageCopy.list.columns.name}</TableHead>
+                    <TableHead className="text-muted-foreground">{clientsPageCopy.list.columns.domain}</TableHead>
+                    <TableHead className="text-muted-foreground">{clientsPageCopy.list.columns.primaryContact}</TableHead>
+                    <TableHead className="text-muted-foreground">{clientsPageCopy.list.columns.email}</TableHead>
                     <TableHead className="text-muted-foreground hidden md:table-cell">
-                      Notes
+                      {clientsPageCopy.list.columns.notes}
                     </TableHead>
                     <TableHead className="text-muted-foreground text-right">
-                      Roles
+                      {clientsPageCopy.list.columns.roles}
                     </TableHead>
                     <TableHead className="text-muted-foreground text-right">
-                      Applications
+                      {clientsPageCopy.list.columns.applications}
                     </TableHead>
                     <TableHead className="text-muted-foreground text-right">
-                      Actions
+                      {clientsPageCopy.list.columns.actions}
                     </TableHead>
                   </TableRow>
                 </TableHeader>
@@ -304,14 +305,14 @@ export default function ClientsPage() {
                             {client.domain}
                           </a>
                         ) : (
-                          <span className="text-muted-foreground text-xs">Not set</span>
+                          <span className="text-muted-foreground text-xs">{clientsPageCopy.list.notSet}</span>
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
                         {client.primaryContactName ? (
                           client.primaryContactName
                         ) : (
-                          <span className="text-muted-foreground text-xs">Not set</span>
+                          <span className="text-muted-foreground text-xs">{clientsPageCopy.list.notSet}</span>
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-sm">
@@ -321,7 +322,7 @@ export default function ClientsPage() {
                             {client.primaryContactEmail}
                           </span>
                         ) : (
-                          <span className="text-muted-foreground text-xs">Not set</span>
+                          <span className="text-muted-foreground text-xs">{clientsPageCopy.list.notSet}</span>
                         )}
                       </TableCell>
                       <TableCell className="text-muted-foreground text-xs hidden md:table-cell max-w-xs">
@@ -343,7 +344,7 @@ export default function ClientsPage() {
                           size="sm"
                           onClick={() => openEditDialog(client)}
                         >
-                          Edit
+                          {clientsPageCopy.list.edit}
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -365,67 +366,67 @@ export default function ClientsPage() {
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>
-                {editingClient ? "Edit Client" : "Add Client"}
+                {editingClient ? clientsPageCopy.dialog.editTitle : clientsPageCopy.dialog.addTitle}
               </DialogTitle>
               <DialogDescription>
                 {editingClient
-                  ? "Update client details for better organization and reporting."
-                  : "Create a new client that you can associate jobs with."}
+                  ? clientsPageCopy.dialog.editDescription
+                  : clientsPageCopy.dialog.addDescription}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div>
-                <Label htmlFor="client-name">Name *</Label>
+                <Label htmlFor="client-name">{clientsPageCopy.dialog.name}</Label>
                 <Input
                   id="client-name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="mt-1"
-                  placeholder="Acme Corp"
+                  placeholder={clientsPageCopy.dialog.namePlaceholder}
                 />
               </div>
               <div>
-                <Label htmlFor="client-domain">Domain</Label>
+                <Label htmlFor="client-domain">{clientsPageCopy.dialog.domain}</Label>
                 <Input
                   id="client-domain"
                   value={domain}
                   onChange={(e) => setDomain(e.target.value)}
                   className="mt-1"
-                  placeholder="acme.com"
+                  placeholder={clientsPageCopy.dialog.domainPlaceholder}
                 />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="client-contact-name">Primary Contact Name</Label>
+                  <Label htmlFor="client-contact-name">{clientsPageCopy.dialog.contactName}</Label>
                   <Input
                     id="client-contact-name"
                     value={primaryContactName}
                     onChange={(e) => setPrimaryContactName(e.target.value)}
                     className="mt-1"
-                    placeholder="Jane Doe"
+                    placeholder={clientsPageCopy.dialog.contactNamePlaceholder}
                   />
                 </div>
                 <div>
-                  <Label htmlFor="client-contact-email">Primary Contact Email</Label>
+                  <Label htmlFor="client-contact-email">{clientsPageCopy.dialog.contactEmail}</Label>
                   <Input
                     id="client-contact-email"
                     type="email"
                     value={primaryContactEmail}
                     onChange={(e) => setPrimaryContactEmail(e.target.value)}
                     className="mt-1"
-                    placeholder="jane.doe@acme.com"
+                    placeholder={clientsPageCopy.dialog.contactEmailPlaceholder}
                   />
                 </div>
               </div>
               <div>
-                <Label htmlFor="client-notes">Notes</Label>
+                <Label htmlFor="client-notes">{clientsPageCopy.dialog.notes}</Label>
                 <Textarea
                   id="client-notes"
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   className="mt-1"
                   rows={3}
-                  placeholder="Key stakeholders, expectations, or special terms..."
+                  placeholder={clientsPageCopy.dialog.notesPlaceholder}
                 />
               </div>
             </div>
@@ -437,7 +438,7 @@ export default function ClientsPage() {
                   resetForm();
                 }}
               >
-                Cancel
+                {clientsPageCopy.dialog.cancel}
               </Button>
               <Button
                 onClick={handleSave}
@@ -446,7 +447,7 @@ export default function ClientsPage() {
                 {(createMutation.isPending || updateMutation.isPending) && (
                   <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                 )}
-                Save
+                {clientsPageCopy.dialog.save}
               </Button>
             </div>
           </DialogContent>

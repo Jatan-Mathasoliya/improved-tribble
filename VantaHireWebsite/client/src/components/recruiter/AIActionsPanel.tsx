@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { AlertCircle, ArrowRight, Loader2, RefreshCcw, Zap } from "lucide-react";
+import { recruiterDashboardCopy } from "@/lib/internal-copy";
 import { apiRequest } from "@/lib/queryClient";
 import { DASHBOARD_EYEBROW, DASHBOARD_PANEL, DASHBOARD_PANEL_MUTED, DASHBOARD_TITLE } from "@/lib/dashboard-theme";
 import { cn } from "@/lib/utils";
@@ -67,22 +68,22 @@ type NormalizedSection = {
 const TAB_ORDER: Array<{ key: TabKey; label: string; aliases: RawSectionKey[] }> = [
   {
     key: "candidates_to_review",
-    label: "Candidates to Review",
+    label: recruiterDashboardCopy.actionsPanel.sections.candidatesToReview,
     aliases: ["candidates_to_review", "candidatesToReview"],
   },
   {
     key: "final_stage",
-    label: "Final Stage",
+    label: recruiterDashboardCopy.actionsPanel.sections.finalStage,
     aliases: ["final_stage", "finalStageCandidates"],
   },
   {
     key: "feedback_pending",
-    label: "Feedback Pending",
+    label: recruiterDashboardCopy.actionsPanel.sections.feedbackPending,
     aliases: ["feedback_pending", "feedbackPending"],
   },
   {
     key: "low_pipeline",
-    label: "Low Pipeline",
+    label: recruiterDashboardCopy.actionsPanel.sections.lowPipeline,
     aliases: ["low_pipeline", "jobsLowOnPipeline"],
   },
 ];
@@ -97,15 +98,15 @@ const FIT_BADGE_STYLES: Record<string, string> = {
 const URGENCY_BADGE_STYLES: Record<ActionUrgency, { container: string; label: string }> = {
   high: {
     container: "bg-[#FEE2E2] text-[#DC2626]",
-    label: "High",
+    label: recruiterDashboardCopy.actionsPanel.urgency.high,
   },
   medium: {
     container: "bg-[#FEF3C7] text-[#D97706]",
-    label: "Medium",
+    label: recruiterDashboardCopy.actionsPanel.urgency.medium,
   },
   low: {
     container: "bg-[#F3F4F6] text-[#6B7280]",
-    label: "Low",
+    label: recruiterDashboardCopy.actionsPanel.urgency.low,
   },
 };
 
@@ -180,9 +181,9 @@ export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
             <Zap className="h-[22px] w-[22px] fill-white text-white" />
           </div>
           <div className="space-y-2">
-            <p className={DASHBOARD_EYEBROW}>Recommended Actions</p>
+            <p className={DASHBOARD_EYEBROW}>{recruiterDashboardCopy.actionsPanel.eyebrow}</p>
             <div className="flex items-center gap-3">
-              <h2 className={cn(DASHBOARD_TITLE, "text-[20px] leading-none")}>AI Actions</h2>
+              <h2 className={cn(DASHBOARD_TITLE, "text-[20px] leading-none")}>{recruiterDashboardCopy.actionsPanel.title}</h2>
               <span className="inline-flex items-center rounded-[20px] bg-[#EEF0FF] px-2 py-1 font-inter text-[12px] font-semibold leading-none text-[#4D41DF]">
                 {totalCount}
               </span>
@@ -192,7 +193,7 @@ export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
 
         <div className="flex items-center gap-2 font-inter text-[12px] font-normal leading-none text-[#9CA3AF]">
           {isFetching && !isLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[#C4C0FF]" /> : null}
-          <span>{updatedLabel ? `Updated ${updatedLabel}` : "Updated --"}</span>
+          <span>{updatedLabel ? `Updated ${updatedLabel}` : recruiterDashboardCopy.actionsPanel.updatedFallback}</span>
         </div>
       </div>
 
@@ -230,12 +231,12 @@ export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
       >
         {isLoading ? (
           <div className="flex flex-1 items-center justify-center">
-            <p className="font-inter text-[13px] text-[#9CA3AF]">Loading AI actions...</p>
+            <p className="font-inter text-[13px] text-[#9CA3AF]">{recruiterDashboardCopy.actionsPanel.loading}</p>
           </div>
         ) : error || !activeSection ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
             <AlertCircle className="h-5 w-5 text-[#9CA3AF]" />
-            <p className="font-inter text-[13px] text-[#9CA3AF]">AI actions unavailable</p>
+            <p className="font-inter text-[13px] text-[#9CA3AF]">{recruiterDashboardCopy.actionsPanel.unavailable}</p>
           </div>
         ) : activeSection.items.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
@@ -287,7 +288,7 @@ export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
                           urgencyStyle.container,
                         )}
                       >
-                        {urgencyStyle.label} Urgency
+                        {urgencyStyle.label} {recruiterDashboardCopy.actionsPanel.urgency.suffix}
                       </span>
                     </div>
                   </div>
@@ -306,7 +307,7 @@ export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
         className="flex items-center justify-center gap-2 border-t border-[#191C1E]/15 bg-[#FFFFFF] px-6 py-5 font-inter text-[11px] font-medium uppercase tracking-[0.08em] text-[#9CA3AF] transition-colors hover:text-[#6B7280]"
       >
         <RefreshCcw className={cn("h-3.5 w-3.5", isFetching && "animate-spin")} />
-        <span>Sync Actions</span>
+        <span>{recruiterDashboardCopy.actionsPanel.syncLabel}</span>
       </button>
     </section>
   );

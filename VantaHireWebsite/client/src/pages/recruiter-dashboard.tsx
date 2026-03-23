@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { DASHBOARD_EYEBROW, DASHBOARD_PAGE_BACKGROUND, DASHBOARD_SHELL_PANEL, DASHBOARD_TITLE } from "@/lib/dashboard-theme";
+import { recruiterDashboardCopy } from "@/lib/internal-copy";
 import { cn } from "@/lib/utils";
 import { Mail, Send, Loader2, ChevronDown } from "lucide-react";
 import { RecruiterKpiRibbon } from "@/components/recruiter/RecruiterKpiRibbon";
@@ -86,7 +87,7 @@ export default function RecruiterDashboard() {
     },
     onSuccess: () => {
       toast({
-        title: "Invitation Sent",
+        title: recruiterDashboardCopy.toasts.inviteSuccessTitle,
         description: `Invitation sent to ${inviteHMEmail}`,
       });
       setShowInviteHMDialog(false);
@@ -95,7 +96,7 @@ export default function RecruiterDashboard() {
     },
     onError: (error: Error) => {
       toast({
-        title: "Failed to Send Invitation",
+        title: recruiterDashboardCopy.toasts.inviteErrorTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -383,43 +384,43 @@ export default function RecruiterDashboard() {
   const kpiItems = useMemo(
     () => [
       {
-        label: "Pipeline Health",
+        label: recruiterDashboardCopy.kpis.pipelineHealth.label,
         value: pipelineHealthScore.isEmpty ? "—" : `${pipelineHealthScore.score}%`,
-        hint: pipelineHealthScore.isEmpty ? "Post a job to get started" : pipelineHealthScore.tag,
+        hint: pipelineHealthScore.isEmpty ? recruiterDashboardCopy.kpis.pipelineHealth.emptyHint : pipelineHealthScore.tag,
         trend: pipelineHealthScore.isEmpty ? "flat" as const : pipelineHealthScore.score >= 70 ? "up" as const : pipelineHealthScore.score >= 50 ? "flat" as const : "down" as const,
-        tooltip: "Score based on stage movement, time in stage, drop-offs, and candidates that are stuck in the pipeline.",
+        tooltip: recruiterDashboardCopy.kpis.pipelineHealth.tooltip,
         variant: "pipeline" as const,
       },
       {
-        label: "Active Roles",
+        label: recruiterDashboardCopy.kpis.activeRoles.label,
         value: stats.activeJobs,
-        secondary: "Open positions",
-        tooltip: "Active job requisitions in scope for the current dashboard filter.",
+        secondary: recruiterDashboardCopy.kpis.activeRoles.secondary,
+        tooltip: recruiterDashboardCopy.kpis.activeRoles.tooltip,
         variant: "roles" as const,
       },
       {
-        label: "Today's Apps",
+        label: recruiterDashboardCopy.kpis.todaysApps.label,
         value: stats.newToday ?? 0,
         trend: appsTrend.trend,
         trendValue: appsTrend.value || undefined,
-        tooltip: "Applications received today for the selected jobs, compared with the existing weekly baseline already used by this dashboard.",
+        tooltip: recruiterDashboardCopy.kpis.todaysApps.tooltip,
         variant: "apps" as const,
       },
       {
-        label: "First Review",
+        label: recruiterDashboardCopy.kpis.firstReview.label,
         value: stats.avgFirstReview != null ? `${stats.avgFirstReview}d` : "—",
         trend: stats.avgFirstReview != null && stats.avgFirstReview <= 2 ? "up" as const : stats.avgFirstReview != null && stats.avgFirstReview > 4 ? "down" as const : "flat" as const,
-        secondary: "Avg response time",
-        tooltip: "Average time from application submitted to the first recruiter action.",
+        secondary: recruiterDashboardCopy.kpis.firstReview.secondary,
+        tooltip: recruiterDashboardCopy.kpis.firstReview.tooltip,
         variant: "review" as const,
       },
       {
-        label: "To Interview",
+        label: recruiterDashboardCopy.kpis.toInterview.label,
         value: `${stats.interviewConv}%`,
         trend: stats.interviewConv >= 30 ? "up" as const : stats.interviewConv >= 15 ? "flat" as const : "down" as const,
-        tooltip: "Conversion rate from screening to interview for applications in the current range.",
+        tooltip: recruiterDashboardCopy.kpis.toInterview.tooltip,
         variant: "interview" as const,
-        secondary: "Screen → Interview",
+        secondary: recruiterDashboardCopy.kpis.toInterview.secondary,
       },
     ],
     [stats, pipelineHealthScore, appsTrend]
@@ -490,15 +491,15 @@ export default function RecruiterDashboard() {
               <div className="relative space-y-6">
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                   <div className="space-y-3">
-                    <p className={DASHBOARD_EYEBROW}>Recruiting Performance</p>
+                    <p className={DASHBOARD_EYEBROW}>{recruiterDashboardCopy.header.eyebrow}</p>
                     <div className="flex flex-wrap items-center gap-3">
-                      <h1 className={cn(DASHBOARD_TITLE, "text-[28px] md:text-[34px]")}>Recruiter Dashboard</h1>
+                      <h1 className={cn(DASHBOARD_TITLE, "text-[28px] md:text-[34px]")}>{recruiterDashboardCopy.header.title}</h1>
                       <Badge variant="outline" className="rounded-full border-[#D8DBE6] bg-white/80 px-3 py-1 text-xs font-semibold text-[#5B4FF7]">
                     {planName} Plan
                   </Badge>
                     </div>
                     <p className="max-w-2xl text-sm text-[#5F6675] md:text-[15px]">
-                      Action-first view of your live pipeline, interviews, and hiring momentum.
+                      {recruiterDashboardCopy.header.subtitle}
                     </p>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
@@ -510,7 +511,7 @@ export default function RecruiterDashboard() {
                       className="h-11 rounded-2xl border-[#D9DDEA] bg-white px-5 text-[13px] font-semibold text-[#1F2937] shadow-[0_8px_18px_rgba(15,23,42,0.05)] hover:bg-[#F7F8FC]"
                     >
                       <Mail className="mr-2 h-4 w-4" />
-                      Invite Hiring Manager
+                      {recruiterDashboardCopy.header.inviteHiringManager}
                     </Button>
                   </div>
                 </div>
@@ -519,25 +520,25 @@ export default function RecruiterDashboard() {
 
                 <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                   <div className="text-sm text-[#687182]">
-                    KPIs filtered by{" "}
+                    {recruiterDashboardCopy.header.filterSummaryPrefix}{" "}
                     <span className="font-semibold text-[#111827]">
                       Last {RANGE_PRESETS[rangePreset]} days
                     </span>{" "}
                     ·{" "}
                     <span className="font-semibold text-[#111827]">
-                      {selectedJobId === "all" ? "All jobs" : `Job #${selectedJobId}`}
+                      {selectedJobId === "all" ? recruiterDashboardCopy.header.allJobsLabel : `Job #${selectedJobId}`}
                     </span>
                   </div>
                   <div className="flex flex-wrap items-center gap-3">
                     <Select value={rangePreset} onValueChange={(val) => setRangePreset(val as keyof typeof RANGE_PRESETS)}>
                       <SelectTrigger className="h-11 w-[164px] rounded-2xl border-[#E5E7EB] bg-[#FAFAFB] px-5 text-[0.95rem] font-semibold text-[#111827] shadow-[0_3px_10px_rgba(15,23,42,0.04)] [&>svg]:hidden">
-                        <SelectValue placeholder="Date range" />
+                        <SelectValue placeholder={recruiterDashboardCopy.filters.dateRangePlaceholder} />
                         <ChevronDown className="h-4 w-4 text-[#4B5563]" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="7d">Last 7 days</SelectItem>
-                        <SelectItem value="30d">Last 30 days</SelectItem>
-                        <SelectItem value="90d">Last 90 days</SelectItem>
+                        <SelectItem value="7d">{recruiterDashboardCopy.filters.last7Days}</SelectItem>
+                        <SelectItem value="30d">{recruiterDashboardCopy.filters.last30Days}</SelectItem>
+                        <SelectItem value="90d">{recruiterDashboardCopy.filters.last90Days}</SelectItem>
                       </SelectContent>
                     </Select>
                     <Select
@@ -545,11 +546,11 @@ export default function RecruiterDashboard() {
                       onValueChange={(val) => setSelectedJobId(val === "all" ? "all" : Number(val))}
                     >
                       <SelectTrigger className="h-11 w-[154px] rounded-2xl border-[#E5E7EB] bg-[#FAFAFB] px-5 text-[0.95rem] font-semibold text-[#111827] shadow-[0_3px_10px_rgba(15,23,42,0.04)] [&>svg]:hidden">
-                        <SelectValue placeholder="All jobs" />
+                        <SelectValue placeholder={recruiterDashboardCopy.filters.allJobsPlaceholder} />
                         <ChevronDown className="h-4 w-4 text-[#4B5563]" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All jobs</SelectItem>
+                        <SelectItem value="all">{recruiterDashboardCopy.header.allJobsLabel}</SelectItem>
                         {jobs.map((job) => (
                           <SelectItem key={job.id} value={String(job.id)}>
                             {job.title}
@@ -562,7 +563,7 @@ export default function RecruiterDashboard() {
 
                 <RecruiterKpiRibbon
                   items={kpiItems}
-                  heroLabel="Pipeline Health"
+                  heroLabel={recruiterDashboardCopy.kpis.pipelineHealth.label}
                   heroTooltip="Score based on stage movement, time in stage, drop-offs and stuck candidates."
                 />
               </div>
@@ -600,31 +601,31 @@ export default function RecruiterDashboard() {
       <Dialog open={showInviteHMDialog} onOpenChange={setShowInviteHMDialog}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Invite Hiring Manager</DialogTitle>
+            <DialogTitle>{recruiterDashboardCopy.inviteDialog.title}</DialogTitle>
             <DialogDescription>
-              Send an email invitation to collaborate on candidate reviews.
+              {recruiterDashboardCopy.inviteDialog.description}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <label htmlFor="hm-email" className="text-sm font-medium">
-                Email <span className="text-destructive">*</span>
+                {recruiterDashboardCopy.inviteDialog.emailLabel} <span className="text-destructive">*</span>
               </label>
               <Input
                 id="hm-email"
                 type="email"
-                placeholder="hiring.manager@company.com"
+                placeholder={recruiterDashboardCopy.inviteDialog.emailPlaceholder}
                 value={inviteHMEmail}
                 onChange={(e) => setInviteHMEmail(e.target.value)}
               />
             </div>
             <div className="space-y-2">
               <label htmlFor="hm-name" className="text-sm font-medium">
-                Name <span className="text-muted-foreground">(optional)</span>
+                {recruiterDashboardCopy.inviteDialog.nameLabel} <span className="text-muted-foreground">{recruiterDashboardCopy.inviteDialog.optionalLabel}</span>
               </label>
               <Input
                 id="hm-name"
-                placeholder="John Smith"
+                placeholder={recruiterDashboardCopy.inviteDialog.namePlaceholder}
                 value={inviteHMName}
                 onChange={(e) => setInviteHMName(e.target.value)}
               />
@@ -639,14 +640,14 @@ export default function RecruiterDashboard() {
                 setInviteHMName("");
               }}
             >
-              Cancel
+              {recruiterDashboardCopy.inviteDialog.cancelLabel}
             </Button>
             <Button
               onClick={() => {
                 if (!inviteHMEmail) {
                   toast({
-                    title: "Email Required",
-                    description: "Please enter an email address.",
+                    title: recruiterDashboardCopy.inviteDialog.emailRequiredTitle,
+                    description: recruiterDashboardCopy.inviteDialog.emailRequiredDescription,
                     variant: "destructive",
                   });
                   return;
@@ -662,12 +663,12 @@ export default function RecruiterDashboard() {
               {inviteHiringManagerMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending...
+                  {recruiterDashboardCopy.inviteDialog.submittingLabel}
                 </>
               ) : (
                 <>
                   <Send className="mr-2 h-4 w-4" />
-                  Send Invitation
+                  {recruiterDashboardCopy.inviteDialog.submitLabel}
                 </>
               )}
             </Button>

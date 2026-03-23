@@ -14,6 +14,7 @@ import {
   Target,
   BarChart3
 } from "lucide-react";
+import { orgAnalyticsPageCopy } from "@/lib/internal-copy";
 
 interface AnalyticsOverview {
   totalApplications: number;
@@ -135,9 +136,9 @@ export default function OrgAnalyticsPage() {
     <Layout>
       <div className="max-w-7xl mx-auto p-6 space-y-6">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Organization Analytics</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{orgAnalyticsPageCopy.header.title}</h1>
         <p className="text-muted-foreground">
-          Comprehensive hiring metrics and team performance insights
+          {orgAnalyticsPageCopy.header.subtitle}
         </p>
       </div>
 
@@ -153,24 +154,24 @@ export default function OrgAnalyticsPage() {
         ) : overview ? (
           <>
             <StatCard
-              title="Total Applications"
+              title={orgAnalyticsPageCopy.stats.totalApplications}
               value={overview.totalApplications}
               icon={FileText}
             />
             <StatCard
-              title="Total Hires"
+              title={orgAnalyticsPageCopy.stats.totalHires}
               value={overview.totalHires}
               icon={UserCheck}
             />
             <StatCard
-              title="Conversion Rate"
+              title={orgAnalyticsPageCopy.stats.conversionRate}
               value={`${overview.conversionRate}%`}
               icon={TrendingUp}
             />
             <StatCard
-              title="Avg Time to Fill"
+              title={orgAnalyticsPageCopy.stats.avgTimeToFill}
               value={overview.avgTimeToFill ? `${overview.avgTimeToFill}d` : "—"}
-              subtitle="Last 90 days"
+              subtitle={orgAnalyticsPageCopy.stats.avgTimeToFillSubtitle}
               icon={Clock}
             />
           </>
@@ -183,10 +184,10 @@ export default function OrgAnalyticsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Clock className="h-5 w-5" />
-              Time to Fill by Job
+              {orgAnalyticsPageCopy.sections.timeToFill.title}
             </CardTitle>
             <CardDescription>
-              Average days from posting to hire (last 90 days)
+              {orgAnalyticsPageCopy.sections.timeToFill.description}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -214,7 +215,7 @@ export default function OrgAnalyticsPage() {
                 </TableBody>
               </Table>
             ) : (
-              <p className="text-muted-foreground text-center py-8">No hiring data yet</p>
+              <p className="text-muted-foreground text-center py-8">{orgAnalyticsPageCopy.sections.timeToFill.empty}</p>
             )}
           </CardContent>
         </Card>
@@ -224,10 +225,10 @@ export default function OrgAnalyticsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
-              Time in Stage Breakdown
+              {orgAnalyticsPageCopy.sections.timeInStage.title}
             </CardTitle>
             <CardDescription>
-              Average days candidates spend in each stage
+              {orgAnalyticsPageCopy.sections.timeInStage.description}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -253,7 +254,7 @@ export default function OrgAnalyticsPage() {
                 </TableBody>
               </Table>
             ) : (
-              <p className="text-muted-foreground text-center py-8">No stage data yet</p>
+              <p className="text-muted-foreground text-center py-8">{orgAnalyticsPageCopy.sections.timeInStage.empty}</p>
             )}
           </CardContent>
         </Card>
@@ -264,10 +265,10 @@ export default function OrgAnalyticsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Target className="h-5 w-5" />
-            Source Performance
+            {orgAnalyticsPageCopy.sections.sourcePerformance.title}
           </CardTitle>
           <CardDescription>
-            Application sources and their conversion rates (last 90 days)
+            {orgAnalyticsPageCopy.sections.sourcePerformance.description}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -299,7 +300,7 @@ export default function OrgAnalyticsPage() {
               </TableBody>
             </Table>
           ) : (
-            <p className="text-muted-foreground text-center py-8">No source data yet</p>
+            <p className="text-muted-foreground text-center py-8">{orgAnalyticsPageCopy.sections.sourcePerformance.empty}</p>
           )}
         </CardContent>
       </Card>

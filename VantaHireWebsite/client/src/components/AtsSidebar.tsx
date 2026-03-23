@@ -49,6 +49,7 @@ import {
   Users,
 } from "lucide-react";
 import vantahireLogo from "@/assets/vantahire-logo.png";
+import { atsShellCopy } from "@/lib/internal-copy";
 
 type NavItem = {
   label: string;
@@ -106,28 +107,28 @@ export default function AtsSidebar({
 
   const mainItems: NavItem[] = [
     {
-      label: "Dashboard",
+      label: atsShellCopy.routes.dashboard.label,
       path: "/recruiter-dashboard",
       icon: Home,
       visible: isRecruiter || isAdmin,
       active: location === "/recruiter-dashboard",
     },
     {
-      label: "Applications",
+      label: atsShellCopy.routes.applications.label,
       path: "/applications",
       icon: Briefcase,
       visible: isRecruiter || isAdmin,
       active: matchesPath(location, "/applications"),
     },
     {
-      label: "Talent Search",
+      label: atsShellCopy.routes.talentSearch.label,
       path: "/candidates",
       icon: Search,
       visible: isRecruiter || isAdmin,
       active: matchesPath(location, "/candidates"),
     },
     {
-      label: "My Jobs",
+      label: atsShellCopy.routes.myJobs.label,
       path: "/my-jobs",
       icon: Briefcase,
       visible: isRecruiter || isAdmin,
@@ -136,42 +137,42 @@ export default function AtsSidebar({
         /^\/jobs\/\d+\/(applications|edit|pipeline|analytics|sourcing|bulk-import)/.test(location),
     },
     {
-      label: "Forms",
+      label: atsShellCopy.routes.forms.label,
       path: "/admin/forms",
       icon: FileText,
       visible: isRecruiter || isAdmin,
       active: matchesPath(location, "/admin/forms"),
     },
     {
-      label: "Clients",
+      label: atsShellCopy.routes.clients.label,
       path: "/clients",
       icon: Users,
       visible: isRecruiter || isAdmin,
       active: matchesPath(location, "/clients"),
     },
     {
-      label: "Email",
+      label: atsShellCopy.routes.email.label,
       path: "/admin/email-templates",
       icon: Sparkles,
       visible: isRecruiter || isAdmin,
       active: matchesPath(location, "/admin/email-templates"),
     },
     {
-      label: "Pricing",
+      label: atsShellCopy.routes.pricing.label,
       path: "/pricing",
       icon: CreditCard,
       visible: isRecruiter || isAdmin,
       active: location === "/pricing",
     },
     {
-      label: "Admin Dashboard",
+      label: atsShellCopy.routes.adminDashboard.label,
       path: "/admin",
       icon: Shield,
       visible: isAdmin,
       active: location === "/admin",
     },
     {
-      label: "Job Analytics",
+      label: atsShellCopy.routes.jobAnalytics.label,
       path: "/analytics",
       icon: BarChart3,
       visible: isAdmin,
@@ -181,42 +182,42 @@ export default function AtsSidebar({
 
   const accountItems: NavItem[] = [
     {
-      label: "Profile Settings",
+      label: atsShellCopy.routes.profileSettings.label,
       path: "/profile/settings",
       icon: Settings,
       visible: isRecruiter || isAdmin,
       active: matchesPath(location, "/profile/settings"),
     },
     {
-      label: "Org Settings",
+      label: atsShellCopy.routes.orgSettings.label,
       path: "/org/settings",
       icon: Building2,
       visible: !!organizationData && isOrgOwnerOrAdmin,
       active: matchesPath(location, "/org/settings"),
     },
     {
-      label: "Team Members",
+      label: atsShellCopy.routes.teamMembers.label,
       path: "/org/team",
       icon: Users,
       visible: !!organizationData && isOrgOwnerOrAdmin,
       active: matchesPath(location, "/org/team"),
     },
     {
-      label: "Billing",
+      label: atsShellCopy.routes.billing.label,
       path: "/org/billing",
       icon: CreditCard,
       visible: !!organizationData && isOrgOwner,
       active: matchesPath(location, "/org/billing"),
     },
     {
-      label: "Organization Analytics",
+      label: atsShellCopy.routes.organizationAnalytics.label,
       path: "/org/analytics",
       icon: BarChart3,
       visible: !!organizationData && isOrgOwnerOrAdmin,
       active: matchesPath(location, "/org/analytics"),
     },
     {
-      label: "Logout",
+      label: atsShellCopy.routes.logout.label,
       icon: LogOut,
       visible: true,
       active: false,
@@ -251,8 +252,8 @@ export default function AtsSidebar({
             </div>
             <div className="min-w-0 group-data-[collapsible=icon]:hidden">
               <div className="flex items-center gap-2">
-                <div className="truncate text-[18px] font-semibold leading-none text-[#1E2332]">VantaHire</div>
-                <div className="rounded-full bg-[#EEF0FF] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#5B52F5]">ATS</div>
+                <div className="truncate text-[18px] font-semibold leading-none text-[#1E2332]">{atsShellCopy.brand.name}</div>
+                <div className="rounded-full bg-[#EEF0FF] px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#5B52F5]">{atsShellCopy.brand.badge}</div>
               </div>
               {organizationData?.organization?.name && (
                 <div className="mt-1 truncate text-xs font-medium text-[#8D94A7]">
@@ -275,7 +276,7 @@ export default function AtsSidebar({
       >
         <SidebarGroup className="gap-2 p-0">
           <SidebarGroupLabel className="px-6 pb-1 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#A4A9B8] group-data-[collapsible=icon]:hidden">
-            Workspace
+            {atsShellCopy.sections.workspace}
           </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu className="gap-0.5 group-data-[collapsible=icon]:gap-2">
@@ -364,7 +365,7 @@ export default function AtsSidebar({
                 onClick={() => setOrgManagementOpen((open) => !open)}
                 className="mx-2 flex h-10 w-[calc(100%-1rem)] items-center justify-between rounded-2xl pl-6 pr-3 text-left transition-colors duration-200 hover:bg-white hover:shadow-[0_8px_24px_rgba(15,23,42,0.05)]"
               >
-                <span className="text-[13px] font-medium text-[#6E7891]">Org Management</span>
+                <span className="text-[13px] font-medium text-[#6E7891]">{atsShellCopy.menu.organizationManagement}</span>
                 <ChevronDown
                   className={cn(
                     "h-4 w-4 text-[#A4A9B8] transition-transform duration-200",

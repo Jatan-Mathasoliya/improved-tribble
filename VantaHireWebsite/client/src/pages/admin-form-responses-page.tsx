@@ -40,6 +40,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { Redirect } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
+import { adminFormResponsesPageCopy } from "@/lib/internal-copy";
 
 interface FormResponseSummary {
   id: number;
@@ -188,9 +189,9 @@ export default function AdminFormResponsesPage() {
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
 
-      toast({ title: "Export Complete", description: "Form responses exported successfully." });
+      toast({ title: adminFormResponsesPageCopy.toasts.exportCompleteTitle, description: adminFormResponsesPageCopy.toasts.exportCompleteDescription });
     } catch (error: any) {
-      toast({ title: "Export Failed", description: error.message, variant: "destructive" });
+      toast({ title: adminFormResponsesPageCopy.toasts.exportFailedTitle, description: error.message, variant: "destructive" });
     }
   };
 
@@ -203,13 +204,13 @@ export default function AdminFormResponsesPage() {
             <div>
               <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
                 <FileText className="w-8 h-8 text-primary" />
-                Form Responses
+                {adminFormResponsesPageCopy.header.title}
               </h1>
-              <p className="text-muted-foreground mt-1">View and manage all form responses across candidates</p>
+              <p className="text-muted-foreground mt-1">{adminFormResponsesPageCopy.header.subtitle}</p>
             </div>
             <Button onClick={handleExportAll} variant="outline">
               <Download className="w-4 h-4 mr-2" />
-              Export CSV
+              {adminFormResponsesPageCopy.header.export}
             </Button>
           </div>
 
@@ -219,7 +220,7 @@ export default function AdminFormResponsesPage() {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Total Responses</p>
+                    <p className="text-sm text-muted-foreground">{adminFormResponsesPageCopy.stats.totalResponses}</p>
                     <p className="text-2xl font-bold text-foreground">{stats.totalResponses}</p>
                   </div>
                   <FileText className="w-8 h-8 text-primary opacity-50" />
@@ -230,7 +231,7 @@ export default function AdminFormResponsesPage() {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Today</p>
+                    <p className="text-sm text-muted-foreground">{adminFormResponsesPageCopy.stats.today}</p>
                     <p className="text-2xl font-bold text-success">{stats.responsesToday}</p>
                   </div>
                   <CheckCircle2 className="w-8 h-8 text-success opacity-50" />
@@ -241,9 +242,9 @@ export default function AdminFormResponsesPage() {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Avg Response Time</p>
+                    <p className="text-sm text-muted-foreground">{adminFormResponsesPageCopy.stats.avgResponseTime}</p>
                     <p className="text-2xl font-bold text-info">
-                      {stats.avgResponseTime > 0 ? `${Math.round(stats.avgResponseTime)}h` : "N/A"}
+                      {stats.avgResponseTime > 0 ? `${Math.round(stats.avgResponseTime)}h` : adminFormResponsesPageCopy.stats.notAvailable}
                     </p>
                   </div>
                   <Clock className="w-8 h-8 text-info opacity-50" />
@@ -254,9 +255,9 @@ export default function AdminFormResponsesPage() {
               <CardContent className="pt-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-sm text-muted-foreground">Completion Rate</p>
+                    <p className="text-sm text-muted-foreground">{adminFormResponsesPageCopy.stats.completionRate}</p>
                     <p className="text-2xl font-bold text-primary">
-                      {stats.completionRate > 0 ? `${Math.round(stats.completionRate)}%` : "N/A"}
+                      {stats.completionRate > 0 ? `${Math.round(stats.completionRate)}%` : adminFormResponsesPageCopy.stats.notAvailable}
                     </p>
                   </div>
                   <BarChart3 className="w-8 h-8 text-primary opacity-50" />
@@ -273,7 +274,7 @@ export default function AdminFormResponsesPage() {
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                     <Input
-                      placeholder="Search by candidate name or email..."
+                      placeholder={adminFormResponsesPageCopy.filters.searchPlaceholder}
                       value={searchTerm}
                       onChange={(e) => {
                         setSearchTerm(e.target.value);
@@ -286,10 +287,10 @@ export default function AdminFormResponsesPage() {
                 <Select value={selectedFormId} onValueChange={(v) => { setSelectedFormId(v); setPage(1); }}>
                   <SelectTrigger className="w-[200px]">
                     <Filter className="w-4 h-4 mr-2" />
-                    <SelectValue placeholder="Filter by form" />
+                    <SelectValue placeholder={adminFormResponsesPageCopy.filters.formPlaceholder} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Forms</SelectItem>
+                    <SelectItem value="all">{adminFormResponsesPageCopy.filters.allForms}</SelectItem>
                     {templates.map((t) => (
                       <SelectItem key={t.id} value={t.id.toString()}>{t.name}</SelectItem>
                     ))}
@@ -297,14 +298,14 @@ export default function AdminFormResponsesPage() {
                 </Select>
                 <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); setPage(1); }}>
                   <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="Status" />
+                    <SelectValue placeholder={adminFormResponsesPageCopy.filters.statusPlaceholder} />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="all">All Status</SelectItem>
-                    <SelectItem value="answered">Answered</SelectItem>
-                    <SelectItem value="viewed">Viewed</SelectItem>
-                    <SelectItem value="sent">Sent</SelectItem>
-                    <SelectItem value="expired">Expired</SelectItem>
+                    <SelectItem value="all">{adminFormResponsesPageCopy.filters.allStatus}</SelectItem>
+                    <SelectItem value="answered">{adminFormResponsesPageCopy.filters.answered}</SelectItem>
+                    <SelectItem value="viewed">{adminFormResponsesPageCopy.filters.viewed}</SelectItem>
+                    <SelectItem value="sent">{adminFormResponsesPageCopy.filters.sent}</SelectItem>
+                    <SelectItem value="expired">{adminFormResponsesPageCopy.filters.expired}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -314,7 +315,7 @@ export default function AdminFormResponsesPage() {
           {/* Responses Table */}
           <Card>
             <CardHeader>
-              <CardTitle>Responses</CardTitle>
+              <CardTitle>{adminFormResponsesPageCopy.list.title}</CardTitle>
               <CardDescription>
                 {total} total response{total !== 1 ? "s" : ""} found
               </CardDescription>
@@ -327,18 +328,18 @@ export default function AdminFormResponsesPage() {
               ) : responses.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p>No form responses found</p>
+                  <p>{adminFormResponsesPageCopy.list.empty}</p>
                 </div>
               ) : (
                 <>
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Candidate</TableHead>
-                        <TableHead>Form</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Submitted</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
+                        <TableHead>{adminFormResponsesPageCopy.list.candidate}</TableHead>
+                        <TableHead>{adminFormResponsesPageCopy.list.form}</TableHead>
+                        <TableHead>{adminFormResponsesPageCopy.list.status}</TableHead>
+                        <TableHead>{adminFormResponsesPageCopy.list.submitted}</TableHead>
+                        <TableHead className="text-right">{adminFormResponsesPageCopy.list.actions}</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -364,7 +365,7 @@ export default function AdminFormResponsesPage() {
                               onClick={() => setSelectedResponse(response)}
                             >
                               <Eye className="w-4 h-4 mr-1" />
-                              View
+                              {adminFormResponsesPageCopy.list.view}
                             </Button>
                           </TableCell>
                         </TableRow>
@@ -376,7 +377,7 @@ export default function AdminFormResponsesPage() {
                   {totalPages > 1 && (
                     <div className="flex items-center justify-between mt-4 pt-4 border-t">
                       <p className="text-sm text-muted-foreground">
-                        Page {page} of {totalPages}
+                        {adminFormResponsesPageCopy.list.pagePrefix} {page} {adminFormResponsesPageCopy.list.of} {totalPages}
                       </p>
                       <div className="flex gap-2">
                         <Button
@@ -410,14 +411,14 @@ export default function AdminFormResponsesPage() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-primary" />
-                {responseDetail?.formName || "Form Response"}
+                {responseDetail?.formName || adminFormResponsesPageCopy.detail.fallbackTitle}
               </DialogTitle>
               <DialogDescription>
                 {responseDetail && (
                   <>
-                    Submitted by {responseDetail.candidateName} ({responseDetail.candidateEmail})
+                    {adminFormResponsesPageCopy.detail.submittedByPrefix} {responseDetail.candidateName} ({responseDetail.candidateEmail})
                     <br />
-                    on {new Date(responseDetail.submittedAt).toLocaleString()}
+                    {adminFormResponsesPageCopy.detail.onPrefix} {new Date(responseDetail.submittedAt).toLocaleString()}
                   </>
                 )}
               </DialogDescription>
@@ -442,10 +443,10 @@ export default function AdminFormResponsesPage() {
                             className="text-primary hover:underline inline-flex items-center gap-1"
                           >
                             <FileText className="w-4 h-4" />
-                            View Uploaded File
+                            {adminFormResponsesPageCopy.detail.viewUploadedFile}
                           </a>
                         ) : (
-                          qa.answer || <span className="text-muted-foreground italic">No answer provided</span>
+                          qa.answer || <span className="text-muted-foreground italic">{adminFormResponsesPageCopy.detail.noAnswer}</span>
                         )}
                       </p>
                     </CardContent>

@@ -16,6 +16,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Redirect, Link } from "wouter";
 import { Progress } from "@/components/ui/progress";
 import { Switch } from "@/components/ui/switch";
+import { adminSuperDashboardCopy } from "@/lib/internal-copy";
 import {
   Users,
   Briefcase,
@@ -724,8 +725,8 @@ export default function AdminSuperDashboard() {
               <Shield className="h-8 w-8 text-primary" />
             </div>
             <div>
-              <h1 className="text-3xl font-bold text-foreground">Admin Super Dashboard</h1>
-              <p className="text-muted-foreground">Complete platform control and management</p>
+              <h1 className="text-3xl font-bold text-foreground">{adminSuperDashboardCopy.header.title}</h1>
+              <p className="text-muted-foreground">{adminSuperDashboardCopy.header.subtitle}</p>
             </div>
           </div>
 
@@ -736,14 +737,14 @@ export default function AdminSuperDashboard() {
               variant="outline"
             >
               <Building2 className="h-4 w-4 mr-2" />
-              Organizations
+              {adminSuperDashboardCopy.header.organizations}
             </Button>
             <Button
               onClick={() => window.location.href = '/admin/subscriptions'}
               variant="outline"
             >
               <Crown className="h-4 w-4 mr-2" />
-              Subscriptions
+              {adminSuperDashboardCopy.header.subscriptions}
             </Button>
             <Button
               onClick={() => window.location.href = '/admin/org-controls'}

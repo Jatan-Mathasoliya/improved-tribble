@@ -63,6 +63,7 @@ import {
   AlertCircle,
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { orgTeamPageCopy } from "@/lib/internal-copy";
 
 function getRoleIcon(role: string) {
   switch (role) {
@@ -126,15 +127,15 @@ export default function OrgTeamPage() {
     try {
       await inviteMember.mutateAsync({ email: inviteEmail.trim() });
       toast({
-        title: "Invitation sent",
+        title: orgTeamPageCopy.toasts.invitationSentTitle,
         description: `Invitation sent to ${inviteEmail}`,
       });
       setInviteEmail("");
       setInviteDialogOpen(false);
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to send invitation",
+        title: orgTeamPageCopy.toasts.errorTitle,
+        description: error.message || orgTeamPageCopy.toasts.inviteError,
         variant: "destructive",
       });
     }
@@ -148,7 +149,7 @@ export default function OrgTeamPage() {
         memberIdsToKeep: selectedMemberIds,
       });
       toast({
-        title: "Seats reduced",
+        title: orgTeamPageCopy.toasts.seatsReducedTitle,
         description: `Successfully reduced to ${targetSeats} seat${targetSeats !== 1 ? 's' : ''}.`,
       });
       setSeatReductionOpen(false);
@@ -166,8 +167,8 @@ export default function OrgTeamPage() {
   const handleRemoveMember = async (member: OrganizationMember) => {
     if (member.role === 'owner') {
       toast({
-        title: "Cannot remove owner",
-        description: "The organization owner cannot be removed.",
+        title: orgTeamPageCopy.toasts.cannotRemoveOwnerTitle,
+        description: orgTeamPageCopy.toasts.cannotRemoveOwnerDescription,
         variant: "destructive",
       });
       return;
@@ -193,7 +194,7 @@ export default function OrgTeamPage() {
 
       await removeMember.mutateAsync(memberToRemove.id);
       toast({
-        title: "Member removed",
+        title: orgTeamPageCopy.toasts.memberRemovedTitle,
         description: `${memberToRemove.user.firstName || memberToRemove.user.username} has been removed.`,
       });
       setReassignDialogOpen(false);
@@ -201,8 +202,8 @@ export default function OrgTeamPage() {
       setReassignToUserId(null);
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to remove member",
+        title: orgTeamPageCopy.toasts.errorTitle,
+        description: error.message || orgTeamPageCopy.toasts.removeMemberError,
         variant: "destructive",
       });
     }
@@ -212,13 +213,13 @@ export default function OrgTeamPage() {
     try {
       await respondToJoinRequest.mutateAsync({ requestId: request.id, status });
       toast({
-        title: status === 'approved' ? "Request approved" : "Request rejected",
+        title: status === 'approved' ? orgTeamPageCopy.toasts.requestApprovedTitle : orgTeamPageCopy.toasts.requestRejectedTitle,
         description: `${request.user.firstName || request.user.username}'s request has been ${status}.`,
       });
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to respond to request",
+        title: orgTeamPageCopy.toasts.errorTitle,
+        description: error.message || orgTeamPageCopy.toasts.requestError,
         variant: "destructive",
       });
     }
@@ -230,13 +231,13 @@ export default function OrgTeamPage() {
       // Resend = create new invite with same email (replaces old one)
       await inviteMember.mutateAsync({ email: invite.email });
       toast({
-        title: "Invitation resent",
+        title: orgTeamPageCopy.toasts.invitationResentTitle,
         description: `A new invitation has been sent to ${invite.email}`,
       });
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to resend invitation",
+        title: orgTeamPageCopy.toasts.errorTitle,
+        description: error.message || orgTeamPageCopy.toasts.resendInviteError,
         variant: "destructive",
       });
     } finally {
@@ -248,13 +249,13 @@ export default function OrgTeamPage() {
     try {
       await cancelInvite.mutateAsync(invite.id);
       toast({
-        title: "Invitation cancelled",
+        title: orgTeamPageCopy.toasts.invitationCancelledTitle,
         description: `Invitation to ${invite.email} has been cancelled.`,
       });
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to cancel invitation",
+        title: orgTeamPageCopy.toasts.errorTitle,
+        description: error.message || orgTeamPageCopy.toasts.cancelInviteError,
         variant: "destructive",
       });
     }
@@ -272,9 +273,9 @@ export default function OrgTeamPage() {
       <div className="max-w-7xl mx-auto p-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold">Team Members</h1>
+            <h1 className="text-2xl font-bold">{orgTeamPageCopy.header.title}</h1>
           <p className="text-muted-foreground">
-            Manage your organization's team members
+            {orgTeamPageCopy.header.subtitle}
           </p>
         </div>
         {isOwnerOrAdmin && (
@@ -282,37 +283,36 @@ export default function OrgTeamPage() {
             <DialogTrigger asChild>
               <Button>
                 <UserPlus className="h-4 w-4 mr-2" />
-                Invite Member
+                {orgTeamPageCopy.header.inviteMember}
               </Button>
             </DialogTrigger>
             <DialogContent>
               <form onSubmit={handleInvite}>
                 <DialogHeader>
-                  <DialogTitle>Invite Team Member</DialogTitle>
+                  <DialogTitle>{orgTeamPageCopy.dialogs.inviteTitle}</DialogTitle>
                   <DialogDescription>
-                    Send an invitation to join your organization.
+                    {orgTeamPageCopy.dialogs.inviteDescription}
                     {seatUsage && seatUsage.available <= 0 && (
                       <span className="text-amber-600 block mt-2">
-                        No seats available. Purchase more seats first.
+                        {orgTeamPageCopy.dialogs.noSeatsWarning}
                       </span>
                     )}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email Address</Label>
+                    <Label htmlFor="email">{orgTeamPageCopy.dialogs.emailLabel}</Label>
                     <Input
                       id="email"
                       type="email"
-                      placeholder="colleague@company.com"
+                      placeholder={orgTeamPageCopy.dialogs.emailPlaceholder}
                       value={inviteEmail}
                       onChange={(e) => setInviteEmail(e.target.value)}
                       required
                     />
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    The invited user will join as a <span className="font-medium">Member</span>.
-                    You can promote them to Admin after they join.
+                    {orgTeamPageCopy.dialogs.memberRoleHint}
                   </p>
                 </div>
                 <DialogFooter>
@@ -323,7 +323,7 @@ export default function OrgTeamPage() {
                     {inviteMember.isPending ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
                     ) : null}
-                    Send Invitation
+                    {orgTeamPageCopy.dialogs.sendInvitation}
                   </Button>
                 </DialogFooter>
               </form>
@@ -359,7 +359,7 @@ export default function OrgTeamPage() {
                     </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
-                        <DialogTitle>Manage Seats</DialogTitle>
+                        <DialogTitle>{orgTeamPageCopy.dialogs.manageSeatsTitle}</DialogTitle>
                         <DialogDescription>
                           Reduce the number of seats for your organization. You currently have {seatUsage.purchased} seats with {seatUsage.assigned} in use.
                         </DialogDescription>
@@ -466,7 +466,7 @@ export default function OrgTeamPage() {
       {/* Members List */}
       <Card>
         <CardHeader>
-          <CardTitle>Members</CardTitle>
+          <CardTitle>{orgTeamPageCopy.sections.members}</CardTitle>
         </CardHeader>
         <CardContent>
           {membersLoading ? (
@@ -510,7 +510,7 @@ export default function OrgTeamPage() {
                         </Badge>
                       ) : (
                         <Badge variant="outline" className="text-amber-600 border-amber-200">
-                          No Seat
+                          {orgTeamPageCopy.sections.noSeat}
                         </Badge>
                       )}
                     </TableCell>
@@ -545,10 +545,10 @@ export default function OrgTeamPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Mail className="h-5 w-5" />
-              Pending Invitations
+              {orgTeamPageCopy.sections.pendingInvitations}
             </CardTitle>
             <CardDescription>
-              Invitations that haven't been accepted yet
+              {orgTeamPageCopy.sections.pendingInvitationsDescription}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -660,7 +660,7 @@ export default function OrgTeamPage() {
       }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Remove Member</DialogTitle>
+            <DialogTitle>{orgTeamPageCopy.dialogs.removeMemberTitle}</DialogTitle>
             <DialogDescription>
               {memberToRemove && (
                 <>
@@ -683,10 +683,10 @@ export default function OrgTeamPage() {
                 onValueChange={(v) => setReassignToUserId(v === "none" ? null : parseInt(v))}
               >
                 <SelectTrigger className="mt-2">
-                  <SelectValue placeholder="Select a member" />
+                  <SelectValue placeholder={orgTeamPageCopy.dialogs.reassignPlaceholder} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">Don't reassign (jobs will be orphaned)</SelectItem>
+                  <SelectItem value="none">{orgTeamPageCopy.dialogs.noReassign}</SelectItem>
                   {members
                     .filter(m => m.id !== memberToRemove?.id && m.seatAssigned)
                     .map((m) => (

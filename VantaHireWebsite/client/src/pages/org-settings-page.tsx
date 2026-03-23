@@ -20,6 +20,7 @@ import {
   Copy,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { orgSettingsPageCopy } from "@/lib/internal-copy";
 
 export default function OrgSettingsPage() {
   const { data: orgData, isLoading } = useOrganization();
@@ -62,13 +63,13 @@ export default function OrgSettingsPage() {
     try {
       await updateOrg.mutateAsync({ name: name.trim() });
       toast({
-        title: "Settings saved",
-        description: "Organization name updated successfully.",
+        title: orgSettingsPageCopy.toasts.settingsSavedTitle,
+        description: orgSettingsPageCopy.toasts.settingsSavedDescription,
       });
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to update settings",
+        title: orgSettingsPageCopy.toasts.errorTitle,
+        description: error.message || orgSettingsPageCopy.toasts.updateSettingsError,
         variant: "destructive",
       });
     }
@@ -89,13 +90,13 @@ export default function OrgSettingsPage() {
         gstin: gstin.trim() || null,
       });
       toast({
-        title: "Billing info saved",
-        description: "Billing information updated successfully.",
+        title: orgSettingsPageCopy.toasts.billingSavedTitle,
+        description: orgSettingsPageCopy.toasts.billingSavedDescription,
       });
     } catch (error: any) {
       toast({
-        title: "Error",
-        description: error.message || "Failed to update billing info",
+        title: orgSettingsPageCopy.toasts.errorTitle,
+        description: error.message || orgSettingsPageCopy.toasts.updateBillingError,
         variant: "destructive",
       });
     }
@@ -104,8 +105,8 @@ export default function OrgSettingsPage() {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast({
-      title: "Copied",
-      description: "Copied to clipboard",
+      title: orgSettingsPageCopy.toasts.copiedTitle,
+      description: orgSettingsPageCopy.toasts.copiedDescription,
     });
   };
 
@@ -126,7 +127,7 @@ export default function OrgSettingsPage() {
           <Card>
             <CardContent className="pt-6">
               <p className="text-center text-muted-foreground">
-                You are not part of any organization.
+                {orgSettingsPageCopy.header.noOrganization}
               </p>
             </CardContent>
           </Card>
@@ -141,9 +142,9 @@ export default function OrgSettingsPage() {
     <Layout>
       <div className="max-w-7xl mx-auto p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Organization Settings</h1>
+        <h1 className="text-2xl font-bold">{orgSettingsPageCopy.header.title}</h1>
         <p className="text-muted-foreground">
-          Manage your organization's settings and billing information
+          {orgSettingsPageCopy.header.subtitle}
         </p>
       </div>
 
@@ -152,32 +153,32 @@ export default function OrgSettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Building2 className="h-5 w-5" />
-            General Settings
+            {orgSettingsPageCopy.general.title}
           </CardTitle>
           <CardDescription>
-            Basic information about your organization
+            {orgSettingsPageCopy.general.description}
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSaveGeneral}>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Organization Name</Label>
+              <Label htmlFor="name">{orgSettingsPageCopy.general.organizationName}</Label>
               <Input
                 id="name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 disabled={!isOwner}
-                placeholder="Acme Inc"
+                placeholder={orgSettingsPageCopy.general.organizationNamePlaceholder}
               />
               {!isOwner && (
                 <p className="text-xs text-muted-foreground">
-                  Only the organization owner can change the name.
+                  {orgSettingsPageCopy.general.ownerOnlyHint}
                 </p>
               )}
             </div>
 
             <div className="space-y-2">
-              <Label>Organization Slug</Label>
+              <Label>{orgSettingsPageCopy.general.organizationSlug}</Label>
               <div className="flex items-center gap-2">
                 <code className="flex-1 p-2 bg-slate-100 rounded text-sm">
                   {org.slug}
@@ -192,7 +193,7 @@ export default function OrgSettingsPage() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                This is your unique organization identifier.
+                {orgSettingsPageCopy.general.slugHint}
               </p>
             </div>
           </CardContent>
@@ -200,7 +201,7 @@ export default function OrgSettingsPage() {
             <CardFooter className="border-t pt-6">
               <Button type="submit" disabled={updateOrg.isPending || !name.trim()}>
                 {updateOrg.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                Save Changes
+                {orgSettingsPageCopy.general.save}
               </Button>
             </CardFooter>
           )}
@@ -212,10 +213,10 @@ export default function OrgSettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Globe className="h-5 w-5" />
-            Email Domain
+            {orgSettingsPageCopy.domain.title}
           </CardTitle>
           <CardDescription>
-            Claim your company email domain to enable automatic join requests
+            {orgSettingsPageCopy.domain.description}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -231,25 +232,25 @@ export default function OrgSettingsPage() {
                   <p className="font-medium">@{org.domain}</p>
                   <p className="text-sm text-muted-foreground">
                     {org.domainVerified
-                      ? "Domain verified - users can request to join"
-                      : "Pending verification by admin"
+                      ? orgSettingsPageCopy.domain.verifiedDescription
+                      : orgSettingsPageCopy.domain.pendingDescription
                     }
                   </p>
                 </div>
               </div>
               <Badge variant={org.domainVerified ? "default" : "secondary"}>
-                {org.domainVerified ? "Verified" : "Pending"}
+                {org.domainVerified ? orgSettingsPageCopy.domain.verifiedBadge : orgSettingsPageCopy.domain.pendingBadge}
               </Badge>
             </div>
           ) : (
             <div className="text-center py-6">
               <Globe className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
               <p className="text-muted-foreground mb-4">
-                No domain claimed yet. Claim your company domain to let employees request to join.
+                {orgSettingsPageCopy.domain.emptyState}
               </p>
               {isOwner && (
                 <Button variant="outline" asChild>
-                  <a href="/org/domain">Request Domain Verification</a>
+                  <a href="/org/domain">{orgSettingsPageCopy.domain.requestVerification}</a>
                 </Button>
               )}
             </div>
@@ -262,61 +263,61 @@ export default function OrgSettingsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileText className="h-5 w-5" />
-            Billing Information
+            {orgSettingsPageCopy.billing.title}
           </CardTitle>
           <CardDescription>
-            Information for invoices and tax purposes
+            {orgSettingsPageCopy.billing.description}
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSaveBilling}>
           <CardContent className="space-y-4">
             <div className="grid md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="billingContactName">Billing Contact Name</Label>
+                <Label htmlFor="billingContactName">{orgSettingsPageCopy.billing.billingContactName}</Label>
                 <Input
                   id="billingContactName"
                   value={billingContactName}
                   onChange={(e) => setBillingContactName(e.target.value)}
                   disabled={!isAdmin}
-                  placeholder="John Doe"
+                  placeholder={orgSettingsPageCopy.billing.billingContactNamePlaceholder}
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="billingContactEmail">Billing Contact Email</Label>
+                <Label htmlFor="billingContactEmail">{orgSettingsPageCopy.billing.billingContactEmail}</Label>
                 <Input
                   id="billingContactEmail"
                   type="email"
                   value={billingContactEmail}
                   onChange={(e) => setBillingContactEmail(e.target.value)}
                   disabled={!isAdmin}
-                  placeholder="billing@company.com"
+                  placeholder={orgSettingsPageCopy.billing.billingContactEmailPlaceholder}
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="billingName">Legal Name (for invoices)</Label>
+              <Label htmlFor="billingName">{orgSettingsPageCopy.billing.legalName}</Label>
               <Input
                 id="billingName"
                 value={billingName}
                 onChange={(e) => setBillingName(e.target.value)}
                 disabled={!isAdmin}
-                placeholder="Company Legal Name LLP"
+                placeholder={orgSettingsPageCopy.billing.legalNamePlaceholder}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="gstin">GSTIN (Optional)</Label>
+              <Label htmlFor="gstin">{orgSettingsPageCopy.billing.gstin}</Label>
               <Input
                 id="gstin"
                 value={gstin}
                 onChange={(e) => setGstin(e.target.value.toUpperCase())}
                 disabled={!isAdmin}
-                placeholder="22AAAAA0000A1Z5"
+                placeholder={orgSettingsPageCopy.billing.gstinPlaceholder}
                 maxLength={15}
               />
               <p className="text-xs text-muted-foreground">
-                Provide GSTIN if you want it printed on invoices for tax records.
+                {orgSettingsPageCopy.billing.gstinHint}
               </p>
             </div>
 

@@ -24,6 +24,7 @@ import {
 } from "@/components/sourcing/SourcingFilters";
 import { SourcingListSkeleton } from "@/components/skeletons";
 import { splitByTier, type TierModel } from "@/lib/sourcing-tiering";
+import { jobSourcingPageCopy } from "@/lib/internal-copy";
 
 type SortKey = "rank" | "fitScore" | "source" | "freshness";
 
@@ -288,21 +289,21 @@ export default function JobSourcingPage() {
 	        <div className="flex items-center justify-between mb-4">
 	          <div>
 	            <div className="flex items-center gap-2">
-	              <h1 className="text-xl font-semibold">Sourcing</h1>
+	              <h1 className="text-xl font-semibold">{jobSourcingPageCopy.header.title}</h1>
 	              <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">
-	                Beta
+	                {jobSourcingPageCopy.header.betaBadge}
 	              </Badge>
 	            </div>
 	            <p className="mt-1 text-sm text-amber-700">
-	              Beta feature, still being refined.
+	              {jobSourcingPageCopy.header.betaHint}
 	            </p>
 	            {isPolling && (
 	              <div className="flex items-center gap-2 mt-1">
 	                <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
                 <span className="text-sm text-muted-foreground">
                   {isSourcingActive
-                    ? "Searching for candidates..."
-                    : "Enrichment in progress..."}
+                    ? jobSourcingPageCopy.header.searching
+                    : jobSourcingPageCopy.header.enriching}
                   {isSourcingActive && status?.candidateCount != null && status.candidateCount > 0 && (
                     <> ({status.candidateCount} found so far)</>
                   )}
@@ -319,7 +320,7 @@ export default function JobSourcingPage() {
             ) : (
               <Search className="h-4 w-4 mr-1.5" />
             )}
-            {isRunning ? "Searching..." : "Find Candidates"}
+            {isRunning ? jobSourcingPageCopy.header.actionPending : jobSourcingPageCopy.header.action}
           </Button>
         </div>
 
@@ -374,7 +375,7 @@ export default function JobSourcingPage() {
             <div className="rounded-full bg-primary/10 p-4 mb-4">
               <Sparkles className="h-8 w-8 text-primary" />
             </div>
-            <h2 className="text-lg font-semibold mb-2">Find top candidates for this role</h2>
+            <h2 className="text-lg font-semibold mb-2">{jobSourcingPageCopy.emptyState.title}</h2>
             <p className="text-sm text-muted-foreground mb-6 max-w-md">
               We will prioritize the strongest matches first and clearly separate broader results when location or fit constraints are expanded.
             </p>

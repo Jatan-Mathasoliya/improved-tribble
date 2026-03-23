@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
+import { recruiterDashboardCopy } from "@/lib/internal-copy";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { DASHBOARD_EYEBROW, DASHBOARD_PANEL, DASHBOARD_PANEL_MUTED, DASHBOARD_TITLE } from "@/lib/dashboard-theme";
@@ -158,32 +159,32 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
     >
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-2">
-          <p className={DASHBOARD_EYEBROW}>Interview Calendar</p>
+          <p className={DASHBOARD_EYEBROW}>{recruiterDashboardCopy.interviewsPanel.eyebrow}</p>
           <div className="flex items-center gap-3">
-            <h2 className={cn(DASHBOARD_TITLE, "text-[20px] sm:text-[21px]")}>Today&apos;s Interviews</h2>
+            <h2 className={cn(DASHBOARD_TITLE, "text-[20px] sm:text-[21px]")}>{recruiterDashboardCopy.interviewsPanel.title}</h2>
             <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-[#F1EEFF] px-2 text-[11px] font-medium text-[#5B4FF7]">
               {count}
             </span>
           </div>
         </div>
         <a href="/applications" className="text-[14px] font-normal text-[#5B4FF7] transition-colors hover:text-[#4F46E5]">
-          View Calendar
+          {recruiterDashboardCopy.interviewsPanel.viewCalendar}
         </a>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-medium text-[#7B8497]">
-        <span className="rounded-full bg-[#F3F4F8] px-3 py-1">Pick a day to inspect upcoming interviews</span>
+        <span className="rounded-full bg-[#F3F4F8] px-3 py-1">{recruiterDashboardCopy.interviewsPanel.hint}</span>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F8F9FC] px-3 py-1">
           <span className="h-2 w-2 rounded-full bg-[#4F46E5]" />
-          Scheduled
+          {recruiterDashboardCopy.interviewsPanel.statuses.scheduled}
         </span>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-[#FFF6E8] px-3 py-1">
           <span className="h-2 w-2 rounded-full bg-[#F59E0B]" />
-          Upcoming
+          {recruiterDashboardCopy.interviewsPanel.statuses.upcoming}
         </span>
         <span className="inline-flex items-center gap-1.5 rounded-full bg-[#EEF8F1] px-3 py-1">
           <span className="h-2 w-2 rounded-full bg-[#22C55E]" />
-          Completed
+          {recruiterDashboardCopy.interviewsPanel.statuses.completed}
         </span>
       </div>
 
@@ -250,7 +251,7 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
         ) : count === 0 || items.length === 0 ? (
           <div className="flex min-h-[180px] items-center justify-center rounded-[12px] border border-dashed border-[#E7E9F0] bg-[#FBFBFD] px-6 text-center">
             <p className="max-w-sm text-sm font-medium text-[#9AA1AF]">
-              No interviews scheduled for this day.
+              {recruiterDashboardCopy.interviewsPanel.empty}
             </p>
           </div>
         ) : (

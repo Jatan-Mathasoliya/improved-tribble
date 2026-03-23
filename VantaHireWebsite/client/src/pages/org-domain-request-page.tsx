@@ -16,6 +16,7 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { orgDomainRequestPageCopy } from "@/lib/internal-copy";
 
 // List of public email domains that cannot be claimed
 const PUBLIC_DOMAINS = [
@@ -46,8 +47,8 @@ export default function OrgDomainRequestPage() {
 
     if (!normalizedDomain) {
       toast({
-        title: "Error",
-        description: "Please enter a domain",
+        title: orgDomainRequestPageCopy.common.errorTitle,
+        description: orgDomainRequestPageCopy.toasts.missingDomain,
         variant: "destructive",
       });
       return;
@@ -57,8 +58,8 @@ export default function OrgDomainRequestPage() {
     const domainRegex = /^[a-z0-9]+([\-\.]{1}[a-z0-9]+)*\.[a-z]{2,}$/;
     if (!domainRegex.test(normalizedDomain)) {
       toast({
-        title: "Invalid domain",
-        description: "Please enter a valid domain (e.g., company.com)",
+        title: orgDomainRequestPageCopy.toasts.invalidDomainTitle,
+        description: orgDomainRequestPageCopy.toasts.invalidDomainDescription,
         variant: "destructive",
       });
       return;
@@ -67,8 +68,8 @@ export default function OrgDomainRequestPage() {
     // Check if it's a public domain
     if (PUBLIC_DOMAINS.includes(normalizedDomain)) {
       toast({
-        title: "Public domain not allowed",
-        description: "Public email domains like gmail.com cannot be claimed.",
+        title: orgDomainRequestPageCopy.toasts.publicDomainTitle,
+        description: orgDomainRequestPageCopy.toasts.publicDomainDescription,
         variant: "destructive",
       });
       return;
@@ -93,18 +94,18 @@ export default function OrgDomainRequestPage() {
 
       if (!res.ok) {
         const error = await res.json();
-        throw new Error(error.error || 'Failed to submit request');
+        throw new Error(error.error || orgDomainRequestPageCopy.toasts.submitFailed);
       }
 
       toast({
-        title: "Request submitted",
-        description: "Your domain verification request has been submitted for review.",
+        title: orgDomainRequestPageCopy.toasts.requestSubmittedTitle,
+        description: orgDomainRequestPageCopy.toasts.requestSubmittedDescription,
       });
 
       setLocation('/org/settings');
     } catch (error: any) {
       toast({
-        title: "Error",
+        title: orgDomainRequestPageCopy.common.errorTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -130,7 +131,7 @@ export default function OrgDomainRequestPage() {
           <Card>
             <CardContent className="pt-6">
               <p className="text-center text-muted-foreground">
-                You are not part of any organization.
+                {orgDomainRequestPageCopy.common.noOrganization}
               </p>
             </CardContent>
           </Card>
@@ -148,11 +149,11 @@ export default function OrgDomainRequestPage() {
               <div className="text-center">
                 <AlertCircle className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
                 <p className="text-muted-foreground">
-                  Only organization owners can request domain verification.
+                  {orgDomainRequestPageCopy.access.ownerOnly}
                 </p>
                 <Button variant="outline" className="mt-4" onClick={() => setLocation('/org/settings')}>
                   <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Settings
+                  {orgDomainRequestPageCopy.common.backToSettings}
                 </Button>
               </div>
             </CardContent>
@@ -173,21 +174,21 @@ export default function OrgDomainRequestPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <CheckCircle className="h-5 w-5 text-green-500" />
-                Domain Verified
+                {orgDomainRequestPageCopy.verified.title}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
                 <p className="font-medium text-green-800">@{org.domain}</p>
                 <p className="text-sm text-green-700 mt-1">
-                  Users with this email domain can now request to join your organization.
+                  {orgDomainRequestPageCopy.verified.description}
                 </p>
               </div>
             </CardContent>
             <CardFooter>
               <Button variant="outline" onClick={() => setLocation('/org/settings')}>
                 <ArrowLeft className="h-4 w-4 mr-2" />
-                Back to Settings
+                {orgDomainRequestPageCopy.common.backToSettings}
               </Button>
             </CardFooter>
           </Card>
@@ -205,7 +206,7 @@ export default function OrgDomainRequestPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Globe className="h-5 w-5" />
-              Domain Verification Pending
+              {orgDomainRequestPageCopy.pending.title}
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -214,20 +215,20 @@ export default function OrgDomainRequestPage() {
                 <div>
                   <p className="font-medium text-amber-800">@{org.domain}</p>
                   <p className="text-sm text-amber-700 mt-1">
-                    Your request is being reviewed by an administrator.
+                    {orgDomainRequestPageCopy.pending.description}
                   </p>
                 </div>
-                <Badge variant="secondary">Pending</Badge>
+                <Badge variant="secondary">{orgDomainRequestPageCopy.pending.badge}</Badge>
               </div>
             </div>
             <p className="text-sm text-muted-foreground mt-4">
-              You'll receive a notification once your request is approved or rejected.
+              {orgDomainRequestPageCopy.pending.hint}
             </p>
           </CardContent>
           <CardFooter>
             <Button variant="outline" onClick={() => setLocation('/org/settings')}>
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Settings
+              {orgDomainRequestPageCopy.common.backToSettings}
             </Button>
           </CardFooter>
         </Card>
@@ -241,17 +242,17 @@ export default function OrgDomainRequestPage() {
       <div className="max-w-7xl mx-auto p-6 space-y-6">
       <Button variant="ghost" onClick={() => setLocation('/org/settings')}>
         <ArrowLeft className="h-4 w-4 mr-2" />
-        Back to Settings
+        {orgDomainRequestPageCopy.common.backToSettings}
       </Button>
 
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Globe className="h-5 w-5" />
-            Request Domain Verification
+            {orgDomainRequestPageCopy.request.title}
           </CardTitle>
           <CardDescription>
-            Claim your company's email domain to enable automatic join requests from employees
+            {orgDomainRequestPageCopy.request.description}
           </CardDescription>
         </CardHeader>
         <form onSubmit={handleSubmit}>
@@ -261,10 +262,9 @@ export default function OrgDomainRequestPage() {
                 <div className="flex items-start gap-3">
                   <AlertCircle className="h-5 w-5 text-amber-500 flex-shrink-0 mt-0.5" />
                   <div>
-                    <p className="font-medium text-amber-800">Using a public email</p>
+                    <p className="font-medium text-amber-800">{orgDomainRequestPageCopy.request.publicEmailTitle}</p>
                     <p className="text-sm text-amber-700 mt-1">
-                      You're using a public email domain (@{userEmailDomain}).
-                      You can still claim a company domain, but you'll need to verify ownership.
+                      {orgDomainRequestPageCopy.request.publicEmailDescription.replace("public email domain.", `public email domain (@${userEmailDomain}).`)}
                     </p>
                   </div>
                 </div>
@@ -272,12 +272,12 @@ export default function OrgDomainRequestPage() {
             )}
 
             <div className="space-y-2">
-              <Label htmlFor="domain">Company Domain</Label>
+              <Label htmlFor="domain">{orgDomainRequestPageCopy.request.companyDomain}</Label>
               <div className="flex items-center">
                 <span className="text-muted-foreground mr-1">@</span>
                 <Input
                   id="domain"
-                  placeholder="company.com"
+                  placeholder={orgDomainRequestPageCopy.request.companyDomainPlaceholder}
                   value={domain}
                   onChange={(e) => setDomain(e.target.value.toLowerCase())}
                   className="flex-1"
@@ -285,33 +285,33 @@ export default function OrgDomainRequestPage() {
               </div>
               {!isPublicEmailUser && (
                 <p className="text-sm text-muted-foreground">
-                  Based on your email, we suggest: <strong>@{userEmailDomain}</strong>
+                  {orgDomainRequestPageCopy.request.suggestedPrefix} <strong>@{userEmailDomain}</strong>
                   <Button
                     type="button"
                     variant="link"
                     className="h-auto p-0 ml-2"
                     onClick={() => setDomain(userEmailDomain)}
                   >
-                    Use this
+                    {orgDomainRequestPageCopy.request.useThis}
                   </Button>
                 </p>
               )}
             </div>
 
             <div className="p-4 bg-slate-50 rounded-lg space-y-3">
-              <h4 className="font-medium">What happens next?</h4>
+              <h4 className="font-medium">{orgDomainRequestPageCopy.request.nextTitle}</h4>
               <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
-                <li>Your request will be reviewed by a VantaHire administrator</li>
-                <li>We may contact you to verify domain ownership</li>
-                <li>Once approved, users with @{domain || 'yourdomain.com'} emails can request to join</li>
-                <li>You'll be able to approve or reject join requests</li>
+                <li>{orgDomainRequestPageCopy.request.nextSteps[0]}</li>
+                <li>{orgDomainRequestPageCopy.request.nextSteps[1]}</li>
+                <li>{orgDomainRequestPageCopy.request.nextSteps[2].replace("your company email", `@${domain || 'yourdomain.com'} email`)}</li>
+                <li>{orgDomainRequestPageCopy.request.nextSteps[3]}</li>
               </ol>
             </div>
           </CardContent>
           <CardFooter className="border-t pt-6">
             <Button type="submit" disabled={isSubmitting || !domain.trim()}>
               {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Submit Request
+              {orgDomainRequestPageCopy.request.submit}
             </Button>
           </CardFooter>
         </form>

@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { User, Building, MapPin, Linkedin, Globe, Save, X, Phone } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
+import { profileSettingsPageCopy } from "@/lib/internal-copy";
 import Layout from "@/components/Layout";
 
 interface UserProfile {
@@ -92,13 +93,13 @@ export default function ProfileSettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/profile"] });
       toast({
-        title: "Profile updated",
-        description: "Your profile has been saved successfully.",
+        title: profileSettingsPageCopy.toasts.successTitle,
+        description: profileSettingsPageCopy.toasts.successDescription,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Failed to update profile",
+        title: profileSettingsPageCopy.toasts.errorTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -134,7 +135,7 @@ export default function ProfileSettingsPage() {
       <Layout>
         <div className="container mx-auto px-4 py-16">
           <div className="flex items-center justify-center h-64">
-            <div className="text-muted-foreground">Loading profile...</div>
+            <div className="text-muted-foreground">{profileSettingsPageCopy.loading}</div>
           </div>
         </div>
       </Layout>
@@ -148,10 +149,10 @@ export default function ProfileSettingsPage() {
           {/* Header */}
           <div className="mb-8 pt-8">
             <h1 className="text-2xl md:text-3xl font-semibold text-foreground mb-2">
-              Profile Settings
+              {profileSettingsPageCopy.header.title}
             </h1>
             <p className="text-muted-foreground">
-              Manage your recruiter profile and public visibility
+              {profileSettingsPageCopy.header.subtitle}
             </p>
           </div>
 
@@ -161,77 +162,77 @@ export default function ProfileSettingsPage() {
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <User className="h-5 w-5 text-primary" />
-                  Basic Information
+                  {profileSettingsPageCopy.cards.basicInformation.title}
                 </CardTitle>
                 <CardDescription>
-                  Your public display information
+                  {profileSettingsPageCopy.cards.basicInformation.description}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="displayName">Display Name</Label>
+                  <Label htmlFor="displayName">{profileSettingsPageCopy.cards.basicInformation.displayName}</Label>
                   <Input
                     id="displayName"
                     value={formData.displayName || ""}
                     onChange={(e) => setFormData({ ...formData, displayName: e.target.value })}
-                    placeholder="Your display name"
+                    placeholder={profileSettingsPageCopy.cards.basicInformation.displayNamePlaceholder}
                   />
                   <p className="text-xs text-muted-foreground">
-                    This will be shown on your job postings
+                    {profileSettingsPageCopy.cards.basicInformation.displayNameHint}
                   </p>
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="company" className="flex items-center gap-2">
                     <Building className="h-4 w-4" />
-                    Company
+                    {profileSettingsPageCopy.cards.basicInformation.company}
                   </Label>
                   <Input
                     id="company"
                     value={formData.company || ""}
                     onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                    placeholder="Your company name"
+                    placeholder={profileSettingsPageCopy.cards.basicInformation.companyPlaceholder}
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="phone" className="flex items-center gap-2">
                     <Phone className="h-4 w-4" />
-                    Phone Number
+                    {profileSettingsPageCopy.cards.basicInformation.phone}
                   </Label>
                   <Input
                     id="phone"
                     type="tel"
                     value={formData.phone || ""}
                     onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                    placeholder="+1 (555) 123-4567"
+                    placeholder={profileSettingsPageCopy.cards.basicInformation.phonePlaceholder}
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="location" className="flex items-center gap-2">
                     <MapPin className="h-4 w-4" />
-                    Location
+                    {profileSettingsPageCopy.cards.basicInformation.location}
                   </Label>
                   <Input
                     id="location"
                     value={formData.location || ""}
                     onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                    placeholder="City, Country"
+                    placeholder={profileSettingsPageCopy.cards.basicInformation.locationPlaceholder}
                   />
                 </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="linkedin" className="flex items-center gap-2">
                     <Linkedin className="h-4 w-4" />
-                    LinkedIn Profile
+                    {profileSettingsPageCopy.cards.basicInformation.linkedin}
                   </Label>
                   <Input
                     id="linkedin"
                     type="url"
                     value={formData.linkedin || ""}
                     onChange={(e) => setFormData({ ...formData, linkedin: e.target.value })}
-                    placeholder="https://linkedin.com/in/your-profile"
+                    placeholder={profileSettingsPageCopy.cards.basicInformation.linkedinPlaceholder}
                   />
                 </div>
               </CardContent>
@@ -240,16 +241,16 @@ export default function ProfileSettingsPage() {
             {/* Bio Card */}
             <Card className="shadow-sm border-border">
               <CardHeader>
-                <CardTitle className="text-foreground">Bio</CardTitle>
+                <CardTitle className="text-foreground">{profileSettingsPageCopy.cards.bio.title}</CardTitle>
                 <CardDescription>
-                  Tell candidates about yourself
+                  {profileSettingsPageCopy.cards.bio.description}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <Textarea
                   value={formData.bio || ""}
                   onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                  placeholder="Write a brief bio about yourself and your recruiting experience..."
+                  placeholder={profileSettingsPageCopy.cards.bio.placeholder}
                   rows={4}
                   maxLength={2000}
                 />
@@ -262,9 +263,9 @@ export default function ProfileSettingsPage() {
             {/* Skills Card */}
             <Card className="shadow-sm border-border">
               <CardHeader>
-                <CardTitle className="text-foreground">Specializations</CardTitle>
+                <CardTitle className="text-foreground">{profileSettingsPageCopy.cards.specializations.title}</CardTitle>
                 <CardDescription>
-                  Industries or areas you specialize in
+                  {profileSettingsPageCopy.cards.specializations.description}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -278,14 +279,14 @@ export default function ProfileSettingsPage() {
                         addSkill();
                       }
                     }}
-                    placeholder="Add a specialization (e.g., Tech, Healthcare)"
+                    placeholder={profileSettingsPageCopy.cards.specializations.placeholder}
                   />
                   <Button
                     type="button"
                     onClick={addSkill}
                     variant="outline"
                   >
-                    Add
+                    {profileSettingsPageCopy.cards.specializations.addLabel}
                   </Button>
                 </div>
 
@@ -311,7 +312,7 @@ export default function ProfileSettingsPage() {
                 )}
 
                 <p className="text-xs text-muted-foreground">
-                  {(formData.skills || []).length}/20 specializations
+                  {(formData.skills || []).length}{profileSettingsPageCopy.cards.specializations.counterSuffix}
                 </p>
               </CardContent>
             </Card>
@@ -321,18 +322,18 @@ export default function ProfileSettingsPage() {
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center gap-2">
                   <Globe className="h-5 w-5 text-primary" />
-                  Profile Visibility
+                  {profileSettingsPageCopy.cards.visibility.title}
                 </CardTitle>
                 <CardDescription>
-                  Control who can see your profile
+                  {profileSettingsPageCopy.cards.visibility.description}
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="flex items-center justify-between">
                   <div className="space-y-1">
-                    <Label>Public Profile</Label>
+                    <Label>{profileSettingsPageCopy.cards.visibility.publicProfile}</Label>
                     <p className="text-sm text-muted-foreground">
-                      Allow candidates to view your profile and see all your job postings
+                      {profileSettingsPageCopy.cards.visibility.publicProfileHint}
                     </p>
                   </div>
                   <Switch
@@ -351,7 +352,7 @@ export default function ProfileSettingsPage() {
                 className="bg-primary hover:bg-primary/80"
               >
                 <Save className="h-4 w-4 mr-2" />
-                {updateProfileMutation.isPending ? "Saving..." : "Save Profile"}
+                {updateProfileMutation.isPending ? profileSettingsPageCopy.save.pending : profileSettingsPageCopy.save.idle}
               </Button>
             </div>
           </form>

@@ -41,6 +41,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { jobPipelinePageCopy } from "@/lib/internal-copy";
 
 // Sortable stage item component
 function SortableStageItem({
@@ -231,13 +232,13 @@ export default function JobPipelinePage() {
       queryClient.invalidateQueries({ queryKey: ["/api/pipeline/stages"] });
       setNewStageName("");
       toast({
-        title: "Stage created",
-        description: "New pipeline stage has been added.",
+        title: jobPipelinePageCopy.toasts.createdTitle,
+        description: jobPipelinePageCopy.toasts.createdDescription,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Failed to create stage",
+        title: jobPipelinePageCopy.toasts.createFailedTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -255,7 +256,7 @@ export default function JobPipelinePage() {
     },
     onError: (error: Error) => {
       toast({
-        title: "Failed to update stage",
+        title: jobPipelinePageCopy.toasts.updateFailedTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -273,13 +274,13 @@ export default function JobPipelinePage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/pipeline/stages"] });
       toast({
-        title: "Stages reordered",
-        description: "Pipeline stage order has been updated.",
+        title: jobPipelinePageCopy.toasts.reorderedTitle,
+        description: jobPipelinePageCopy.toasts.reorderedDescription,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Failed to reorder stages",
+        title: jobPipelinePageCopy.toasts.reorderFailedTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -296,13 +297,13 @@ export default function JobPipelinePage() {
       setDeleteDialogOpen(false);
       setStageToDelete(null);
       toast({
-        title: "Stage deleted",
-        description: "Pipeline stage has been removed.",
+        title: jobPipelinePageCopy.toasts.deletedTitle,
+        description: jobPipelinePageCopy.toasts.deletedDescription,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Failed to delete stage",
+        title: jobPipelinePageCopy.toasts.deleteFailedTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -323,8 +324,8 @@ export default function JobPipelinePage() {
     if (!editingStageId || !editingStageName.trim()) return;
     updateStageMutation.mutate({ id: editingStageId, name: editingStageName.trim() });
     toast({
-      title: "Stage updated",
-      description: "Pipeline stage has been renamed.",
+      title: jobPipelinePageCopy.toasts.updatedTitle,
+      description: jobPipelinePageCopy.toasts.updatedDescription,
     });
   };
 
@@ -378,8 +379,8 @@ export default function JobPipelinePage() {
         <div className="container mx-auto px-4 py-8">
           <Card className="shadow-sm">
             <CardContent className="p-8 text-center">
-              <h3 className="text-xl font-semibold text-foreground mb-2">Job Not Found</h3>
-              <p className="text-muted-foreground">The requested job could not be found.</p>
+              <h3 className="text-xl font-semibold text-foreground mb-2">{jobPipelinePageCopy.empty.title}</h3>
+              <p className="text-muted-foreground">{jobPipelinePageCopy.empty.description}</p>
             </CardContent>
           </Card>
         </div>
@@ -400,7 +401,7 @@ export default function JobPipelinePage() {
               className="text-muted-foreground hover:text-foreground hover:bg-muted"
             >
               <ArrowLeft className="h-4 w-4 mr-2" />
-              Back to Job
+              {jobPipelinePageCopy.back}
             </Button>
           </div>
 
@@ -410,15 +411,15 @@ export default function JobPipelinePage() {
           {/* Pipeline Stages */}
           <Card className="shadow-sm mb-6">
             <CardHeader>
-              <CardTitle className="text-foreground">Pipeline Stages</CardTitle>
+              <CardTitle className="text-foreground">{jobPipelinePageCopy.panel.title}</CardTitle>
               <CardDescription>
-                Drag to reorder stages. Click edit to rename.
+                {jobPipelinePageCopy.panel.description}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               {sortedStages.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
-                  No pipeline stages configured. Add your first stage below.
+                  {jobPipelinePageCopy.panel.empty}
                 </div>
               ) : (
                 <DndContext
@@ -455,7 +456,7 @@ export default function JobPipelinePage() {
               {/* Add New Stage */}
               <div className="flex items-center gap-2 pt-4 border-t border-border">
                 <Input
-                  placeholder="New stage name..."
+                  placeholder={jobPipelinePageCopy.panel.newStagePlaceholder}
                   value={newStageName}
                   onChange={(e) => setNewStageName(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleAddStage()}
@@ -465,7 +466,7 @@ export default function JobPipelinePage() {
                   disabled={!newStageName.trim() || createStageMutation.isPending}
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Add Stage
+                  {jobPipelinePageCopy.panel.addStage}
                 </Button>
               </div>
             </CardContent>
@@ -474,14 +475,13 @@ export default function JobPipelinePage() {
           {/* Stage Info */}
           <Card className="shadow-sm">
             <CardHeader>
-              <CardTitle className="text-foreground text-base">About Pipeline Stages</CardTitle>
+              <CardTitle className="text-foreground text-base">{jobPipelinePageCopy.panel.aboutTitle}</CardTitle>
             </CardHeader>
             <CardContent>
               <ul className="text-sm text-muted-foreground space-y-2">
-                <li>• Drag stages to reorder them in your hiring workflow</li>
-                <li>• Stages with candidates show a count badge</li>
-                <li>• Deleting a stage with candidates will move them to "Unassigned"</li>
-                <li>• Stages are shared across all jobs in your organization</li>
+                {jobPipelinePageCopy.panel.tips.map((tip) => (
+                  <li key={tip}>• {tip}</li>
+                ))}
               </ul>
             </CardContent>
           </Card>
@@ -496,26 +496,25 @@ export default function JobPipelinePage() {
               {stageToDelete && stageToDelete.count > 0 && (
                 <AlertTriangle className="h-5 w-5 text-warning" />
               )}
-              Delete "{stageToDelete?.name}" stage?
+              {jobPipelinePageCopy.deleteDialog.titlePrefix}{stageToDelete?.name}{jobPipelinePageCopy.deleteDialog.titleSuffix}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {stageToDelete && stageToDelete.count > 0 ? (
                 <span className="text-warning">
-                  This stage has <strong>{stageToDelete.count} candidate{stageToDelete.count === 1 ? '' : 's'}</strong>.
-                  Deleting it will move them to "Unassigned". This action cannot be undone.
+                  {jobPipelinePageCopy.deleteDialog.withCandidatesPrefix} <strong>{stageToDelete.count} {stageToDelete.count === 1 ? jobPipelinePageCopy.deleteDialog.withCandidatesMiddle : jobPipelinePageCopy.deleteDialog.withCandidatesMiddlePlural}</strong>. {jobPipelinePageCopy.deleteDialog.withCandidatesSuffix}
                 </span>
               ) : (
-                "This stage has no candidates. Are you sure you want to delete it?"
+                jobPipelinePageCopy.deleteDialog.withoutCandidates
               )}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel>{jobPipelinePageCopy.deleteDialog.cancel}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDelete}
               className={stageToDelete && stageToDelete.count > 0 ? "bg-amber-600 hover:bg-amber-700" : "bg-destructive hover:bg-destructive/80"}
             >
-              {deleteStageMutation.isPending ? "Deleting..." : "Delete Stage"}
+              {deleteStageMutation.isPending ? jobPipelinePageCopy.deleteDialog.deleting : jobPipelinePageCopy.deleteDialog.delete}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

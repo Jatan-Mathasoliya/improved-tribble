@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Briefcase, Users, MessageSquare, Calendar, ArrowRight } from "lucide-react";
 import Layout from "@/components/Layout";
 import { ProfileCompletionBanner } from "@/components/ProfileCompletionBanner";
+import { hiringManagerDashboardCopy } from "@/lib/internal-copy";
 
 interface Job {
   id: number;
@@ -122,10 +123,10 @@ export default function HiringManagerDashboard() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">
-            Hiring Manager Dashboard
+            {hiringManagerDashboardCopy.header.title}
           </h1>
           <p className="text-muted-foreground">
-            Welcome back, {user.firstName || user.username}! Review candidates and provide feedback.
+            {hiringManagerDashboardCopy.header.subtitlePrefix} {user.firstName || user.username}! {hiringManagerDashboardCopy.header.subtitleSuffix}
           </p>
         </div>
 
@@ -137,14 +138,14 @@ export default function HiringManagerDashboard() {
           <Card className="bg-card border-border shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                My Jobs
+                {hiringManagerDashboardCopy.stats.myJobs}
               </CardTitle>
               <Briefcase className="h-4 w-4 text-info" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground">{myJobs.length}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                Jobs assigned to you
+                {hiringManagerDashboardCopy.stats.myJobsHint}
               </p>
             </CardContent>
           </Card>
@@ -152,14 +153,14 @@ export default function HiringManagerDashboard() {
           <Card className="bg-card border-border shadow-sm">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Candidates
+                {hiringManagerDashboardCopy.stats.totalCandidates}
               </CardTitle>
               <Users className="h-4 w-4 text-success" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-foreground">{allApplications.length}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                Across all your jobs
+                {hiringManagerDashboardCopy.stats.totalCandidatesHint}
               </p>
             </CardContent>
           </Card>
@@ -167,7 +168,7 @@ export default function HiringManagerDashboard() {
           <Card className="bg-card border-border shadow-sm" data-tour="pending-feedback">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
-                Awaiting Feedback
+                {hiringManagerDashboardCopy.stats.awaitingFeedback}
               </CardTitle>
               <MessageSquare className="h-4 w-4 text-warning" />
             </CardHeader>
@@ -176,7 +177,7 @@ export default function HiringManagerDashboard() {
                 {applicationsNeedingFeedback.length}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Candidates needing your review
+                {hiringManagerDashboardCopy.stats.awaitingFeedbackHint}
               </p>
             </CardContent>
           </Card>
@@ -186,18 +187,18 @@ export default function HiringManagerDashboard() {
         <div className="mb-8" data-tour="my-jobs">
           <h2 className="text-xl font-semibold text-foreground mb-4 flex items-center gap-2">
             <Briefcase className="h-5 w-5 text-info" />
-            My Jobs
+            {hiringManagerDashboardCopy.sections.myJobs}
           </h2>
 
           {jobsLoading ? (
-            <p className="text-muted-foreground">Loading jobs...</p>
+            <p className="text-muted-foreground">{hiringManagerDashboardCopy.sections.loadingJobs}</p>
           ) : myJobs.length === 0 ? (
             <Card className="bg-card border-border">
               <CardContent className="py-12 text-center">
                 <Briefcase className="h-12 w-12 mx-auto mb-3 text-muted-foreground/50" />
-                <p className="text-muted-foreground">No jobs assigned to you yet.</p>
+                <p className="text-muted-foreground">{hiringManagerDashboardCopy.sections.emptyJobs}</p>
                 <p className="text-muted-foreground text-sm mt-1">
-                  Contact your recruiter to get assigned to job postings.
+                  {hiringManagerDashboardCopy.sections.emptyJobsHint}
                 </p>
               </CardContent>
             </Card>

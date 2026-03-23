@@ -47,6 +47,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
 import { formatPriceINR } from "@/hooks/use-subscription";
+import { adminSubscriptionsPageCopy } from "@/lib/internal-copy";
 
 interface Subscription {
   id: number;
@@ -137,7 +138,7 @@ export default function AdminSubscriptionsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'subscriptions'] });
       toast({
-        title: "Subscription extended",
+        title: adminSubscriptionsPageCopy.toasts.successTitle,
         description: `Subscription extended by ${extendDays} days.`,
       });
       setExtendDialogOpen(false);
@@ -147,8 +148,8 @@ export default function AdminSubscriptionsPage() {
     },
     onError: (error: any) => {
       toast({
-        title: "Error",
-        description: error.message || "Failed to extend subscription",
+        title: adminSubscriptionsPageCopy.toasts.errorTitle,
+        description: error.message || adminSubscriptionsPageCopy.toasts.errorDescription,
         variant: "destructive",
       });
     },
@@ -207,10 +208,10 @@ export default function AdminSubscriptionsPage() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <CreditCard className="h-6 w-6" />
-            Subscriptions
+            {adminSubscriptionsPageCopy.header.title}
           </h1>
           <p className="text-muted-foreground">
-            Manage organization subscriptions and view analytics
+            {adminSubscriptionsPageCopy.header.subtitle}
           </p>
         </div>
 
@@ -226,7 +227,7 @@ export default function AdminSubscriptionsPage() {
                   <p className="text-2xl font-bold">
                     {analytics ? formatPriceINR(analytics.mrr) : '-'}
                   </p>
-                  <p className="text-sm text-muted-foreground">Monthly Recurring Revenue</p>
+                  <p className="text-sm text-muted-foreground">{adminSubscriptionsPageCopy.stats.mrr}</p>
                 </div>
               </div>
             </CardContent>
@@ -240,7 +241,7 @@ export default function AdminSubscriptionsPage() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{analytics?.activeSubscriptions || 0}</p>
-                  <p className="text-sm text-muted-foreground">Active Subscriptions</p>
+                  <p className="text-sm text-muted-foreground">{adminSubscriptionsPageCopy.stats.activeSubscriptions}</p>
                 </div>
               </div>
             </CardContent>
@@ -273,7 +274,7 @@ export default function AdminSubscriptionsPage() {
                 </div>
                 <div>
                   <p className="text-2xl font-bold">{data?.total || 0}</p>
-                  <p className="text-sm text-muted-foreground">Total Subscriptions</p>
+                  <p className="text-sm text-muted-foreground">{adminSubscriptionsPageCopy.stats.totalSubscriptions}</p>
                 </div>
               </div>
             </CardContent>
@@ -284,7 +285,7 @@ export default function AdminSubscriptionsPage() {
         {analytics?.planDistribution && analytics.planDistribution.length > 0 && (
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Plan Distribution</CardTitle>
+              <CardTitle className="text-lg">{adminSubscriptionsPageCopy.stats.planDistribution}</CardTitle>
             </CardHeader>
             <CardContent>
               <div className="flex flex-wrap gap-4">
@@ -305,14 +306,14 @@ export default function AdminSubscriptionsPage() {
             <div className="flex gap-4">
               <Select value={statusFilter} onValueChange={setStatusFilter}>
                 <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Filter by status" />
+                  <SelectValue placeholder={adminSubscriptionsPageCopy.filters.statusPlaceholder} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Statuses</SelectItem>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="past_due">Past Due</SelectItem>
-                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                  <SelectItem value="trialing">Trial</SelectItem>
+                  <SelectItem value="all">{adminSubscriptionsPageCopy.filters.allStatuses}</SelectItem>
+                  <SelectItem value="active">{adminSubscriptionsPageCopy.filters.active}</SelectItem>
+                  <SelectItem value="past_due">{adminSubscriptionsPageCopy.filters.pastDue}</SelectItem>
+                  <SelectItem value="cancelled">{adminSubscriptionsPageCopy.filters.cancelled}</SelectItem>
+                  <SelectItem value="trialing">{adminSubscriptionsPageCopy.filters.trial}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -322,7 +323,7 @@ export default function AdminSubscriptionsPage() {
         {/* Subscriptions Table */}
         <Card>
           <CardHeader>
-            <CardTitle>All Subscriptions</CardTitle>
+            <CardTitle>{adminSubscriptionsPageCopy.list.title}</CardTitle>
           </CardHeader>
           <CardContent>
             {isLoading ? (
@@ -332,7 +333,7 @@ export default function AdminSubscriptionsPage() {
             ) : (data?.subscriptions?.length || 0) === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <CreditCard className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>No subscriptions found</p>
+                <p>{adminSubscriptionsPageCopy.list.empty}</p>
               </div>
             ) : (
               <Table>

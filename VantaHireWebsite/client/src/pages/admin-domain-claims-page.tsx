@@ -36,6 +36,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { formatDistanceToNow, format } from "date-fns";
+import { adminDomainClaimsPageCopy } from "@/lib/internal-copy";
 
 interface DomainClaim {
   id: number;
@@ -88,10 +89,10 @@ export default function AdminDomainClaimsPage() {
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'domain-claims'] });
       toast({
-        title: variables.status === 'approved' ? "Claim approved" : "Claim rejected",
+        title: variables.status === 'approved' ? adminDomainClaimsPageCopy.toasts.approvedTitle : adminDomainClaimsPageCopy.toasts.rejectedTitle,
         description: variables.status === 'approved'
-          ? "The domain claim has been approved."
-          : "The domain claim has been rejected.",
+          ? adminDomainClaimsPageCopy.toasts.approvedDescription
+          : adminDomainClaimsPageCopy.toasts.rejectedDescription,
       });
       setRejectDialogOpen(false);
       setSelectedClaim(null);
@@ -99,8 +100,8 @@ export default function AdminDomainClaimsPage() {
     },
     onError: (error: any) => {
       toast({
-        title: "Error",
-        description: error.message || "Failed to respond to claim",
+        title: adminDomainClaimsPageCopy.toasts.errorTitle,
+        description: error.message || adminDomainClaimsPageCopy.toasts.errorDescription,
         variant: "destructive",
       });
     },
@@ -147,10 +148,10 @@ export default function AdminDomainClaimsPage() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2">
             <Globe className="h-6 w-6" />
-            Domain Claims
+            {adminDomainClaimsPageCopy.header.title}
           </h1>
           <p className="text-muted-foreground">
-            Review and approve domain verification requests
+            {adminDomainClaimsPageCopy.header.subtitle}
           </p>
         </div>
 
@@ -163,14 +164,14 @@ export default function AdminDomainClaimsPage() {
                   <Clock className="h-5 w-5 text-amber-600" />
                 </div>
                 <div>
-                  <p className="font-medium">Pending Claims</p>
+                  <p className="font-medium">{adminDomainClaimsPageCopy.stats.title}</p>
                   <p className="text-sm text-muted-foreground">
-                    {pendingClaims.length} awaiting review
+                    {pendingClaims.length} {adminDomainClaimsPageCopy.stats.awaitingReviewSuffix}
                   </p>
                 </div>
               </div>
               <Badge variant={pendingClaims.length > 0 ? "default" : "secondary"}>
-                {pendingClaims.length} pending
+                {pendingClaims.length} {adminDomainClaimsPageCopy.stats.pendingSuffix}
               </Badge>
             </div>
           </CardContent>
@@ -179,9 +180,9 @@ export default function AdminDomainClaimsPage() {
         {/* Claims List */}
         <Card>
           <CardHeader>
-            <CardTitle>Pending Domain Claims</CardTitle>
+            <CardTitle>{adminDomainClaimsPageCopy.list.title}</CardTitle>
             <CardDescription>
-              Verify that organizations own the domains they're claiming
+              {adminDomainClaimsPageCopy.list.description}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -192,17 +193,17 @@ export default function AdminDomainClaimsPage() {
             ) : pendingClaims.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <Globe className="h-12 w-12 mx-auto mb-3 opacity-50" />
-                <p>No pending domain claims</p>
+                <p>{adminDomainClaimsPageCopy.list.empty}</p>
               </div>
             ) : (
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Domain</TableHead>
-                    <TableHead>Organization</TableHead>
-                    <TableHead>Requested By</TableHead>
-                    <TableHead>Requested</TableHead>
-                    <TableHead className="w-[150px]">Actions</TableHead>
+                    <TableHead>{adminDomainClaimsPageCopy.list.columns.domain}</TableHead>
+                    <TableHead>{adminDomainClaimsPageCopy.list.columns.organization}</TableHead>
+                    <TableHead>{adminDomainClaimsPageCopy.list.columns.requestedBy}</TableHead>
+                    <TableHead>{adminDomainClaimsPageCopy.list.columns.requested}</TableHead>
+                    <TableHead className="w-[150px]">{adminDomainClaimsPageCopy.list.columns.actions}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -271,23 +272,23 @@ export default function AdminDomainClaimsPage() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <AlertTriangle className="h-5 w-5 text-amber-500" />
-                Reject Domain Claim
+                {adminDomainClaimsPageCopy.rejectDialog.title}
               </DialogTitle>
               <DialogDescription>
                 {selectedClaim && (
                   <>
-                    Reject the domain claim for <strong>{selectedClaim.domain}</strong> by{' '}
-                    <strong>{selectedClaim.organization.name}</strong>?
+                    {adminDomainClaimsPageCopy.rejectDialog.description} <strong>{selectedClaim.domain}</strong> for{" "}
+                    <strong>{selectedClaim.organization.name}</strong>.
                   </>
                 )}
               </DialogDescription>
             </DialogHeader>
 
             <div className="py-4">
-              <Label htmlFor="rejectionReason">Reason (optional)</Label>
+              <Label htmlFor="rejectionReason">{adminDomainClaimsPageCopy.rejectDialog.reasonLabel}</Label>
               <Textarea
                 id="rejectionReason"
-                placeholder="Explain why this claim is being rejected..."
+                placeholder={adminDomainClaimsPageCopy.rejectDialog.reasonPlaceholder}
                 value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value)}
                 className="mt-2"

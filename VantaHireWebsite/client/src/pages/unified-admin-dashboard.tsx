@@ -38,6 +38,7 @@ import { Switch } from "@/components/ui/switch";
 import Layout from "@/components/Layout";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
+import { unifiedAdminDashboardCopy } from "@/lib/internal-copy";
 import { Redirect, Link } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 import { HiringMetricsPanel } from "@/components/HiringMetricsPanel";
@@ -490,11 +491,11 @@ export default function UnifiedAdminDashboard() {
           <div className="flex items-center gap-3 mb-2">
             <Shield className="h-7 w-7 text-primary" />
             <h1 className="text-2xl md:text-3xl font-semibold text-foreground">
-              Admin Control Center
+              {unifiedAdminDashboardCopy.header.title}
             </h1>
           </div>
           <p className="text-muted-foreground text-sm md:text-base max-w-2xl">
-            Complete platform management, testing, and analytics dashboard
+            {unifiedAdminDashboardCopy.header.subtitle}
           </p>
         </div>
 

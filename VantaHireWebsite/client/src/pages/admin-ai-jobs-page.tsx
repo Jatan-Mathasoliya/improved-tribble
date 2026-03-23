@@ -36,6 +36,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { Redirect } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { adminAIJobsPageCopy } from "@/lib/internal-copy";
 
 interface AIJob {
   id: number;
@@ -105,15 +106,15 @@ export default function AdminAIJobsPage() {
     },
     onSuccess: () => {
       toast({
-        title: "Job Cancelled",
-        description: "The AI job has been cancelled successfully.",
+        title: adminAIJobsPageCopy.toasts.cancelledTitle,
+        description: adminAIJobsPageCopy.toasts.cancelledDescription,
       });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/ai/jobs"] });
       setCancelJobId(null);
     },
     onError: (error: Error) => {
       toast({
-        title: "Error",
+        title: adminAIJobsPageCopy.toasts.errorTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -155,13 +156,13 @@ export default function AdminAIJobsPage() {
             <div>
               <h1 className="text-3xl font-bold text-foreground flex items-center gap-3">
                 <Cpu className="w-8 h-8 text-primary" />
-                AI Queue Management
+                {adminAIJobsPageCopy.header.title}
               </h1>
-              <p className="text-muted-foreground mt-1">Monitor and manage AI processing jobs</p>
+              <p className="text-muted-foreground mt-1">{adminAIJobsPageCopy.header.subtitle}</p>
             </div>
             <Button onClick={() => refetch()} variant="outline" size="sm">
               <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh
+              {adminAIJobsPageCopy.header.refresh}
             </Button>
           </div>
 
@@ -170,50 +171,50 @@ export default function AdminAIJobsPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Interactive Queue</CardTitle>
+                  <CardTitle className="text-lg">{adminAIJobsPageCopy.queues.interactive}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-4 gap-4 text-center">
                     <div>
                       <p className="text-2xl font-bold text-yellow-600">{healthData.interactive?.waiting || 0}</p>
-                      <p className="text-xs text-muted-foreground">Waiting</p>
+                      <p className="text-xs text-muted-foreground">{adminAIJobsPageCopy.queues.waiting}</p>
                     </div>
                     <div>
                       <p className="text-2xl font-bold text-blue-600">{healthData.interactive?.active || 0}</p>
-                      <p className="text-xs text-muted-foreground">Active</p>
+                      <p className="text-xs text-muted-foreground">{adminAIJobsPageCopy.queues.active}</p>
                     </div>
                     <div>
                       <p className="text-2xl font-bold text-green-600">{healthData.interactive?.completed || 0}</p>
-                      <p className="text-xs text-muted-foreground">Completed</p>
+                      <p className="text-xs text-muted-foreground">{adminAIJobsPageCopy.queues.completed}</p>
                     </div>
                     <div>
                       <p className="text-2xl font-bold text-red-600">{healthData.interactive?.failed || 0}</p>
-                      <p className="text-xs text-muted-foreground">Failed</p>
+                      <p className="text-xs text-muted-foreground">{adminAIJobsPageCopy.queues.failed}</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-lg">Batch Queue</CardTitle>
+                  <CardTitle className="text-lg">{adminAIJobsPageCopy.queues.batch}</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-4 gap-4 text-center">
                     <div>
                       <p className="text-2xl font-bold text-yellow-600">{healthData.batch?.waiting || 0}</p>
-                      <p className="text-xs text-muted-foreground">Waiting</p>
+                      <p className="text-xs text-muted-foreground">{adminAIJobsPageCopy.queues.waiting}</p>
                     </div>
                     <div>
                       <p className="text-2xl font-bold text-blue-600">{healthData.batch?.active || 0}</p>
-                      <p className="text-xs text-muted-foreground">Active</p>
+                      <p className="text-xs text-muted-foreground">{adminAIJobsPageCopy.queues.active}</p>
                     </div>
                     <div>
                       <p className="text-2xl font-bold text-green-600">{healthData.batch?.completed || 0}</p>
-                      <p className="text-xs text-muted-foreground">Completed</p>
+                      <p className="text-xs text-muted-foreground">{adminAIJobsPageCopy.queues.completed}</p>
                     </div>
                     <div>
                       <p className="text-2xl font-bold text-red-600">{healthData.batch?.failed || 0}</p>
-                      <p className="text-xs text-muted-foreground">Failed</p>
+                      <p className="text-xs text-muted-foreground">{adminAIJobsPageCopy.queues.failed}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -224,8 +225,8 @@ export default function AdminAIJobsPage() {
           {/* Jobs Table */}
           <Card>
             <CardHeader>
-              <CardTitle>Active & Pending Jobs</CardTitle>
-              <CardDescription>Jobs currently in the queue or recently failed</CardDescription>
+              <CardTitle>{adminAIJobsPageCopy.jobs.title}</CardTitle>
+              <CardDescription>{adminAIJobsPageCopy.jobs.description}</CardDescription>
             </CardHeader>
             <CardContent>
               {jobsLoading ? (
@@ -235,20 +236,20 @@ export default function AdminAIJobsPage() {
               ) : jobs.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <CheckCircle className="w-12 h-12 mx-auto mb-3 text-green-500 opacity-50" />
-                  <p>No pending or failed jobs</p>
+                  <p>{adminAIJobsPageCopy.jobs.empty}</p>
                 </div>
               ) : (
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Queue</TableHead>
-                      <TableHead>User ID</TableHead>
-                      <TableHead>Progress</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead>Error</TableHead>
-                      <TableHead>Actions</TableHead>
+                      <TableHead>{adminAIJobsPageCopy.jobs.id}</TableHead>
+                      <TableHead>{adminAIJobsPageCopy.jobs.status}</TableHead>
+                      <TableHead>{adminAIJobsPageCopy.jobs.queue}</TableHead>
+                      <TableHead>{adminAIJobsPageCopy.jobs.userId}</TableHead>
+                      <TableHead>{adminAIJobsPageCopy.jobs.progress}</TableHead>
+                      <TableHead>{adminAIJobsPageCopy.jobs.created}</TableHead>
+                      <TableHead>{adminAIJobsPageCopy.jobs.error}</TableHead>
+                      <TableHead>{adminAIJobsPageCopy.jobs.actions}</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -325,9 +326,9 @@ export default function AdminAIJobsPage() {
       <AlertDialog open={cancelJobId !== null} onOpenChange={() => setCancelJobId(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Cancel AI Job?</AlertDialogTitle>
+            <AlertDialogTitle>{adminAIJobsPageCopy.cancelDialog.title}</AlertDialogTitle>
             <AlertDialogDescription>
-              This will cancel the job and remove it from the queue. The user will be able to retry.
+              {adminAIJobsPageCopy.cancelDialog.description}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

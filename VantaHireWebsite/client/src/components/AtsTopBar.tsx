@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { DialogTitle } from "@/components/ui/dialog";
 import type { Organization, Membership } from "@/hooks/use-organization";
+import { atsShellCopy } from "@/lib/internal-copy";
 import type { User as SelectUser } from "@shared/schema";
 
 type AtsTopBarProps = {
@@ -60,114 +61,114 @@ type RouteMeta = {
 const ATS_ROUTES: RouteMeta[] = [
   {
     path: "/recruiter-dashboard",
-    label: "Dashboard",
-    description: "Recruiter performance, actions, and interview pipeline",
+    label: atsShellCopy.routes.dashboard.label,
+    description: atsShellCopy.routes.dashboard.description,
     icon: Home,
-    section: "Workspace",
+    section: atsShellCopy.routes.dashboard.section,
     match: (location) => location === "/recruiter-dashboard",
   },
   {
     path: "/applications",
-    label: "Applications",
-    description: "Review and move candidates through the pipeline",
+    label: atsShellCopy.routes.applications.label,
+    description: atsShellCopy.routes.applications.description,
     icon: Briefcase,
-    section: "Workspace",
+    section: atsShellCopy.routes.applications.section,
     match: (location) => location === "/applications" || location.startsWith("/jobs/") && location.includes("/applications"),
   },
   {
     path: "/candidates",
-    label: "Talent Search",
-    description: "Search your talent pool and rediscover candidates",
+    label: atsShellCopy.routes.talentSearch.label,
+    description: atsShellCopy.routes.talentSearch.description,
     icon: Search,
-    section: "Workspace",
+    section: atsShellCopy.routes.talentSearch.section,
     match: (location) => location.startsWith("/candidates"),
   },
   {
     path: "/my-jobs",
-    label: "My Jobs",
-    description: "Open roles, sourcing, and job operations",
+    label: atsShellCopy.routes.myJobs.label,
+    description: atsShellCopy.routes.myJobs.description,
     icon: Briefcase,
-    section: "Workspace",
+    section: atsShellCopy.routes.myJobs.section,
     match: (location) => location === "/my-jobs" || /^\/jobs\/\d+/.test(location),
   },
   {
     path: "/clients",
-    label: "Clients",
-    description: "Manage client relationships and shared hiring workflows",
+    label: atsShellCopy.routes.clients.label,
+    description: atsShellCopy.routes.clients.description,
     icon: Users,
-    section: "Workspace",
+    section: atsShellCopy.routes.clients.section,
     match: (location) => location.startsWith("/clients"),
   },
   {
     path: "/admin/forms",
-    label: "Forms",
-    description: "Application forms and intake flows",
+    label: atsShellCopy.routes.forms.label,
+    description: atsShellCopy.routes.forms.description,
     icon: FileText,
-    section: "Workspace",
+    section: atsShellCopy.routes.forms.section,
     match: (location) => location.startsWith("/admin/forms"),
   },
   {
     path: "/admin/email-templates",
-    label: "Email",
-    description: "Templates and outreach assets",
+    label: atsShellCopy.routes.email.label,
+    description: atsShellCopy.routes.email.description,
     icon: Sparkles,
-    section: "Workspace",
+    section: atsShellCopy.routes.email.section,
     match: (location) => location.startsWith("/admin/email-templates"),
   },
   {
     path: "/profile/settings",
-    label: "Profile Settings",
-    description: "Personal recruiter profile and preferences",
+    label: atsShellCopy.routes.profileSettings.label,
+    description: atsShellCopy.routes.profileSettings.description,
     icon: Settings,
-    section: "Account",
+    section: atsShellCopy.routes.profileSettings.section,
     match: (location) => location.startsWith("/profile/settings"),
   },
   {
     path: "/org/settings",
-    label: "Org Settings",
-    description: "Organization setup and permissions",
+    label: atsShellCopy.routes.orgSettings.label,
+    description: atsShellCopy.routes.orgSettings.description,
     icon: Settings,
-    section: "Organization",
+    section: atsShellCopy.routes.orgSettings.section,
     match: (location) => location.startsWith("/org/settings"),
   },
   {
     path: "/org/team",
-    label: "Team Members",
-    description: "Seats, roles, and collaborator access",
+    label: atsShellCopy.routes.teamMembers.label,
+    description: atsShellCopy.routes.teamMembers.description,
     icon: Users,
-    section: "Organization",
+    section: atsShellCopy.routes.teamMembers.section,
     match: (location) => location.startsWith("/org/team"),
   },
   {
     path: "/org/billing",
-    label: "Billing",
-    description: "Subscription and payment settings",
+    label: atsShellCopy.routes.billing.label,
+    description: atsShellCopy.routes.billing.description,
     icon: CreditCard,
-    section: "Organization",
+    section: atsShellCopy.routes.billing.section,
     match: (location) => location.startsWith("/org/billing"),
   },
   {
     path: "/org/analytics",
-    label: "Organization Analytics",
-    description: "Org-level performance analytics",
+    label: atsShellCopy.routes.organizationAnalytics.label,
+    description: atsShellCopy.routes.organizationAnalytics.description,
     icon: Shield,
-    section: "Organization",
+    section: atsShellCopy.routes.organizationAnalytics.section,
     match: (location) => location.startsWith("/org/analytics"),
   },
   {
     path: "/admin",
-    label: "Admin Dashboard",
-    description: "Platform-level controls and oversight",
+    label: atsShellCopy.routes.adminDashboard.label,
+    description: atsShellCopy.routes.adminDashboard.description,
     icon: Shield,
-    section: "Admin",
+    section: atsShellCopy.routes.adminDashboard.section,
     match: (location) => location === "/admin",
   },
   {
     path: "/pricing",
-    label: "Pricing",
-    description: "Plans, entitlements, and upgrade options",
+    label: atsShellCopy.routes.pricing.label,
+    description: atsShellCopy.routes.pricing.description,
     icon: CreditCard,
-    section: "Workspace",
+    section: atsShellCopy.routes.pricing.section,
     match: (location) => location === "/pricing",
   },
 ];
@@ -216,7 +217,7 @@ export function AtsTopBar({
 
   const primaryAction = isRecruiter || isAdmin
     ? {
-        label: "Post New Job",
+        label: atsShellCopy.primaryActionLabel,
         path: "/jobs/post",
       }
     : null;
@@ -248,7 +249,7 @@ export function AtsTopBar({
                 className="hidden w-[220px] items-center gap-3 rounded-[18px] border border-[#E6E9F2] bg-white/92 px-4 py-3 text-left shadow-[0_10px_24px_rgba(15,23,42,0.05)] transition-colors hover:bg-[#FCFCFE] xl:flex"
               >
                 <Search className="h-4 w-4 text-[#81889A]" />
-                <span className="truncate text-sm text-[#81889A]">Jump to pages, workflows, and settings…</span>
+                <span className="truncate text-sm text-[#81889A]">{atsShellCopy.quickJump.buttonLabel}</span>
                 <span className="ml-auto rounded-md border border-[#E8EBF2] bg-[#F8F9FC] px-1.5 py-0.5 text-[11px] font-semibold text-[#9097A8]">
                   ⌘K
                 </span>
@@ -284,7 +285,7 @@ export function AtsTopBar({
                     <div className="hidden min-w-0 text-left lg:block">
                       <div className="truncate text-sm font-semibold text-[#111827]">{displayName}</div>
                       <div className="truncate text-xs text-[#7B8497]">
-                        {organizationData?.organization?.name ?? (isRecruiter ? "Recruiter Workspace" : "ATS Workspace")}
+                        {organizationData?.organization?.name ?? (isRecruiter ? atsShellCopy.brand.recruiterWorkspaceFallback : atsShellCopy.brand.atsWorkspaceFallback)}
                       </div>
                     </div>
                   </button>
@@ -300,7 +301,7 @@ export function AtsTopBar({
                     className="cursor-pointer rounded-xl px-3 py-2.5 text-sm font-medium text-[#4A5568] focus:bg-[#F3F4F8] focus:text-[#4338CA]"
                   >
                     <UserCircle2 className="mr-2 h-4 w-4" />
-                    Profile Settings
+                    {atsShellCopy.routes.profileSettings.label}
                   </DropdownMenuItem>
                   {isOrgOwnerOrAdmin ? (
                     <DropdownMenuItem
@@ -308,7 +309,7 @@ export function AtsTopBar({
                       className="cursor-pointer rounded-xl px-3 py-2.5 text-sm font-medium text-[#4A5568] focus:bg-[#F3F4F8] focus:text-[#4338CA]"
                     >
                       <Settings className="mr-2 h-4 w-4" />
-                      Organization Settings
+                      {atsShellCopy.menu.organizationSettings}
                     </DropdownMenuItem>
                   ) : null}
                   <DropdownMenuSeparator />
@@ -327,10 +328,10 @@ export function AtsTopBar({
       </header>
 
       <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
-        <DialogTitle className="sr-only">Quick jump</DialogTitle>
-        <CommandInput placeholder="Search pages, settings, and ATS workflows…" />
+        <DialogTitle className="sr-only">{atsShellCopy.quickJump.title}</DialogTitle>
+        <CommandInput placeholder={atsShellCopy.quickJump.inputPlaceholder} />
         <CommandList className="max-h-[420px]">
-          <CommandEmpty>No matching routes.</CommandEmpty>
+          <CommandEmpty>{atsShellCopy.quickJump.emptyState}</CommandEmpty>
           <CommandGroup heading="Navigate">
             {quickRoutes.map((route) => {
               const Icon = route.icon;

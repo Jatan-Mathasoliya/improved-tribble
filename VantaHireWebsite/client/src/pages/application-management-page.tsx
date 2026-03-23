@@ -67,6 +67,7 @@ import { ApplicationDetailModal } from "@/components/kanban/ApplicationDetailMod
 import { PageHeaderSkeleton, FilterBarSkeleton, KanbanBoardSkeleton } from "@/components/skeletons";
 import { JobSubNav } from "@/components/JobSubNav";
 import { UploadDialog } from "@/components/bulk-import/UploadDialog";
+import { applicationManagementCopy } from "@/lib/internal-copy";
 
 export default function ApplicationManagementPage() {
   const [match, params] = useRoute("/jobs/:id/applications");
@@ -309,11 +310,11 @@ export default function ApplicationManagementPage() {
     },
     onSuccess: (data) => {
       if (data.cached) {
-        toast({ title: 'All Selected Have Summaries', description: data.message });
+        toast({ title: applicationManagementCopy.toasts.aiSummaryAllCachedTitle, description: data.message });
         setShowAISummaryDialog(false);
       } else {
         setAiSummaryJobId(data.jobId);
-        toast({ title: 'AI Summary Started', description: `Processing ${data.totalCount} candidates...` });
+        toast({ title: applicationManagementCopy.toasts.aiSummaryStartedTitle, description: `Processing ${data.totalCount} candidates...` });
       }
     },
     onError: (error: any) => {
@@ -333,7 +334,7 @@ export default function ApplicationManagementPage() {
         msg = 'You have a job in progress. Please wait for it to complete.';
       }
 
-      toast({ title: 'Cannot Generate Summaries', description: msg, variant: 'destructive' });
+      toast({ title: applicationManagementCopy.toasts.aiSummaryCannotStartTitle, description: msg, variant: 'destructive' });
     },
   });
 
@@ -342,7 +343,7 @@ export default function ApplicationManagementPage() {
     if (summaryJobStatus?.status === 'completed') {
       const result = summaryJobStatus.result?.summary || { succeeded: 0, skipped: 0, errors: 0 };
       toast({
-        title: 'AI Summaries Generated',
+        title: applicationManagementCopy.toasts.aiSummariesGeneratedTitle,
         description: `${result.succeeded} generated, ${result.skipped} skipped, ${result.errors} failed.`,
       });
       setShowAISummaryDialog(false);
@@ -356,7 +357,7 @@ export default function ApplicationManagementPage() {
 
     if (summaryJobStatus?.status === 'failed') {
       toast({
-        title: 'Summary Generation Failed',
+        title: applicationManagementCopy.toasts.aiSummaryFailedTitle,
         description: summaryJobStatus.error || 'An error occurred during processing',
         variant: 'destructive',
       });
@@ -392,13 +393,13 @@ export default function ApplicationManagementPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "applications"] });
       toast({
-        title: "Status updated",
-        description: "Application status has been updated successfully.",
+        title: applicationManagementCopy.toasts.statusUpdatedTitle,
+        description: applicationManagementCopy.toasts.statusUpdatedDescription,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Update failed",
+        title: applicationManagementCopy.toasts.updateFailedTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -418,13 +419,13 @@ export default function ApplicationManagementPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "applications"] });
       setSelectedApplications([]);
       toast({
-        title: "Bulk update successful",
+        title: applicationManagementCopy.toasts.bulkUpdateSuccessTitle,
         description: `${data.updatedCount} applications updated successfully.`,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Bulk update failed",
+        title: applicationManagementCopy.toasts.bulkUpdateFailedTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -449,8 +450,8 @@ export default function ApplicationManagementPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "applications"] });
       toast({
-        title: "Download tracked",
-        description: "Resume download has been recorded.",
+        title: applicationManagementCopy.toasts.downloadTrackedTitle,
+        description: applicationManagementCopy.toasts.downloadTrackedDescription,
       });
     },
   });
@@ -467,8 +468,8 @@ export default function ApplicationManagementPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "applications"] });
       toast({
-        title: "Stage updated",
-        description: "Application moved to new stage successfully.",
+        title: applicationManagementCopy.toasts.stageUpdatedTitle,
+        description: applicationManagementCopy.toasts.stageUpdatedDescription,
       });
     },
   });
@@ -498,8 +499,8 @@ export default function ApplicationManagementPage() {
       setInterviewLocation("");
       setInterviewNotes("");
       toast({
-        title: "Interview scheduled",
-        description: "Interview has been scheduled successfully.",
+        title: applicationManagementCopy.toasts.interviewScheduledTitle,
+        description: applicationManagementCopy.toasts.interviewScheduledDescription,
       });
     },
   });
@@ -532,13 +533,13 @@ export default function ApplicationManagementPage() {
       const url = data.fullUrl || data.publicUrl || "";
       setShortlistUrl(url || null);
       toast({
-        title: "Shortlist Created",
-        description: "Share this link with your client to review candidates.",
+        title: applicationManagementCopy.toasts.shortlistCreatedTitle,
+        description: applicationManagementCopy.toasts.shortlistCreatedDescription,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Failed to Create Shortlist",
+        title: applicationManagementCopy.toasts.shortlistFailedTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -557,8 +558,8 @@ export default function ApplicationManagementPage() {
       setShowEmailDialog(false);
       setSelectedTemplateId(null);
       toast({
-        title: "Email sent",
-        description: "Email has been sent successfully.",
+        title: applicationManagementCopy.toasts.emailSentTitle,
+        description: applicationManagementCopy.toasts.emailSentDescription,
       });
     },
   });
@@ -588,13 +589,13 @@ export default function ApplicationManagementPage() {
       setSelectedApplications([]);
       setBulkProgress({ sent: 0, total: 0 });
       toast({
-        title: "Bulk email sent",
+        title: applicationManagementCopy.toasts.bulkEmailSentTitle,
         description: `Sent: ${summary.success}, Failed: ${summary.failed}`,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Bulk email failed",
+        title: applicationManagementCopy.toasts.bulkEmailFailedTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -646,13 +647,13 @@ export default function ApplicationManagementPage() {
       // Invalidate invitation quota to refresh remaining count
       queryClient.invalidateQueries({ queryKey: formsQueryKeys.invitationQuota() });
       toast({
-        title: "Bulk forms sent",
+        title: applicationManagementCopy.toasts.bulkFormsSentTitle,
         description: `Created: ${summary.created}, Duplicates: ${summary.duplicate}, Failed: ${summary.failed}`,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Bulk forms failed",
+        title: applicationManagementCopy.toasts.bulkFormsFailedTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -691,13 +692,13 @@ export default function ApplicationManagementPage() {
       setBatchNotes("");
       setBatchStageId("");
       toast({
-        title: "Batch interviews scheduled",
+        title: applicationManagementCopy.toasts.batchInterviewsScheduledTitle,
         description: `${data.scheduledCount} of ${data.total} candidates scheduled.`,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Batch scheduling failed",
+        title: applicationManagementCopy.toasts.batchSchedulingFailedTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -716,8 +717,8 @@ export default function ApplicationManagementPage() {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "applications"] });
       setNewRecruiterNote("");
       toast({
-        title: "Note added",
-        description: "Recruiter note has been added successfully.",
+        title: applicationManagementCopy.toasts.noteAddedTitle,
+        description: applicationManagementCopy.toasts.noteAddedDescription,
       });
     },
   });
@@ -733,8 +734,8 @@ export default function ApplicationManagementPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "applications"] });
       toast({
-        title: "Rating updated",
-        description: "Candidate rating has been updated successfully.",
+        title: applicationManagementCopy.toasts.ratingUpdatedTitle,
+        description: applicationManagementCopy.toasts.ratingUpdatedDescription,
       });
     },
   });
@@ -815,8 +816,8 @@ export default function ApplicationManagementPage() {
 
   const handleDragCancel = () => {
     toast({
-      title: "Drag cancelled",
-      description: "Drop onto a stage column to move the application.",
+      title: applicationManagementCopy.toasts.dragCancelledTitle,
+      description: applicationManagementCopy.toasts.dragCancelledDescription,
     });
   };
 
@@ -840,8 +841,8 @@ export default function ApplicationManagementPage() {
       // Revert on error
       queryClient.setQueryData(["/api/jobs", jobId, "applications"], previousApplications);
       toast({
-        title: "Move failed",
-        description: "Failed to move application. Please try again.",
+        title: applicationManagementCopy.toasts.moveFailedTitle,
+        description: applicationManagementCopy.toasts.moveFailedDescription,
         variant: "destructive",
       });
     }
@@ -850,8 +851,8 @@ export default function ApplicationManagementPage() {
   const handleBulkMoveStage = async (stageId: number) => {
     if (selectedApplications.length === 0) {
       toast({
-        title: "No applications selected",
-        description: "Please select applications first.",
+        title: applicationManagementCopy.toasts.noApplicationsSelectedTitle,
+        description: applicationManagementCopy.toasts.noApplicationsSelectedDescription,
         variant: "destructive",
       });
       return;
@@ -885,8 +886,8 @@ export default function ApplicationManagementPage() {
     setSelectedApplications([]);
 
     toast({
-      title: "Bulk move complete",
-      description: `Moved: ${success}, Failed: ${failed}`,
+      title: applicationManagementCopy.toasts.bulkMoveCompleteTitle,
+      description: `${applicationManagementCopy.toasts.movedPrefix} ${success}, ${applicationManagementCopy.toasts.failedPrefix} ${failed}`,
     });
   };
 
@@ -966,12 +967,12 @@ export default function ApplicationManagementPage() {
       ...(message && { customMessage: message })
     }).then(() => {
       toast({
-        title: "Invitation sent",
-        description: "Form invitation has been sent successfully.",
+        title: applicationManagementCopy.toasts.invitationSentTitle,
+        description: applicationManagementCopy.toasts.invitationSentDescription,
       });
     }).catch((error) => {
       toast({
-        title: "Failed to send invitation",
+        title: applicationManagementCopy.toasts.invitationFailedTitle,
         description: error.message,
         variant: "destructive",
       });
@@ -1003,8 +1004,8 @@ export default function ApplicationManagementPage() {
   const handleExportCSV = () => {
     if (!applications || applications.length === 0) {
       toast({
-        title: "No Data",
-        description: "There are no applications to export.",
+        title: applicationManagementCopy.toasts.noDataTitle,
+        description: applicationManagementCopy.toasts.noDataDescription,
         variant: "destructive",
       });
       return;
@@ -1074,13 +1075,13 @@ export default function ApplicationManagementPage() {
       document.body.removeChild(a);
 
       toast({
-        title: "Export Successful",
+        title: applicationManagementCopy.toasts.exportSuccessTitle,
         description: `Exported ${applications.length} application(s) to CSV.`,
       });
     } catch (error: any) {
       toast({
-        title: "Export Failed",
-        description: error.message || "Failed to export applications.",
+        title: applicationManagementCopy.toasts.exportFailedTitle,
+        description: error.message || applicationManagementCopy.toasts.exportFailedDescription,
         variant: "destructive",
       });
     }
@@ -1242,15 +1243,15 @@ export default function ApplicationManagementPage() {
                 onClick={() => {
                   if (selectedApplications.length === 0) {
                     toast({
-                      title: "No candidates selected",
-                      description: "Select candidates using the checkboxes first.",
+                      title: applicationManagementCopy.validation.noCandidatesTitle,
+                      description: applicationManagementCopy.validation.noCandidatesDescription,
                       variant: "destructive",
                     });
                     return;
                   }
                   if (selectedApplications.length > 20) {
                     const ok = window.confirm(
-                      `You are about to email ${selectedApplications.length} candidates. Proceed?`
+                      applicationManagementCopy.validation.bulkEmailConfirm(selectedApplications.length)
                     );
                     if (!ok) return;
                   }
@@ -1258,7 +1259,7 @@ export default function ApplicationManagementPage() {
                 }}
               >
                 <Mail className="h-4 w-4 mr-2" />
-                Bulk Email
+                {applicationManagementCopy.actions.bulkEmail}
               </Button>
               <Button
                 variant="outline"
@@ -1266,15 +1267,15 @@ export default function ApplicationManagementPage() {
                 onClick={() => {
                   if (selectedApplications.length === 0) {
                     toast({
-                      title: "No candidates selected",
-                      description: "Select candidates using the checkboxes first.",
+                      title: applicationManagementCopy.validation.noCandidatesTitle,
+                      description: applicationManagementCopy.validation.noCandidatesDescription,
                       variant: "destructive",
                     });
                     return;
                   }
                   if (selectedApplications.length > 20) {
                     const ok = window.confirm(
-                      `You are about to send forms to ${selectedApplications.length} candidates. Proceed?`
+                      applicationManagementCopy.validation.bulkFormsConfirm(selectedApplications.length)
                     );
                     if (!ok) return;
                   }
@@ -1282,7 +1283,7 @@ export default function ApplicationManagementPage() {
                 }}
               >
                 <FileText className="h-4 w-4 mr-2" />
-                Bulk Form
+                {applicationManagementCopy.actions.bulkForm}
               </Button>
               <Button
                 variant="outline"
@@ -1290,16 +1291,16 @@ export default function ApplicationManagementPage() {
                 onClick={() => {
                   if (selectedApplications.length === 0) {
                     toast({
-                      title: "No candidates selected",
-                      description: "Select candidates using the checkboxes first.",
+                      title: applicationManagementCopy.validation.noCandidatesTitle,
+                      description: applicationManagementCopy.validation.noCandidatesDescription,
                       variant: "destructive",
                     });
                     return;
                   }
                   if (!job?.clientId) {
                     toast({
-                      title: "No client linked",
-                      description: "Set a client for this job before sharing a shortlist.",
+                      title: applicationManagementCopy.validation.noClientTitle,
+                      description: applicationManagementCopy.validation.noClientDescription,
                       variant: "destructive",
                     });
                     return;
@@ -1308,7 +1309,7 @@ export default function ApplicationManagementPage() {
                 }}
               >
                 <Users className="h-4 w-4 mr-2" />
-                Share with Client
+                {applicationManagementCopy.actions.shareWithClient}
               </Button>
               <Button
                 variant="outline"
@@ -1316,8 +1317,8 @@ export default function ApplicationManagementPage() {
                 onClick={() => {
                   if (selectedApplications.length === 0) {
                     toast({
-                      title: "No candidates selected",
-                      description: "Select candidates using the checkboxes first.",
+                      title: applicationManagementCopy.validation.noCandidatesTitle,
+                      description: applicationManagementCopy.validation.noCandidatesDescription,
                       variant: "destructive",
                     });
                     return;
@@ -1326,11 +1327,11 @@ export default function ApplicationManagementPage() {
                 }}
               >
                 <Calendar className="h-4 w-4 mr-2" />
-                Batch Interview
+                {applicationManagementCopy.actions.batchInterview}
               </Button>
               <Button size="sm" onClick={() => setAddCandidateModalOpen(true)}>
                 <Plus className="h-4 w-4 mr-2" />
-                Add Candidate
+                {applicationManagementCopy.actions.addCandidate}
               </Button>
               <Button variant="outline" size="sm" onClick={() => setBulkImportDialogOpen(true)}>
                 <Upload className="h-4 w-4 mr-2" />
@@ -1357,7 +1358,7 @@ export default function ApplicationManagementPage() {
               </h1>
             </div>
             <p className="text-muted-foreground text-sm md:text-base max-w-2xl">
-              Review and manage applications for "{job.title}"
+              {applicationManagementCopy.header.subtitlePrefix} "{job.title}"
             </p>
           </div>
 
@@ -1365,10 +1366,9 @@ export default function ApplicationManagementPage() {
           {job.status === 'pending' && (
             <Alert className="mb-4 border-warning/50 bg-warning/10">
               <Clock className="h-4 w-4 text-warning" />
-              <AlertTitle className="text-warning-foreground">Pending Approval</AlertTitle>
+              <AlertTitle className="text-warning-foreground">{applicationManagementCopy.header.pendingApprovalTitle}</AlertTitle>
               <AlertDescription className="text-muted-foreground">
-                This job is waiting for admin approval. It will become visible to candidates once approved.
-                You can still prepare by setting up pipeline stages and reviewing any existing applications.
+                {applicationManagementCopy.header.pendingApprovalDescription}
               </AlertDescription>
             </Alert>
           )}
@@ -1380,7 +1380,7 @@ export default function ApplicationManagementPage() {
                 <CardTitle className="text-foreground text-xl">{job.title}</CardTitle>
                 {job.status === 'pending' && (
                   <Badge className="bg-warning/10 text-warning-foreground border-warning/30">
-                    Pending Approval
+                    {applicationManagementCopy.header.pendingApprovalTitle}
                   </Badge>
                 )}
               </div>
@@ -1392,11 +1392,11 @@ export default function ApplicationManagementPage() {
                   </span>
                   <span className="flex items-center gap-1">
                     <Calendar className="w-4 h-4" />
-                    Posted {formatDate(job.createdAt)}
+                    {applicationManagementCopy.header.postedPrefix} {formatDate(job.createdAt)}
                   </span>
                   <span className="flex items-center gap-1">
                     <Users className="w-4 h-4" />
-                    {applications?.length || 0} Applications
+                    {applications?.length || 0} {applicationManagementCopy.header.applicationsLabel}
                   </span>
                 </div>
               </CardDescription>
@@ -1411,18 +1411,18 @@ export default function ApplicationManagementPage() {
                 <div className="flex items-center gap-2">
                   <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
                   <Label htmlFor="sort-select" className="text-sm font-medium text-foreground">
-                    Sort by:
+                    {applicationManagementCopy.filters.sortBy}
                   </Label>
                   <Select value={sortBy} onValueChange={(value: 'date' | 'ai_fit') => setSortBy(value)}>
                     <SelectTrigger id="sort-select" className="w-40">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="date">Newest First</SelectItem>
+                      <SelectItem value="date">{applicationManagementCopy.filters.newestFirst}</SelectItem>
                       <SelectItem value="ai_fit">
                         <span className="flex items-center gap-1">
                           <Sparkles className="h-3 w-3" />
-                          AI Fit Score
+                          {applicationManagementCopy.filters.aiFitScore}
                         </span>
                       </SelectItem>
                     </SelectContent>
@@ -1433,15 +1433,15 @@ export default function ApplicationManagementPage() {
                 <div className="flex items-center gap-2">
                   <Filter className="h-4 w-4 text-muted-foreground" />
                   <Label htmlFor="stage-filter" className="text-sm font-medium text-foreground">
-                    Stage:
+                    {applicationManagementCopy.filters.stage}
                   </Label>
                   <Select value={stageFilter} onValueChange={setStageFilter}>
                     <SelectTrigger id="stage-filter" className="w-48">
-                      <SelectValue placeholder="All stages" />
+                      <SelectValue placeholder={applicationManagementCopy.filters.allStages} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">All Stages</SelectItem>
-                      <SelectItem value="unassigned">Unassigned</SelectItem>
+                      <SelectItem value="all">{applicationManagementCopy.filters.allStages}</SelectItem>
+                      <SelectItem value="unassigned">{applicationManagementCopy.filters.unassigned}</SelectItem>
                       {pipelineStages
                         .slice()
                         .sort((a, b) => (a.order - b.order) || (a.id - b.id))
@@ -1457,17 +1457,17 @@ export default function ApplicationManagementPage() {
                 {/* AI Recommended Action Filter */}
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-muted-foreground" />
-                  <Label className="text-sm font-medium text-foreground whitespace-nowrap">AI Action:</Label>
+                  <Label className="text-sm font-medium text-foreground whitespace-nowrap">{applicationManagementCopy.filters.aiAction}</Label>
                   <span
                     className="cursor-help"
-                    title="Filter by AI's recommended next step for each candidate"
+                    title={applicationManagementCopy.filters.aiActionHelp}
                   >
                     <Info className="h-3.5 w-3.5 text-muted-foreground" />
                   </span>
                   <div className="flex items-center gap-1.5 flex-wrap">
                     {['advance', 'hold', 'reject', 'Not Analyzed'].map((action) => {
                       const isActive = actionFilter.includes(action);
-                      const displayLabel = action === 'Not Analyzed' ? 'Not Analyzed' : action.charAt(0).toUpperCase() + action.slice(1);
+                      const displayLabel = action === 'Not Analyzed' ? applicationManagementCopy.filters.notAnalyzed : action.charAt(0).toUpperCase() + action.slice(1);
                       const getActionStyle = () => {
                         if (!isActive) return 'hover:bg-muted';
                         switch (action) {
@@ -1616,14 +1616,14 @@ export default function ApplicationManagementPage() {
         <Dialog key={`interview-${selectedApp?.id ?? 'none'}`} open={showInterviewDialog} onOpenChange={setShowInterviewDialog}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Schedule Interview - {selectedApp?.name}</DialogTitle>
+              <DialogTitle>{applicationManagementCopy.dialogs.interview.titlePrefix} - {selectedApp?.name}</DialogTitle>
               <DialogDescription>
-                Set interview details for this candidate
+                {applicationManagementCopy.dialogs.interview.description}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 mt-4">
               <div>
-                <Label>Date</Label>
+                <Label>{applicationManagementCopy.dialogs.interview.date}</Label>
                 <Input
                   type="datetime-local"
                   value={interviewDate}
@@ -1631,27 +1631,27 @@ export default function ApplicationManagementPage() {
                 />
               </div>
               <div>
-                <Label>Time</Label>
+                <Label>{applicationManagementCopy.dialogs.interview.time}</Label>
                 <Input
                   type="text"
-                  placeholder="e.g., 10:00 AM - 11:00 AM"
+                  placeholder={applicationManagementCopy.dialogs.interview.timePlaceholder}
                   value={interviewTime}
                   onChange={(e) => setInterviewTime(e.target.value)}
                 />
               </div>
               <div>
-                <Label>Location</Label>
+                <Label>{applicationManagementCopy.dialogs.interview.location}</Label>
                 <Input
                   type="text"
-                  placeholder="e.g., Zoom link or office address"
+                  placeholder={applicationManagementCopy.dialogs.interview.locationPlaceholder}
                   value={interviewLocation}
                   onChange={(e) => setInterviewLocation(e.target.value)}
                 />
               </div>
               <div>
-                <Label>Notes (Optional)</Label>
+                <Label>{applicationManagementCopy.dialogs.interview.notes}</Label>
                 <Textarea
-                  placeholder="Additional notes..."
+                  placeholder={applicationManagementCopy.dialogs.interview.notesPlaceholder}
                   value={interviewNotes}
                   onChange={(e) => setInterviewNotes(e.target.value)}
                 />
@@ -1670,14 +1670,14 @@ export default function ApplicationManagementPage() {
                 disabled={!interviewDate || !interviewTime || !interviewLocation || scheduleInterviewMutation.isPending}
                 className="w-full"
               >
-                {scheduleInterviewMutation.isPending ? "Scheduling..." : "Schedule Interview"}
+                {scheduleInterviewMutation.isPending ? applicationManagementCopy.dialogs.interview.submitting : applicationManagementCopy.dialogs.interview.submit}
               </Button>
 
               {/* Download Calendar Invite - show if interview is already scheduled */}
               {selectedApp?.interviewDate && selectedApp?.interviewTime && (
                 <div className="pt-4 border-t">
                   <p className="text-sm text-muted-foreground mb-2">
-                    Interview scheduled for {new Date(selectedApp.interviewDate).toLocaleDateString()} at {selectedApp.interviewTime}
+                    {applicationManagementCopy.dialogs.interview.scheduledPrefix} {new Date(selectedApp.interviewDate).toLocaleDateString()} at {selectedApp.interviewTime}
                   </p>
                   <Button
                     variant="outline"
@@ -1688,10 +1688,10 @@ export default function ApplicationManagementPage() {
                     }}
                   >
                     <FileDown className="h-4 w-4 mr-2" />
-                    Download Calendar Invite (.ics)
+                    {applicationManagementCopy.dialogs.interview.downloadInvite}
                   </Button>
                   <p className="text-xs text-muted-foreground mt-2">
-                    Share this file with the interview panel and candidate to add the interview to their calendars
+                    {applicationManagementCopy.dialogs.interview.downloadInviteHint}
                   </p>
                 </div>
               )}
@@ -1703,20 +1703,20 @@ export default function ApplicationManagementPage() {
         <Dialog key={`email-${selectedApp?.id ?? 'none'}`} open={showEmailDialog} onOpenChange={setShowEmailDialog}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Send Email - {selectedApp?.name}</DialogTitle>
+              <DialogTitle>{applicationManagementCopy.dialogs.email.titlePrefix} - {selectedApp?.name}</DialogTitle>
               <DialogDescription>
-                Select a template to send to this candidate
+                {applicationManagementCopy.dialogs.email.description}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 mt-4">
               <div>
-                <Label>Email Template</Label>
+                <Label>{applicationManagementCopy.dialogs.email.template}</Label>
                 <Select
                   value={selectedTemplateId?.toString() || ""}
                   onValueChange={(value) => setSelectedTemplateId(parseInt(value))}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select template..." />
+                    <SelectValue placeholder={applicationManagementCopy.dialogs.email.templatePlaceholder} />
                   </SelectTrigger>
                   <SelectContent>
                     {emailTemplates.map(template => (
@@ -1729,7 +1729,7 @@ export default function ApplicationManagementPage() {
               </div>
               {selectedTemplateId && (
                 <div className="p-3 bg-muted/50 rounded-lg border border-border">
-                  <Label className="text-sm text-muted-foreground">Preview</Label>
+                  <Label className="text-sm text-muted-foreground">{applicationManagementCopy.dialogs.email.preview}</Label>
                   <p className="text-sm text-foreground mt-1">
                     {emailTemplates.find(t => t.id === selectedTemplateId)?.body.substring(0, 200)}...
                   </p>
@@ -1747,7 +1747,7 @@ export default function ApplicationManagementPage() {
                 disabled={!selectedTemplateId || sendEmailMutation.isPending}
                 className="w-full"
               >
-                {sendEmailMutation.isPending ? "Sending..." : "Send Email"}
+                {sendEmailMutation.isPending ? applicationManagementCopy.dialogs.email.submitting : applicationManagementCopy.dialogs.email.submit}
               </Button>
             </div>
           </DialogContent>
@@ -1757,55 +1757,55 @@ export default function ApplicationManagementPage() {
         <Dialog open={showShareShortlistDialog} onOpenChange={setShowShareShortlistDialog}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Share Shortlist with Client</DialogTitle>
+              <DialogTitle>{applicationManagementCopy.dialogs.shortlist.title}</DialogTitle>
               <DialogDescription>
-                Create a client-ready shortlist link for the selected candidates.
+                {applicationManagementCopy.dialogs.shortlist.description}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 mt-4">
               <div>
-                <Label>Client</Label>
+                <Label>{applicationManagementCopy.dialogs.shortlist.client}</Label>
                 <p className="text-sm text-foreground font-medium">
-                  {job?.clientId ? job?.title : "No client linked to this job"}
+                  {job?.clientId ? job?.title : applicationManagementCopy.dialogs.shortlist.noClientLinked}
                 </p>
                 {!job?.clientId && (
                   <p className="text-xs text-destructive mt-1">
-                    Link a client to this job on the job posting to enable sharing.
+                    {applicationManagementCopy.dialogs.shortlist.noClientHint}
                   </p>
                 )}
               </div>
               <div>
-                <Label>Shortlist Title (Optional)</Label>
+                <Label>{applicationManagementCopy.dialogs.shortlist.titleLabel}</Label>
                 <Input
                   value={shortlistTitle}
                   onChange={(e) => setShortlistTitle(e.target.value)}
-                  placeholder={job?.title || "e.g., Frontend Engineer Shortlist"}
+                  placeholder={job?.title || applicationManagementCopy.dialogs.shortlist.titlePlaceholder}
                 />
               </div>
               <div>
-                <Label>Message to Client (Optional)</Label>
+                <Label>{applicationManagementCopy.dialogs.shortlist.messageLabel}</Label>
                 <Textarea
                   value={shortlistMessage}
                   onChange={(e) => setShortlistMessage(e.target.value)}
-                  placeholder="Context for this shortlist, expectations, or notes for the client..."
+                  placeholder={applicationManagementCopy.dialogs.shortlist.messagePlaceholder}
                   rows={3}
                 />
               </div>
               <div>
-                <Label>Expires At (Optional)</Label>
+                <Label>{applicationManagementCopy.dialogs.shortlist.expiresAt}</Label>
                 <Input
                   type="date"
                   value={shortlistExpiresAt}
                   onChange={(e) => setShortlistExpiresAt(e.target.value)}
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Leave blank to keep the shortlist active indefinitely.
+                  {applicationManagementCopy.dialogs.shortlist.expiresHint}
                 </p>
               </div>
 
               {shortlistUrl && (
                 <div className="p-3 bg-muted/50 border border-border rounded-md space-y-2">
-                  <Label className="text-xs text-muted-foreground">Shareable Link</Label>
+                  <Label className="text-xs text-muted-foreground">{applicationManagementCopy.dialogs.shortlist.shareableLink}</Label>
                   <div className="flex items-center gap-2">
                     <Input value={shortlistUrl} readOnly className="text-xs" />
                     <Button
@@ -1817,20 +1817,20 @@ export default function ApplicationManagementPage() {
                           .writeText(shortlistUrl)
                           .then(() =>
                             toast({
-                              title: "Link Copied",
-                              description: "Shortlist link copied to clipboard.",
+                              title: applicationManagementCopy.toasts.linkCopiedTitle,
+                              description: applicationManagementCopy.toasts.linkCopiedDescription,
                             })
                           )
                           .catch(() =>
                             toast({
-                              title: "Copy Failed",
-                              description: "Could not copy the link. Please copy it manually.",
+                              title: applicationManagementCopy.toasts.copyFailedTitle,
+                              description: applicationManagementCopy.toasts.copyFailedDescription,
                               variant: "destructive",
                             })
                           );
                       }}
                     >
-                      Copy
+                      {applicationManagementCopy.dialogs.shortlist.copy}
                     </Button>
                   </div>
                 </div>
@@ -1847,7 +1847,7 @@ export default function ApplicationManagementPage() {
                   setShortlistExpiresAt("");
                 }}
               >
-                Close
+                {applicationManagementCopy.dialogs.shortlist.close}
               </Button>
               <Button
                 onClick={() => createShortlistMutation.mutate()}
@@ -1857,7 +1857,7 @@ export default function ApplicationManagementPage() {
                   createShortlistMutation.isPending
                 }
               >
-                {createShortlistMutation.isPending ? "Creating..." : "Create Shortlist"}
+                {createShortlistMutation.isPending ? applicationManagementCopy.dialogs.shortlist.creating : applicationManagementCopy.dialogs.shortlist.create}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -1867,9 +1867,9 @@ export default function ApplicationManagementPage() {
         <Dialog key={`bulk-email-${selectedApplications.length}`} open={showBulkEmailDialog} onOpenChange={setShowBulkEmailDialog}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Send Bulk Email - {selectedApplications.length} selected</DialogTitle>
+              <DialogTitle>{applicationManagementCopy.dialogs.bulkEmail.titlePrefix} - {selectedApplications.length} {applicationManagementCopy.dialogs.bulkEmail.titleSuffix}</DialogTitle>
               <DialogDescription>
-                Choose a template to send to all selected candidates
+                {applicationManagementCopy.dialogs.bulkEmail.description}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 mt-4">
@@ -1885,24 +1885,24 @@ export default function ApplicationManagementPage() {
                     }
                   }}
                 />
-                <span className="text-sm text-muted-foreground">Select all in current view</span>
+                <span className="text-sm text-muted-foreground">{applicationManagementCopy.dialogs.bulkEmail.selectAllInView}</span>
                 {selectedApplications.length > 0 && (
                   <button
                     className="text-xs text-muted-foreground underline ml-auto hover:text-foreground"
                     onClick={() => setSelectedApplications([])}
                   >
-                    Clear selection
+                    {applicationManagementCopy.dialogs.bulkEmail.clearSelection}
                   </button>
                 )}
               </div>
               <div>
-                <Label>Email Template</Label>
+                <Label>{applicationManagementCopy.dialogs.bulkEmail.template}</Label>
                 <Select
                   value={bulkTemplateId?.toString() || ""}
                   onValueChange={(value) => setBulkTemplateId(parseInt(value))}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select template..." />
+                    <SelectValue placeholder={applicationManagementCopy.dialogs.bulkEmail.templatePlaceholder} />
                   </SelectTrigger>
                   <SelectContent>
                     {emailTemplates.map((template) => (
@@ -1915,7 +1915,7 @@ export default function ApplicationManagementPage() {
               </div>
               {bulkTemplateId && (
                 <div className="p-3 bg-muted/50 rounded-lg border border-border">
-                  <Label className="text-sm text-muted-foreground">Preview</Label>
+                  <Label className="text-sm text-muted-foreground">{applicationManagementCopy.dialogs.bulkEmail.preview}</Label>
                   <p className="text-sm text-foreground mt-1">
                     {emailTemplates.find((t) => t.id === bulkTemplateId)?.body.substring(0, 200)}...
                   </p>
@@ -1932,11 +1932,11 @@ export default function ApplicationManagementPage() {
                 disabled={!bulkTemplateId || sendBulkEmailsMutation.isPending}
                 className="w-full"
               >
-                {sendBulkEmailsMutation.isPending ? "Sending..." : "Send to Selected"}
+                {sendBulkEmailsMutation.isPending ? applicationManagementCopy.dialogs.bulkEmail.submitting : applicationManagementCopy.dialogs.bulkEmail.submit}
               </Button>
               {sendBulkEmailsMutation.isPending && (
                 <p className="text-xs text-muted-foreground text-center">
-                  Sending {bulkProgress.sent}/{bulkProgress.total}...
+                  {applicationManagementCopy.dialogs.bulkEmail.progressPrefix} {bulkProgress.sent}/{bulkProgress.total}...
                 </p>
               )}
             </div>
@@ -1947,9 +1947,9 @@ export default function ApplicationManagementPage() {
         <Dialog key={`bulk-forms-${selectedApplications.length}`} open={showBulkFormsDialog} onOpenChange={setShowBulkFormsDialog}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Send Bulk Form - {selectedApplications.length} selected</DialogTitle>
+              <DialogTitle>{applicationManagementCopy.dialogs.bulkForms.titlePrefix} - {selectedApplications.length} {applicationManagementCopy.dialogs.bulkForms.titleSuffix}</DialogTitle>
               <DialogDescription>
-                Choose a form template to send to all selected candidates
+                {applicationManagementCopy.dialogs.bulkForms.description}
               </DialogDescription>
             </DialogHeader>
             {/* Invitation Quota Display */}
@@ -1963,11 +1963,11 @@ export default function ApplicationManagementPage() {
               }`}>
                 <span>
                   {invitationQuota.remaining === 0
-                    ? 'Daily invite limit reached'
-                    : `${invitationQuota.remaining} invites remaining today`}
+                    ? applicationManagementCopy.dialogs.bulkForms.dailyInviteLimitReached
+                    : `${invitationQuota.remaining} ${applicationManagementCopy.dialogs.bulkForms.invitesRemainingSuffix}`}
                 </span>
                 <span className="text-xs opacity-75">
-                  ({invitationQuota.used}/{invitationQuota.limit} used)
+                  ({invitationQuota.used}/{invitationQuota.limit} {applicationManagementCopy.dialogs.bulkForms.usedSuffix})
                 </span>
               </div>
             )}
@@ -1984,24 +1984,24 @@ export default function ApplicationManagementPage() {
                     }
                   }}
                 />
-                <span className="text-sm text-muted-foreground">Select all in current view</span>
+                <span className="text-sm text-muted-foreground">{applicationManagementCopy.dialogs.bulkForms.selectAllInView}</span>
                 {selectedApplications.length > 0 && (
                   <button
                     className="text-xs text-muted-foreground underline ml-auto hover:text-foreground"
                     onClick={() => setSelectedApplications([])}
                   >
-                    Clear selection
+                    {applicationManagementCopy.dialogs.bulkForms.clearSelection}
                   </button>
                 )}
               </div>
               <div>
-                <Label>Form Template</Label>
+                <Label>{applicationManagementCopy.dialogs.bulkForms.formTemplate}</Label>
                 <Select
                   value={bulkFormId?.toString() || ""}
                   onValueChange={(value) => setBulkFormId(parseInt(value))}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Select form template..." />
+                    <SelectValue placeholder={applicationManagementCopy.dialogs.bulkForms.formTemplatePlaceholder} />
                   </SelectTrigger>
                   <SelectContent>
                     {formTemplates.map((template) => (
@@ -2015,7 +2015,7 @@ export default function ApplicationManagementPage() {
               </div>
               {bulkFormId && (
                 <div className="p-3 bg-muted/50 rounded-lg border border-border">
-                  <Label className="text-sm text-muted-foreground">Form Info</Label>
+                  <Label className="text-sm text-muted-foreground">{applicationManagementCopy.dialogs.bulkForms.formInfo}</Label>
                   {(() => {
                     const template = formTemplates.find((t) => t.id === bulkFormId);
                     return template ? (
@@ -2025,7 +2025,7 @@ export default function ApplicationManagementPage() {
                           <p className="text-muted-foreground mt-1">{template.description}</p>
                         )}
                         <p className="text-muted-foreground mt-1">
-                          {template.fields?.length || 0} question{template.fields?.length !== 1 ? 's' : ''}
+                          {template.fields?.length || 0} {template.fields?.length !== 1 ? applicationManagementCopy.dialogs.bulkForms.questionsSuffixPlural : applicationManagementCopy.dialogs.bulkForms.questionsSuffixSingle}
                         </p>
                       </div>
                     ) : null;
@@ -2033,15 +2033,15 @@ export default function ApplicationManagementPage() {
                 </div>
               )}
               <div>
-                <Label>Custom Message (Optional)</Label>
+                <Label>{applicationManagementCopy.dialogs.bulkForms.customMessage}</Label>
                 <Textarea
-                  placeholder="Add a personal message for all selected candidates..."
+                  placeholder={applicationManagementCopy.dialogs.bulkForms.customMessagePlaceholder}
                   value={bulkFormMessage}
                   onChange={(e) => setBulkFormMessage(e.target.value)}
                   rows={3}
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  This message will be included in the invitation email for all candidates
+                  {applicationManagementCopy.dialogs.bulkForms.customMessageHint}
                 </p>
               </div>
               <Button
@@ -2057,14 +2057,14 @@ export default function ApplicationManagementPage() {
                 className="w-full"
               >
                 {sendBulkFormsMutation.isPending
-                  ? "Sending..."
+                  ? applicationManagementCopy.dialogs.bulkForms.submitting
                   : invitationQuota?.remaining === 0
-                  ? "Daily limit reached"
-                  : "Send to Selected"}
+                  ? applicationManagementCopy.dialogs.bulkForms.dailyLimitReachedButton
+                  : applicationManagementCopy.dialogs.bulkForms.submit}
               </Button>
               {sendBulkFormsMutation.isPending && (
                 <p className="text-xs text-muted-foreground text-center">
-                  Sending {bulkFormsProgress.sent}/{bulkFormsProgress.total}...
+                  {applicationManagementCopy.dialogs.bulkForms.progressPrefix} {bulkFormsProgress.sent}/{bulkFormsProgress.total}...
                 </p>
               )}
             </div>
@@ -2075,15 +2075,15 @@ export default function ApplicationManagementPage() {
         <Dialog open={showBatchInterviewDialog} onOpenChange={setShowBatchInterviewDialog}>
           <DialogContent className="max-w-md">
             <DialogHeader>
-              <DialogTitle>Schedule Batch Interviews</DialogTitle>
+              <DialogTitle>{applicationManagementCopy.dialogs.batchInterview.title}</DialogTitle>
               <DialogDescription>
-                Schedule interviews for the selected candidates. Use an interval to create back-to-back slots.
+                {applicationManagementCopy.dialogs.batchInterview.description}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-2">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-foreground text-sm">Date</Label>
+                  <Label className="text-foreground text-sm">{applicationManagementCopy.dialogs.batchInterview.date}</Label>
                   <Input
                     type="date"
                     value={batchInterviewDate}
@@ -2091,7 +2091,7 @@ export default function ApplicationManagementPage() {
                   />
                 </div>
                 <div>
-                  <Label className="text-foreground text-sm">Start time</Label>
+                  <Label className="text-foreground text-sm">{applicationManagementCopy.dialogs.batchInterview.startTime}</Label>
                   <Input
                     type="time"
                     value={batchInterviewTime}
@@ -2102,16 +2102,16 @@ export default function ApplicationManagementPage() {
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label className="text-foreground text-sm">Interval between interviews</Label>
+                  <Label className="text-foreground text-sm">{applicationManagementCopy.dialogs.batchInterview.intervalLabel}</Label>
                   <Select
                     value={batchIntervalHours}
                     onValueChange={setBatchIntervalHours}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Interval" />
+                      <SelectValue placeholder={applicationManagementCopy.dialogs.batchInterview.intervalPlaceholder} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="0">0 hours (same time)</SelectItem>
+                      <SelectItem value="0">{applicationManagementCopy.dialogs.batchInterview.intervalSameTime}</SelectItem>
                       <SelectItem value="0.5">0.5 hours</SelectItem>
                       <SelectItem value="1">1 hour</SelectItem>
                       <SelectItem value="2">2 hours</SelectItem>
@@ -2120,13 +2120,13 @@ export default function ApplicationManagementPage() {
                   </Select>
                 </div>
                 <div>
-                  <Label className="text-foreground text-sm">Move to stage</Label>
+                  <Label className="text-foreground text-sm">{applicationManagementCopy.dialogs.batchInterview.moveToStage}</Label>
                   <Select
                     value={batchStageId}
                     onValueChange={setBatchStageId}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Keep current" />
+                      <SelectValue placeholder={applicationManagementCopy.dialogs.batchInterview.keepCurrent} />
                     </SelectTrigger>
                     <SelectContent>
                       {pipelineStages.map((stage) => (
@@ -2140,26 +2140,25 @@ export default function ApplicationManagementPage() {
               </div>
 
               <div>
-                <Label className="text-foreground text-sm">Location</Label>
+                <Label className="text-foreground text-sm">{applicationManagementCopy.dialogs.batchInterview.location}</Label>
                 <Input
-                  placeholder="e.g. Zoom link or office address"
+                  placeholder={applicationManagementCopy.dialogs.batchInterview.locationPlaceholder}
                   value={batchLocation}
                   onChange={(e) => setBatchLocation(e.target.value)}
                 />
               </div>
 
               <div>
-                <Label className="text-foreground text-sm">Notes (optional)</Label>
+                <Label className="text-foreground text-sm">{applicationManagementCopy.dialogs.batchInterview.notes}</Label>
                 <Textarea
                   value={batchNotes}
                   onChange={(e) => setBatchNotes(e.target.value)}
-                  placeholder="Add any interviewer or candidate instructions..."
+                  placeholder={applicationManagementCopy.dialogs.batchInterview.notesPlaceholder}
                 />
               </div>
 
               <p className="text-xs text-muted-foreground">
-                When an interval is set, each candidate will be scheduled in sequence starting from the selected time.
-                Times are based on your browser&apos;s local timezone.
+                {applicationManagementCopy.dialogs.batchInterview.hint}
               </p>
             </div>
             <DialogFooter>
@@ -2168,7 +2167,7 @@ export default function ApplicationManagementPage() {
                 onClick={() => setShowBatchInterviewDialog(false)}
                 disabled={batchInterviewMutation.isPending}
               >
-                Cancel
+                {applicationManagementCopy.dialogs.batchInterview.cancel}
               </Button>
               <Button
                 onClick={() => batchInterviewMutation.mutate()}
@@ -2179,7 +2178,7 @@ export default function ApplicationManagementPage() {
                   selectedApplications.length === 0
                 }
               >
-                {batchInterviewMutation.isPending ? "Scheduling..." : "Schedule Interviews"}
+                {batchInterviewMutation.isPending ? applicationManagementCopy.dialogs.batchInterview.submitting : applicationManagementCopy.dialogs.batchInterview.submit}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -2189,14 +2188,14 @@ export default function ApplicationManagementPage() {
         <Dialog key={`history-${selectedApp?.id ?? 'none'}`} open={showHistoryDialog} onOpenChange={setShowHistoryDialog}>
           <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Stage History - {selectedApp?.name}</DialogTitle>
+              <DialogTitle>{applicationManagementCopy.dialogs.stageHistory.titlePrefix} - {selectedApp?.name}</DialogTitle>
               <DialogDescription>
-                Timeline of all stage changes for this application
+                {applicationManagementCopy.dialogs.stageHistory.description}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-3 mt-4 max-h-96 overflow-y-auto">
               {stageHistory.length === 0 ? (
-                <p className="text-muted-foreground text-center py-8">No stage history available</p>
+                <p className="text-muted-foreground text-center py-8">{applicationManagementCopy.dialogs.stageHistory.empty}</p>
               ) : (
                 stageHistory.map((history: any, idx: number) => {
                   const fromStage = pipelineStages.find(s => s.id === history.fromStage);
@@ -2292,10 +2291,10 @@ export default function ApplicationManagementPage() {
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
                 <Sparkles className="h-5 w-5 text-primary" />
-                Generate AI Summaries
+                {applicationManagementCopy.dialogs.aiSummary.title}
               </DialogTitle>
               <DialogDescription>
-                Generate AI-powered candidate summaries with suggested actions.
+                {applicationManagementCopy.dialogs.aiSummary.description}
               </DialogDescription>
             </DialogHeader>
 
@@ -2303,16 +2302,16 @@ export default function ApplicationManagementPage() {
               {/* Selection and generation counts */}
               <div className="text-sm bg-muted/30 p-3 rounded-lg space-y-1">
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Selected candidates:</span>
+                  <span className="text-muted-foreground">{applicationManagementCopy.dialogs.aiSummary.selectedCandidates}</span>
                   <span className="font-medium">{selectedApplications.length}</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Will generate:</span>
+                  <span className="text-muted-foreground">{applicationManagementCopy.dialogs.aiSummary.willGenerate}</span>
                   <span className="font-medium text-primary">{toGenerateCount}</span>
                 </div>
                 {willSkipCount > 0 && (
                   <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Already have summaries (will skip):</span>
+                    <span className="text-muted-foreground">{applicationManagementCopy.dialogs.aiSummary.alreadyHaveSummaries}</span>
                     <span className="font-medium text-muted-foreground">{willSkipCount}</span>
                   </div>
                 )}
@@ -2322,9 +2321,9 @@ export default function ApplicationManagementPage() {
               {selectedApplications.length > 50 && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Too many selected</AlertTitle>
+                  <AlertTitle>{applicationManagementCopy.dialogs.aiSummary.tooManySelectedTitle}</AlertTitle>
                   <AlertDescription>
-                    Please select 50 or fewer candidates. You have {selectedApplications.length} selected.
+                    {applicationManagementCopy.dialogs.aiSummary.tooManySelectedDescriptionPrefix} {selectedApplications.length} {applicationManagementCopy.dialogs.aiSummary.tooManySelectedDescriptionSuffix}
                   </AlertDescription>
                 </Alert>
               )}
@@ -2333,10 +2332,10 @@ export default function ApplicationManagementPage() {
               {summaryLimitStatus && selectedApplications.length <= 50 && toGenerateCount > summaryLimitStatus.effectiveRemaining && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Daily limit exceeded</AlertTitle>
+                  <AlertTitle>{applicationManagementCopy.dialogs.aiSummary.dailyLimitExceededTitle}</AlertTitle>
                   <AlertDescription>
-                    You have only {summaryLimitStatus.effectiveRemaining} analyses left today.
-                    {toGenerateCount} would be generated. Reduce selection or check "Regenerate" to skip fewer.
+                    You have only {summaryLimitStatus.effectiveRemaining} {applicationManagementCopy.dialogs.aiSummary.dailyLimitExceededDescriptionMiddle}
+                    {toGenerateCount} {applicationManagementCopy.dialogs.aiSummary.dailyLimitExceededDescriptionSuffix}
                   </AlertDescription>
                 </Alert>
               )}
@@ -2345,9 +2344,9 @@ export default function ApplicationManagementPage() {
               {summaryLimitStatus && !summaryLimitStatus.budgetAllowed && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertTitle>Service Unavailable</AlertTitle>
+                  <AlertTitle>{applicationManagementCopy.dialogs.aiSummary.serviceUnavailableTitle}</AlertTitle>
                   <AlertDescription>
-                    AI service is temporarily unavailable. Please try again later.
+                    {applicationManagementCopy.dialogs.aiSummary.serviceUnavailableDescription}
                   </AlertDescription>
                 </Alert>
               )}
@@ -2356,15 +2355,15 @@ export default function ApplicationManagementPage() {
               {summaryLimitStatus && summaryLimitStatus.budgetAllowed && (
                 <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
                   <div className="flex justify-between">
-                    <span>Daily limit:</span>
+                    <span>{applicationManagementCopy.dialogs.aiSummary.dailyLimit}</span>
                     <span>{summaryLimitStatus.dailyUsed} / {summaryLimitStatus.dailyLimit} used</span>
                   </div>
                   <div className="flex justify-between mt-1">
-                    <span>Remaining:</span>
+                    <span>{applicationManagementCopy.dialogs.aiSummary.remaining}</span>
                     <span className="font-medium text-foreground">{summaryLimitStatus.effectiveRemaining}</span>
                   </div>
                   <div className="flex justify-between mt-1">
-                    <span>Resets at:</span>
+                    <span>{applicationManagementCopy.dialogs.aiSummary.resetsAt}</span>
                     <span>{new Date(summaryLimitStatus.dailyResetAt).toLocaleString()}</span>
                   </div>
                 </div>
@@ -2380,10 +2379,10 @@ export default function ApplicationManagementPage() {
                 />
                 <div>
                   <label htmlFor="regenerate" className="text-sm font-medium cursor-pointer">
-                    Regenerate existing summaries
+                    {applicationManagementCopy.dialogs.aiSummary.regenerateTitle}
                   </label>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    By default, candidates with existing summaries are skipped
+                    {applicationManagementCopy.dialogs.aiSummary.regenerateHint}
                   </p>
                 </div>
               </div>
@@ -2393,11 +2392,11 @@ export default function ApplicationManagementPage() {
                 <div className="space-y-3 p-3 bg-primary/5 border border-primary/20 rounded-lg">
                   <div className="flex items-center gap-2">
                     <Sparkles className="h-4 w-4 text-primary animate-pulse" />
-                    <span className="text-sm font-medium">Generating summaries...</span>
+                    <span className="text-sm font-medium">{applicationManagementCopy.dialogs.aiSummary.generating}</span>
                   </div>
                   <Progress value={summaryJobStatus?.progress || 0} className="h-2" />
                   <p className="text-sm text-muted-foreground text-center">
-                    {summaryJobStatus?.processedCount || 0} / {summaryJobStatus?.totalCount || 0} processed
+                    {summaryJobStatus?.processedCount || 0} / {summaryJobStatus?.totalCount || 0} {applicationManagementCopy.dialogs.aiSummary.processedSuffix}
                   </p>
                 </div>
               )}
@@ -2412,7 +2411,7 @@ export default function ApplicationManagementPage() {
                 }}
                 disabled={startAISummaryMutation.isPending}
               >
-                {aiSummaryJobId ? 'Close' : 'Cancel'}
+                {aiSummaryJobId ? applicationManagementCopy.dialogs.aiSummary.close : applicationManagementCopy.dialogs.aiSummary.cancel}
               </Button>
               {aiSummaryJobId && (
                 <Button
@@ -2429,17 +2428,17 @@ export default function ApplicationManagementPage() {
                         throw new Error(errorData.error || 'Failed to cancel job');
                       }
                       setAiSummaryJobId(null);
-                      toast({ title: 'Job Cancelled', description: 'AI summary generation cancelled.' });
+                      toast({ title: applicationManagementCopy.toasts.jobCancelledTitle, description: applicationManagementCopy.toasts.jobCancelledDescription });
                     } catch (err) {
                       toast({
-                        title: 'Cancel Failed',
-                        description: err instanceof Error ? err.message : 'Could not cancel the job',
+                        title: applicationManagementCopy.toasts.cancelFailedTitle,
+                        description: err instanceof Error ? err.message : applicationManagementCopy.toasts.cancelFailedDescription,
                         variant: 'destructive'
                       });
                     }
                   }}
                 >
-                  Cancel Job
+                  {applicationManagementCopy.dialogs.aiSummary.cancelJob}
                 </Button>
               )}
               {!aiSummaryJobId && (
@@ -2460,12 +2459,12 @@ export default function ApplicationManagementPage() {
                   {startAISummaryMutation.isPending ? (
                     <>
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Starting...
+                      {applicationManagementCopy.dialogs.aiSummary.starting}
                     </>
                   ) : (
                     <>
                       <Sparkles className="h-4 w-4 mr-2" />
-                      Generate {toGenerateCount} {toGenerateCount === 1 ? 'Summary' : 'Summaries'}
+                      {applicationManagementCopy.dialogs.aiSummary.generatePrefix} {toGenerateCount} {toGenerateCount === 1 ? applicationManagementCopy.dialogs.aiSummary.summarySingular : applicationManagementCopy.dialogs.aiSummary.summaryPlural}
                     </>
                   )}
                 </Button>
