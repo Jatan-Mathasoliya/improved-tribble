@@ -32,6 +32,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { DialogTitle } from "@/components/ui/dialog";
 import type { Organization, Membership } from "@/hooks/use-organization";
 import type { User as SelectUser } from "@shared/schema";
 
@@ -326,6 +327,7 @@ export function AtsTopBar({
       </header>
 
       <CommandDialog open={commandOpen} onOpenChange={setCommandOpen}>
+        <DialogTitle className="sr-only">Quick jump</DialogTitle>
         <CommandInput placeholder="Search pages, settings, and ATS workflows…" />
         <CommandList className="max-h-[420px]">
           <CommandEmpty>No matching routes.</CommandEmpty>
