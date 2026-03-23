@@ -314,6 +314,10 @@ function parseJobIdentifier(param: string): { type: 'id' | 'slug'; value: string
   return { type: 'slug', value: param };
 }
 
+const RESERVED_JOB_PATHS = new Set([
+  "post",
+]);
+
 export async function serveStatic(app: Express) {
   // Compute dirname in ESM
   const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -530,6 +534,12 @@ export async function serveStatic(app: Express) {
   app.get('/jobs/:param', async (req, res, next) => {
     try {
       const { param } = req.params;
+
+      if (RESERVED_JOB_PATHS.has(param)) {
+        next();
+        return;
+      }
+
       const identifier = parseJobIdentifier(param);
 
       // Fetch job data
