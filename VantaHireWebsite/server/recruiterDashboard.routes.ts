@@ -1015,7 +1015,7 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
             count: finalStageCandidates.length,
             emptyMessage: "No candidates are in the final stretch right now.",
             viewAllHref: applicationListHref,
-            items: finalStageCandidates.slice(0, MAX_ITEMS_PER_SECTION).map((app) => {
+            items: finalStageCandidates.map((app) => {
               const stage = app.currentStage ? stageMeta.get(app.currentStage) : undefined;
               const stageLabel = stage?.name ?? "Final stage";
               const waitDays = daysBetween(app.stageChangedAt ?? app.interviewDate ?? app.updatedAt ?? app.appliedAt) ?? 0;
