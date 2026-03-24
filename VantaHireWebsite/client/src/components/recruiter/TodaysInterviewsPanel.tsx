@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { recruiterDashboardCopy } from "@/lib/internal-copy";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { DASHBOARD_EYEBROW, DASHBOARD_PANEL, DASHBOARD_PANEL_MUTED, DASHBOARD_TITLE } from "@/lib/dashboard-theme";
 import { cn } from "@/lib/utils";
 
@@ -120,8 +121,10 @@ function avatarFallbackClass(name: string): string {
 }
 
 export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
+  const listRef = useRef<HTMLDivElement | null>(null);
   const todayKey = useMemo(() => formatDateKey(new Date()), []);
   const [selectedDate, setSelectedDate] = useState(todayKey);
+  const isMobile = useIsMobile();
 
   const { data, isLoading, isFetching } = useQuery<TodaysInterviewsResponse>({
     queryKey: ["/api/recruiter-dashboard/todays-interviews", jobId, selectedDate],
@@ -150,11 +153,16 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
   const items = data?.items ?? [];
   const count = data?.count ?? 0;
 
+  useEffect(() => {
+    if (!isMobile || !listRef.current) return;
+    listRef.current.style.overflowY = "auto";
+  }, [isMobile]);
+
   return (
     <section
       className={cn(
         DASHBOARD_PANEL,
-        "interview-panel h-[492px] w-full rounded-[26px] bg-white/95 px-5 py-5 sm:px-6 sm:py-6",
+        "interview-panel h-auto min-h-0 w-full rounded-[26px] bg-white/95 px-4 py-5 md:h-[492px] md:px-6 md:py-6",
       )}
     >
       <div className="flex items-center justify-between gap-4">
@@ -188,7 +196,7 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
         </span>
       </div>
 
-      <div className="mt-7 grid grid-cols-4 gap-x-4 gap-y-4 sm:grid-cols-7 sm:gap-x-5">
+      <div className="mt-7 flex gap-3 overflow-x-auto overflow-y-hidden pb-1 md:grid md:grid-cols-7 md:gap-x-5 md:gap-y-4 md:overflow-visible">
         {weekDays.map((day) => {
           const date = parseDateKey(day.date);
           const isSelected = day.date === selectedDate;
@@ -199,7 +207,7 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
               key={day.date}
               type="button"
               onClick={() => setSelectedDate(day.date)}
-              className="flex flex-col items-center gap-3 text-center"
+              className="flex min-w-[52px] shrink-0 flex-col items-center gap-2 text-center md:min-w-0"
             >
               <span
                 className={cn(
@@ -212,7 +220,7 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
               </span>
               <span
                 className={cn(
-                  "flex h-[42px] w-[42px] items-center justify-center rounded-full border text-[14px] font-medium leading-none transition-all",
+                  "flex h-8 w-8 items-center justify-center rounded-full border text-[11px] font-medium leading-none transition-all md:h-[42px] md:w-[42px] md:text-[14px]",
                   isSelected
                     ? "border-[#5B4FF7] bg-[#5B4FF7] text-white shadow-[0_8px_18px_rgba(91,79,247,0.22)]"
                     : "border-[#ECEEF3] bg-[#FAFAFC] text-[#B8BDC8]",
@@ -229,8 +237,9 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
       </div>
 
       <div
+        ref={listRef}
         className={cn(
-          "interview-list mt-6 h-[248px] space-y-4 overflow-y-hidden pr-1 transition-[overflow,opacity] duration-150 hover:[scrollbar-color:#C4C0FF_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-[4px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#C4C0FF] [&::-webkit-scrollbar-thumb:hover]:bg-[#6C63FF] [&::-webkit-scrollbar-track]:bg-transparent [.interview-panel:hover_&]:overflow-y-auto md:h-[272px] xl:h-[248px]",
+          "interview-list mt-6 space-y-4 overflow-y-auto pr-1 transition-[overflow,opacity] duration-150 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-[4px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#C4C0FF] [&::-webkit-scrollbar-thumb:hover]:bg-[#6C63FF] [&::-webkit-scrollbar-track]:bg-transparent md:h-[272px] md:overflow-y-hidden md:hover:[scrollbar-color:#C4C0FF_transparent] md:[.interview-panel:hover_&]:overflow-y-auto xl:h-[248px]",
           isFetching && !isLoading && "opacity-70",
         )}
       >
@@ -262,19 +271,24 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
             return (
               <div
                 key={item.id}
+                onClick={() => {
+                  if (isMobile) {
+                    window.location.assign(item.ctaHref);
+                  }
+                }}
                 className={cn(
                   DASHBOARD_PANEL_MUTED,
-                  "flex flex-col gap-3 px-4 py-3.5 transition-colors hover:bg-[#F3F4F8] sm:flex-row sm:items-center sm:gap-4 sm:px-5",
+                  "flex cursor-pointer items-start gap-3 px-4 py-3.5 transition-colors hover:bg-[#F3F4F8] md:items-center md:gap-4 md:px-5",
                 )}
               >
-                <div className="w-[58px] shrink-0 text-center sm:text-left">
+                <div className="w-[58px] shrink-0 text-left">
                   <div className="text-[13px] font-semibold leading-[1.05] tracking-[-0.01em] text-[#374151]">
                     {time}
                   </div>
                   <div className="mt-1 text-[13px] font-medium leading-none text-[#6B7280]">{meridiem}</div>
                 </div>
 
-                <div className="flex min-w-0 flex-1 items-center gap-4">
+                <div className="flex min-w-0 flex-1 flex-col items-start gap-3 md:flex-row md:items-center md:gap-4">
                   <div className="relative shrink-0">
                     <Avatar className="h-[46px] w-[46px] border border-[#E5E7EB]">
                       <AvatarImage src={item.avatarUrl ?? undefined} alt={item.candidateName} className="object-cover" />
@@ -305,15 +319,16 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
                   </div>
                 </div>
 
-                <div className="flex shrink-0 items-center justify-end gap-4 sm:gap-5">
+                <div className="ml-auto flex shrink-0 items-center justify-end gap-4 md:gap-5">
                   <Button
                     asChild
                     className={cn(
-                      "h-auto rounded-[10px] px-4 py-2 text-[13px] font-semibold leading-none shadow-none",
+                      "h-11 min-w-[44px] rounded-[10px] px-4 py-2 text-[13px] font-semibold leading-none shadow-none",
                       isPrimaryAction
                         ? "bg-[#5B4FF7] text-white hover:bg-[#4F46E5]"
                         : "border-0 bg-[#F0F0F0] text-[#4B5563] hover:bg-[#E9E9E9]",
                     )}
+                    onClick={(event) => event.stopPropagation()}
                   >
                     <a href={item.ctaHref}>{item.ctaLabel}</a>
                   </Button>

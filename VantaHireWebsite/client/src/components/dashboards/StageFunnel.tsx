@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsTouchDevice } from "@/hooks/use-touch-device";
 import { DASHBOARD_EYEBROW, DASHBOARD_PANEL, DASHBOARD_PANEL_SOFT, DASHBOARD_TITLE } from "@/lib/dashboard-theme";
 import { recruiterDashboardCopy } from "@/lib/internal-copy";
 import { cn } from "@/lib/utils";
@@ -189,6 +191,8 @@ export function StageFunnel({
   applications = [],
   pipelineStages = [],
 }: StageFunnelProps) {
+  const isMobile = useIsMobile();
+  const isTouchDevice = useIsTouchDevice();
   const [hoveredStageIndex, setHoveredStageIndex] = useState<number | null>(null);
   const [contentVisible, setContentVisible] = useState(true);
   const [connectorPath, setConnectorPath] = useState<string>("");
@@ -280,6 +284,13 @@ export function StageFunnel({
   });
 
   useEffect(() => {
+    if (!data.length) return;
+    if (isTouchDevice && hoveredStageIndex == null) {
+      setHoveredStageIndex(0);
+    }
+  }, [data.length, hoveredStageIndex, isTouchDevice]);
+
+  useEffect(() => {
     setContentVisible(false);
     const timer = window.setTimeout(() => setContentVisible(true), 70);
     return () => window.clearTimeout(timer);
@@ -291,7 +302,7 @@ export function StageFunnel({
       const panel = detailPanelRef.current;
       const stageEl = hoveredStageIndex != null ? stageRefs.current[hoveredStageIndex] : null;
 
-      if (!container || !panel || !stageEl || window.innerWidth < 1024) {
+      if (!container || !panel || !stageEl || window.innerWidth < 1024 || isMobile) {
         setShowConnector(false);
         setConnectorPath("");
         return;
@@ -316,7 +327,7 @@ export function StageFunnel({
     updateConnector();
     window.addEventListener("resize", updateConnector);
     return () => window.removeEventListener("resize", updateConnector);
-  }, [hoveredStageIndex, data.length]);
+  }, [hoveredStageIndex, data.length, isMobile]);
 
   const details = detailsQuery.data;
   const effectiveAvgTimeInStageDays =
@@ -352,7 +363,7 @@ export function StageFunnel({
           {recruiterDashboardCopy.funnel.description}
         </p>
       </CardHeader>
-      <CardContent className="px-6 pb-6 pt-0 lg:px-8 lg:pb-8">
+      <CardContent className="px-4 pb-4 pt-0 sm:px-6 sm:pb-6 lg:px-6 lg:pb-6 xl:px-8 xl:pb-8">
         {isLoading ? (
           <div className="h-[420px] rounded-[24px] bg-[#F5F7FA] animate-pulse" />
         ) : data.length === 0 ? (
@@ -361,7 +372,7 @@ export function StageFunnel({
           </div>
         ) : (
           <div ref={containerRef} className="relative">
-            <div className="grid items-center gap-8 xl:grid-cols-[minmax(0,55%)_minmax(0,45%)]">
+            <div className="grid items-start gap-5 md:gap-6 xl:grid-cols-[minmax(0,55%)_minmax(0,45%)] xl:items-center xl:gap-8">
               <div className="min-w-0">
                 <div className="space-y-1">
                   {data.map((stage, index) => {
@@ -379,12 +390,18 @@ export function StageFunnel({
                                 stageRefs.current[index] = node;
                               }}
                               type="button"
-                              onClick={() => onStageClick?.(stage)}
-                              onMouseEnter={() => setHoveredStageIndex(index)}
-                              onMouseLeave={() => setHoveredStageIndex((current) => (current === index ? null : current))}
+                              onClick={() => {
+                                if (isMobile || isTouchDevice) {
+                                  setHoveredStageIndex(index);
+                                  return;
+                                }
+                                onStageClick?.(stage);
+                              }}
+                              onMouseEnter={isTouchDevice ? undefined : () => setHoveredStageIndex(index)}
+                              onMouseLeave={isTouchDevice ? undefined : () => setHoveredStageIndex((current) => (current === index ? null : current))}
                               onFocus={() => setHoveredStageIndex(index)}
                               onBlur={() => setHoveredStageIndex((current) => (current === index ? null : current))}
-                              className="group relative flex h-[76px] shrink-0 items-center justify-center bg-transparent text-center outline-none transition duration-300 ease-out focus-visible:ring-2 focus-visible:ring-[#4D41DF] focus-visible:ring-offset-2"
+                              className="group relative flex h-8 shrink-0 items-center justify-center bg-transparent text-center outline-none transition duration-300 ease-out focus-visible:ring-2 focus-visible:ring-[#4D41DF] focus-visible:ring-offset-2 md:h-[76px]"
                               style={{
                                 width: visualWidth,
                                 filter: isHovered ? "brightness(1.08)" : "none",
@@ -394,7 +411,7 @@ export function StageFunnel({
                               aria-label={`${stage.name}: ${stage.count} candidates`}
                             >
                               <span
-                                className="px-5 text-center text-[14px] font-[600] tracking-[-0.01em] text-white"
+                                className="px-3 text-center text-[12px] font-[600] tracking-[-0.01em] text-white md:px-5 md:text-[12px] xl:text-[14px]"
                                 style={{ fontFamily: "Manrope, sans-serif" }}
                               >
                                 {stage.name}
@@ -403,15 +420,15 @@ export function StageFunnel({
                           </div>
                         </div>
 
-                        <div className="w-[96px] shrink-0 text-left">
+                        <div className="w-[72px] shrink-0 text-left md:w-[84px] xl:w-[96px]">
                           <div
-                            className="text-[18px] font-[700] leading-none text-[#111827]"
+                            className="text-[16px] font-[700] leading-none text-[#111827] md:text-[17px] xl:text-[18px]"
                             style={{ fontFamily: "Manrope, sans-serif" }}
                           >
                             {formatCompactNumber(stage.count)}
                           </div>
                           <div
-                            className="mt-1 text-[12px] leading-none text-[#6B7280]"
+                            className="mt-1 text-[11px] leading-none text-[#6B7280]"
                             style={{ fontFamily: "Inter, sans-serif" }}
                           >
                             {formatPercent(percentage)}
@@ -421,11 +438,16 @@ export function StageFunnel({
                     );
                   })}
                 </div>
+                {isMobile ? (
+                  <p className="pt-3 text-[11px] font-medium text-[#7B8191]">
+                    Tap a stage to see details
+                  </p>
+                ) : null}
               </div>
 
               <div
                 ref={detailPanelRef}
-                className={cn(DASHBOARD_PANEL_SOFT, "relative p-6 shadow-[0_10px_30px_rgba(77,65,223,0.08)]")}
+                className={cn(DASHBOARD_PANEL_SOFT, "relative p-4 shadow-[0_10px_30px_rgba(77,65,223,0.08)] md:p-4 xl:p-6")}
               >
                 <div
                   className={cn(

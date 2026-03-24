@@ -208,6 +208,13 @@
     scroll-behavior: smooth;
   }
 
+  html,
+  body,
+  #root {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   /* Respect user's motion preferences */
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -218,6 +225,34 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+  }
+}
+
+@media (max-width: 767px) {
+  .ats-theme {
+    font-size: 16px;
+  }
+
+  .ats-theme button,
+  .ats-theme a,
+  .ats-theme [role="button"],
+  .ats-theme input,
+  .ats-theme select,
+  .ats-theme textarea,
+  .ats-theme [data-radix-collection-item] {
+    min-height: 44px;
+  }
+
+  .ats-theme p,
+  .ats-theme span,
+  .ats-theme label,
+  .ats-theme small,
+  .ats-theme li,
+  .ats-theme a,
+  .ats-theme button,
+  .ats-theme input,
+  .ats-theme textarea {
+    font-size: max(11px, 0.6875rem);
   }
 }
 

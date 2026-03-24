@@ -281,11 +281,11 @@ export default function RecruiterDashboard() {
 
   return (
     <Layout>
-      <div className="min-h-screen bg-white px-4 pb-10 pt-6 md:px-8">
+      <div className="min-h-screen overflow-x-hidden bg-white px-4 pb-10 pt-6 md:px-8">
         <div className="mx-auto max-w-[1500px] space-y-8">
           {/* Header + filters + KPIs */}
           <div className="mt-0 space-y-6 pt-3">
-            <div className={cn(DASHBOARD_SHELL_PANEL, "relative px-6 py-6 md:px-8 md:py-8")} data-tour="dashboard-metrics">
+            <div className={cn(DASHBOARD_SHELL_PANEL, "relative px-4 py-5 sm:px-6 sm:py-6 md:px-8 md:py-8")} data-tour="dashboard-metrics">
               <div className="relative space-y-6">
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                   <div className="space-y-3">
@@ -327,9 +327,9 @@ export default function RecruiterDashboard() {
                       {selectedJobId === "all" ? recruiterDashboardCopy.header.allJobsLabel : `Job #${selectedJobId}`}
                     </span>
                   </div>
-                  <div className="flex flex-wrap items-center gap-3">
+                  <div className="flex w-full flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end md:w-auto">
                     <Select value={rangePreset} onValueChange={(val) => setRangePreset(val as keyof typeof RANGE_PRESETS)}>
-                      <SelectTrigger className="h-11 w-[164px] rounded-2xl border-[#E5E7EB] bg-[#FAFAFB] px-5 text-[0.95rem] font-semibold text-[#111827] shadow-[0_3px_10px_rgba(15,23,42,0.04)] [&>svg]:hidden">
+                      <SelectTrigger className="h-11 w-full min-w-0 rounded-2xl border-[#E5E7EB] bg-[#FAFAFB] px-5 text-[0.95rem] font-semibold text-[#111827] shadow-[0_3px_10px_rgba(15,23,42,0.04)] sm:w-[164px] [&>svg]:hidden">
                         <SelectValue placeholder={recruiterDashboardCopy.filters.dateRangePlaceholder} />
                         <ChevronDown className="h-4 w-4 text-[#4B5563]" />
                       </SelectTrigger>
@@ -343,7 +343,7 @@ export default function RecruiterDashboard() {
                       value={selectedJobId === "all" ? "all" : String(selectedJobId)}
                       onValueChange={(val) => setSelectedJobId(val === "all" ? "all" : Number(val))}
                     >
-                      <SelectTrigger className="h-11 w-[154px] rounded-2xl border-[#E5E7EB] bg-[#FAFAFB] px-5 text-[0.95rem] font-semibold text-[#111827] shadow-[0_3px_10px_rgba(15,23,42,0.04)] [&>svg]:hidden">
+                      <SelectTrigger className="h-11 w-full min-w-0 rounded-2xl border-[#E5E7EB] bg-[#FAFAFB] px-5 text-[0.95rem] font-semibold text-[#111827] shadow-[0_3px_10px_rgba(15,23,42,0.04)] sm:w-[154px] [&>svg]:hidden">
                         <SelectValue placeholder={recruiterDashboardCopy.filters.allJobsPlaceholder} />
                         <ChevronDown className="h-4 w-4 text-[#4B5563]" />
                       </SelectTrigger>
@@ -365,7 +365,7 @@ export default function RecruiterDashboard() {
           </div>
 
           {/* Interviews + AI Actions */}
-          <div className="grid grid-cols-1 items-stretch gap-6 xl:grid-cols-2">
+          <div className="grid grid-cols-1 items-stretch gap-6 md:grid-cols-2">
             <div>
               <TodaysInterviewsPanel jobId={selectedJobId} />
             </div>

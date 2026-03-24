@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { AlertCircle, ArrowRight, Loader2, RefreshCcw, Zap } from "lucide-react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { recruiterDashboardCopy } from "@/lib/internal-copy";
 import { apiRequest } from "@/lib/queryClient";
 import { DASHBOARD_EYEBROW, DASHBOARD_PANEL, DASHBOARD_PANEL_MUTED, DASHBOARD_TITLE } from "@/lib/dashboard-theme";
@@ -145,6 +146,7 @@ function normalizeSections(rawSections: RawActionSection[] | undefined): Normali
 export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
   const [, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState<TabKey>("candidates_to_review");
+  const isMobile = useIsMobile();
 
   const { data, isLoading, error, refetch, isFetching } = useQuery<RawActionsResponse>({
     queryKey: ["/api/recruiter-dashboard/actions", range, jobId],
@@ -175,7 +177,7 @@ export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
       )}
       data-testid="ai-actions-panel"
     >
-      <div className="flex items-center justify-between gap-4 px-8 pb-5 pt-7">
+      <div className="flex items-center justify-between gap-4 px-4 pb-5 pt-6 sm:px-6 md:px-6 xl:px-8 xl:pt-7">
         <div className="flex items-center gap-4">
           <div className="flex h-11 w-11 items-center justify-center rounded-[16px] bg-[linear-gradient(135deg,#4D41DF_0%,#6F64FF_100%)] shadow-[0_12px_24px_rgba(77,65,223,0.24)]">
             <Zap className="h-[22px] w-[22px] fill-white text-white" />
@@ -198,7 +200,7 @@ export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
       </div>
 
       <div
-        className="overflow-x-auto overflow-y-hidden px-8 scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+        className="overflow-x-auto overflow-y-hidden px-4 scroll-smooth [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden sm:px-6 xl:px-8"
       >
         <div className="flex min-w-max flex-nowrap gap-x-7 border-b border-[#191C1E]/6">
           {sections.map((section) => {
@@ -225,7 +227,7 @@ export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
 
       <div
         className={cn(
-          "flex min-h-0 flex-1 flex-col bg-[#FFFFFF] px-8 pt-8 transition-opacity",
+          "flex min-h-0 flex-1 flex-col bg-[#FFFFFF] px-4 pt-6 transition-opacity sm:px-6 md:pt-6 xl:px-8 xl:pt-8",
           isFetching && !isLoading && "opacity-70",
         )}
       >
@@ -244,7 +246,7 @@ export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
             <p className="font-inter text-[13px] text-[#9CA3AF]">{activeSection.emptyMessage}</p>
           </div>
         ) : (
-          <div className="actions-list flex-1 space-y-3 overflow-y-hidden pr-1 transition-[overflow] duration-150 hover:[scrollbar-color:#C4C0FF_transparent] [scrollbar-width:thin] [&::-webkit-scrollbar]:w-[4px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#C4C0FF] [&::-webkit-scrollbar-thumb:hover]:bg-[#6C63FF] [&::-webkit-scrollbar-track]:bg-transparent [.actions-panel:hover_&]:overflow-y-auto">
+          <div className="actions-list flex-1 space-y-3 overflow-y-auto pr-1 transition-[overflow] duration-150 [scrollbar-width:thin] [&::-webkit-scrollbar]:w-[4px] [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#C4C0FF] [&::-webkit-scrollbar-thumb:hover]:bg-[#6C63FF] [&::-webkit-scrollbar-track]:bg-transparent md:overflow-y-hidden md:hover:[scrollbar-color:#C4C0FF_transparent] md:[.actions-panel:hover_&]:overflow-y-auto">
             {activeSection.items.map((item, index) => {
               const fitKey = item.badge?.trim().toLowerCase() ?? "";
               const fitBadgeClass = FIT_BADGE_STYLES[fitKey] ?? "bg-[#F3F4F6] text-[#6B7280]";
@@ -252,7 +254,15 @@ export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
               const cardKey = item.id ?? `${item.title}-${item.ctaHref}-${index}`;
 
               return (
-                <article key={cardKey} className={cn(DASHBOARD_PANEL_MUTED, "p-4 transition-colors hover:bg-[#F3F4F8]")}>
+                <article
+                  key={cardKey}
+                  onClick={() => {
+                    if (isMobile) {
+                      setLocation(item.ctaHref);
+                    }
+                  }}
+                  className={cn(DASHBOARD_PANEL_MUTED, "cursor-pointer p-4 transition-colors hover:bg-[#F3F4F8]")}
+                >
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1">
                       <h3 className="truncate font-manrope text-[15px] font-semibold leading-[1.25] text-[#191C1E]">
@@ -263,7 +273,10 @@ export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
                       </p>
                       <button
                         type="button"
-                        onClick={() => setLocation(item.ctaHref)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setLocation(item.ctaHref);
+                        }}
                         className="mt-5 inline-flex items-center gap-2 rounded-[12px] bg-[#FFFFFF] px-5 py-3 font-inter text-[13px] font-medium leading-none text-[#4D41DF] shadow-[0_2px_8px_rgba(77,65,223,0.08)] transition-colors hover:bg-[#EEF0FF]"
                       >
                         <span>{item.ctaLabel}</span>
