@@ -455,6 +455,7 @@ describe('recruiter dashboard endpoint scoping', () => {
 
     expect(result.status).toBe(200);
     expect(result.body.range).toBe('30d');
+    expect(result.body.scope).toBe('all');
     expect(result.body.comparisonLabel).toBe('vs previous 30 days');
     expect(result.body.cards.pipelineHealth).toEqual(
       expect.objectContaining({
@@ -463,6 +464,28 @@ describe('recruiter dashboard endpoint scoping', () => {
         status: expect.stringMatching(/healthy|needs_attention|at_risk/),
         displayValue: expect.stringMatching(/%$/),
         trendDirection: expect.stringMatching(/up|down|flat/),
+      }),
+    );
+    expect(result.body.cards.pipelineHealth.insights).toEqual(
+      expect.objectContaining({
+        stuckCandidates: expect.any(Array),
+        stageHealth: expect.any(Array),
+      }),
+    );
+    expect(result.body.cards.pipelineHealth.insights.mainBlocker).toEqual(
+      expect.objectContaining({
+        description: expect.any(String),
+        stage: expect.any(String),
+        stageId: expect.any(Number),
+        count: expect.any(Number),
+      }),
+    );
+    expect(result.body.cards.pipelineHealth.insights.quickWin).toEqual(
+      expect.objectContaining({
+        action: expect.any(String),
+        estimatedImpactPoints: expect.any(Number),
+        ctaLabel: expect.any(String),
+        ctaHref: expect.stringMatching(/^\/applications\?stage=\d+$/),
       }),
     );
     expect(result.body.cards.activeRoles).toEqual(
@@ -495,6 +518,28 @@ describe('recruiter dashboard endpoint scoping', () => {
         id: 'screenToInterview',
         label: 'Screen → Interview',
         comparisonLabel: 'vs previous 30 days',
+      }),
+    );
+  });
+
+  it('respects job filter in KPI scope and quick-win links', async () => {
+    const app = await buildApp();
+    const result = await invokeRoute(app, 'get', '/api/recruiter-dashboard/kpis', {
+      query: { range: '30d', jobId: '10' },
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body.jobId).toBe(10);
+    expect(result.body.scope).toBe('job');
+    expect(result.body.cards.activeRoles).toEqual(
+      expect.objectContaining({
+        value: 1,
+        contextLine: 'Selected role',
+      }),
+    );
+    expect(result.body.cards.pipelineHealth.insights.quickWin).toEqual(
+      expect.objectContaining({
+        ctaHref: expect.stringMatching(/^\/jobs\/10\/applications\?stage=\d+$/),
       }),
     );
   });

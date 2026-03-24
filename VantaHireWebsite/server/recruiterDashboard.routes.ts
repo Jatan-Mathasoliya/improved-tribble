@@ -272,6 +272,12 @@ function pipelineContextForScore(score: number): string {
   return "At risk";
 }
 
+function stageQueueHref(jobId: number | null, stageId: number): string {
+  return jobId == null
+    ? `/applications?stage=${stageId}`
+    : `/jobs/${jobId}/applications?stage=${stageId}`;
+}
+
 async function getRecruiterDashboardContext(user: NonNullable<Request["user"]>) {
   const orgResult = await getUserOrganization(user.id);
   const organizationId =
@@ -417,16 +423,26 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
 
         const stuckCandidates = sortedStages
           .map((stage) => {
-            const count = currentActivePipelineApplications.filter((app) => {
+            const stuckApps = currentActivePipelineApplications.filter((app) => {
               if (app.currentStage !== stage.id) return false;
               const referenceTime = app.stageChangedAt ?? app.appliedAt;
               const waitDays =
                 (Date.now() - new Date(referenceTime).getTime()) / (1000 * 60 * 60 * 24);
               return waitDays >= 5;
-            }).length;
-            return count > 0 ? { stage: stage.name, count } : null;
+            });
+            const count = stuckApps.length;
+            const avgDaysStuck =
+              count > 0
+                ? Math.round(
+                    (stuckApps.reduce((sum, app) => {
+                      const referenceTime = app.stageChangedAt ?? app.appliedAt;
+                      return sum + (Date.now() - new Date(referenceTime).getTime()) / (1000 * 60 * 60 * 24);
+                    }, 0) / count) * 10,
+                  ) / 10
+                : null;
+            return count > 0 ? { stage: stage.name, stageId: stage.id, count, avgDaysStuck } : null;
           })
-          .filter((value): value is { stage: string; count: number } => value !== null)
+          .filter((value): value is { stage: string; stageId: number; count: number; avgDaysStuck: number | null } => value !== null)
           .sort((a, b) => b.count - a.count)
           .slice(0, 3);
 
@@ -442,13 +458,93 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
             if (!previous || previous.count <= 0) return null;
             return {
               label: `${previous.stage.name} → ${entry.stage.name}`,
+              fromStageId: previous.stage.id,
+              toStageId: entry.stage.id,
               rate: roundRate(entry.count, previous.count),
             };
           })
-          .filter((value): value is { label: string; rate: number } => value !== null);
+          .filter((value): value is { label: string; fromStageId: number; toStageId: number; rate: number } => value !== null);
 
         const strongestConvertingStage = [...stageRates].sort((a, b) => b.rate - a.rate)[0] ?? null;
         const weakestConvertingStage = [...stageRates].sort((a, b) => a.rate - b.rate)[0] ?? null;
+        const weakestStageMeta =
+          weakestConvertingStage != null ? stageById.get(weakestConvertingStage.toStageId) ?? null : null;
+        const weakestStageCount =
+          weakestConvertingStage != null
+            ? stageCounts.find((entry) => entry.stage.id === weakestConvertingStage.toStageId)?.count ?? 0
+            : 0;
+        const mainBlocker = stuckCandidates[0]
+          ? {
+              description: `${stuckCandidates[0].count} candidate${stuckCandidates[0].count === 1 ? "" : "s"} stuck in ${stuckCandidates[0].stage} for 5+ days`,
+              stage: stuckCandidates[0].stage,
+              stageId: stuckCandidates[0].stageId,
+              count: stuckCandidates[0].count,
+              avgDaysStuck: stuckCandidates[0].avgDaysStuck,
+            }
+          : weakestConvertingStage && weakestStageMeta
+            ? {
+                description: `${weakestConvertingStage.label} conversion is only ${weakestConvertingStage.rate}%`,
+                stage: weakestStageMeta.name,
+                stageId: weakestStageMeta.id,
+                count: weakestStageCount,
+                avgDaysStuck: null,
+              }
+            : null;
+        const quickWin = mainBlocker
+          ? {
+              action:
+                mainBlocker.avgDaysStuck != null
+                  ? `Review stuck candidates in ${mainBlocker.stage}`
+                  : `Improve progression into ${mainBlocker.stage}`,
+              estimatedImpactPoints:
+                mainBlocker.avgDaysStuck != null
+                  ? Math.min(20, Math.max(8, Math.round(mainBlocker.count * 2.5)))
+                  : Math.min(
+                      20,
+                      Math.max(8, Math.round(35 - (weakestConvertingStage?.rate ?? 0))),
+                    ),
+              ctaLabel: `Review ${mainBlocker.stage} Candidates`,
+              ctaHref: stageQueueHref(selectedJobId, mainBlocker.stageId),
+            }
+          : null;
+        const rateByToStageId = new Map(stageRates.map((rate) => [rate.toStageId, rate]));
+        const stageHealth = sortedStages.map((stage) => {
+          const stuck = stuckCandidates.find((item) => item.stageId === stage.id);
+          const conversion = rateByToStageId.get(stage.id) ?? null;
+          const hasBacklog = (stuck?.count ?? 0) > 0;
+          const lowConversion = conversion != null && conversion.rate < 40;
+          const criticalConversion = conversion != null && conversion.rate < 20;
+
+          let status: "healthy" | "needs_attention" | "critical" = "healthy";
+          let issue: string | null = null;
+
+          if ((stuck?.count ?? 0) >= 3 || criticalConversion) {
+            status = "critical";
+          } else if (hasBacklog || lowConversion) {
+            status = "needs_attention";
+          }
+
+          if ((stuck?.count ?? 0) >= 3 && criticalConversion) {
+            issue = "Low progression and high candidate backlog";
+          } else if ((stuck?.count ?? 0) >= 3) {
+            issue = "High candidate backlog";
+          } else if (criticalConversion) {
+            issue = "Low progression from previous stage";
+          } else if (hasBacklog && lowConversion) {
+            issue = "Needs faster movement and stronger progression";
+          } else if (hasBacklog) {
+            issue = "Candidates need movement";
+          } else if (lowConversion) {
+            issue = "Progression is below target";
+          }
+
+          return {
+            stage: stage.name,
+            stageId: stage.id,
+            status,
+            issue,
+          };
+        });
 
         const activeRolesCount = activeJobsInScope.length;
         const rolesByDemand = jobsInScope.map((job) => ({
@@ -506,6 +602,7 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
 
         const screeningStage = sortedStages.find((stage) => stage.name.toLowerCase().includes("screen"));
         const interviewStage = sortedStages.find((stage) => stage.name.toLowerCase().includes("interview"));
+        const fallbackQuickWinStage = screeningStage ?? sortedStages[0] ?? null;
         const screeningOrder = screeningStage?.order ?? null;
         const interviewOrder = interviewStage?.order ?? null;
 
@@ -556,11 +653,22 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
                 : "at_risk";
         const screenToInterviewStatus: DashboardKpiStatus =
           currentInterviewRate >= 30 ? "healthy" : currentInterviewRate >= 15 ? "needs_attention" : "at_risk";
+        const resolvedQuickWin =
+          quickWin ??
+          (fallbackQuickWinStage
+            ? {
+                action: `Review candidates in ${fallbackQuickWinStage.name}`,
+                estimatedImpactPoints: 8,
+                ctaLabel: `Review ${fallbackQuickWinStage.name} Candidates`,
+                ctaHref: stageQueueHref(selectedJobId, fallbackQuickWinStage.id),
+              }
+            : null);
 
         res.json({
           generatedAt: new Date().toISOString(),
           range: rangePreset,
           jobId: selectedJobId,
+          scope: selectedJobId == null ? "all" : "job",
           comparisonLabel: `vs previous ${rangeDays} days`,
           cards: {
             pipelineHealth: {
@@ -575,6 +683,9 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
               contextLine: pipelineContextForScore(currentHealth.score),
               insights: {
                 stuckCandidates,
+                mainBlocker,
+                quickWin: resolvedQuickWin,
+                stageHealth,
                 strongestConvertingStage,
                 weakestConvertingStage,
               },
@@ -588,7 +699,7 @@ export function registerRecruiterDashboardRoutes(app: Express): void {
               trendDelta: null,
               trendDirection: "flat" as DashboardTrendDirection,
               comparisonLabel: null,
-              contextLine: "Open positions",
+              contextLine: selectedJobId == null ? "Open positions" : "Selected role",
               insights: {
                 highestDemandRole,
                 lowestCandidateVolumeRole,
