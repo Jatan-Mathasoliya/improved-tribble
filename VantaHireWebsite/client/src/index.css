@@ -229,31 +229,12 @@
 }
 
 @media (max-width: 767px) {
-  .ats-theme {
-    font-size: 16px;
-  }
-
-  .ats-theme button,
-  .ats-theme a,
-  .ats-theme [role="button"],
-  .ats-theme input,
-  .ats-theme select,
-  .ats-theme textarea,
-  .ats-theme [data-radix-collection-item] {
-    min-height: 44px;
-  }
-
-  .ats-theme p,
-  .ats-theme span,
-  .ats-theme label,
-  .ats-theme small,
-  .ats-theme li,
-  .ats-theme a,
-  .ats-theme button,
-  .ats-theme input,
-  .ats-theme textarea {
-    font-size: max(11px, 0.6875rem);
-  }
+  .recruiter-dashboard .kpi-label { font-size: 10px; }
+  .recruiter-dashboard .kpi-value { font-size: 24px; }
+  .recruiter-dashboard .interview-time { font-size: 11px; }
+  .recruiter-dashboard .interview-name { font-size: 13px; }
+  .recruiter-dashboard .interview-role { font-size: 11px; }
+  .recruiter-dashboard .nav-label { font-size: 13px; }
 }
 
 @layer components {

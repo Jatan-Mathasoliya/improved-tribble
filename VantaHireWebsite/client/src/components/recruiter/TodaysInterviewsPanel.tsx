@@ -165,7 +165,7 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
         "interview-panel h-auto min-h-0 w-full rounded-[26px] bg-white/95 px-4 py-5 md:h-[492px] md:px-6 md:py-6",
       )}
     >
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex items-center gap-4">
         <div className="space-y-2">
           <p className={DASHBOARD_EYEBROW}>{recruiterDashboardCopy.interviewsPanel.eyebrow}</p>
           <div className="flex items-center gap-3">
@@ -175,9 +175,6 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
             </span>
           </div>
         </div>
-        <a href="/applications" className="text-[14px] font-normal text-[#5B4FF7] transition-colors hover:text-[#4F46E5]">
-          {recruiterDashboardCopy.interviewsPanel.viewCalendar}
-        </a>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-medium text-[#7B8497]">
@@ -282,10 +279,10 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
                 )}
               >
                 <div className="w-[58px] shrink-0 text-left">
-                  <div className="text-[13px] font-semibold leading-[1.05] tracking-[-0.01em] text-[#374151]">
+                  <div className="interview-time text-[13px] font-semibold leading-[1.05] tracking-[-0.01em] text-[#374151]">
                     {time}
                   </div>
-                  <div className="mt-1 text-[13px] font-medium leading-none text-[#6B7280]">{meridiem}</div>
+                  <div className="interview-time mt-1 text-[13px] font-medium leading-none text-[#6B7280]">{meridiem}</div>
                 </div>
 
                 <div className="flex min-w-0 flex-1 flex-col items-start gap-3 md:flex-row md:items-center md:gap-4">
@@ -305,10 +302,10 @@ export function TodaysInterviewsPanel({ jobId }: TodaysInterviewsPanelProps) {
                   </div>
 
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[16px] font-semibold leading-[1.25] tracking-[-0.02em] text-[#0F172A]">
+                    <div className="interview-name truncate text-[16px] font-semibold leading-[1.25] tracking-[-0.02em] text-[#0F172A]">
                       {item.candidateName}
                     </div>
-                    <div className="mt-0.5 truncate text-[13px] font-normal leading-[1.35] text-[#6B7280]">
+                    <div className="interview-role mt-0.5 truncate text-[13px] font-normal leading-[1.35] text-[#6B7280]">
                       {item.jobTitle}
                     </div>
                     {item.aiFitLabel && (

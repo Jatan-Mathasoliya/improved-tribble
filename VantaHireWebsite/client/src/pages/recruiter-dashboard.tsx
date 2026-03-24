@@ -281,7 +281,7 @@ export default function RecruiterDashboard() {
 
   return (
     <Layout>
-      <div className="min-h-screen overflow-x-hidden bg-white px-4 pb-10 pt-6 md:px-8">
+      <div className="recruiter-dashboard min-h-screen overflow-x-hidden bg-white px-4 pb-10 pt-6 md:px-8">
         <div className="mx-auto max-w-[1500px] space-y-8">
           {/* Header + filters + KPIs */}
           <div className="mt-0 space-y-6 pt-3">

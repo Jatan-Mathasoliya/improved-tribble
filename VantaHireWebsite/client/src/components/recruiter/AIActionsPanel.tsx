@@ -212,7 +212,7 @@ export function AIActionsPanel({ range, jobId }: AIActionsPanelProps) {
                 type="button"
                 onClick={() => setActiveTab(section.key)}
                 className={cn(
-                  "relative -mb-px border-b-2 pb-5 font-inter text-[13px] font-medium leading-none transition-colors",
+                  "nav-label relative -mb-px border-b-2 pb-5 font-inter text-[13px] font-medium leading-none transition-colors",
                   isActive
                     ? "border-[#4D41DF] text-[#4D41DF]"
                     : "border-transparent text-[#9CA3AF] hover:text-[#6B7280]",

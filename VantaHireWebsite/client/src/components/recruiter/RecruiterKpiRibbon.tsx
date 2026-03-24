@@ -386,7 +386,7 @@ function KpiCard({
       >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-2">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+            <div className="kpi-label text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
               {card.label}
             </div>
             <span className={cn("inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold", status.badge)}>
@@ -411,7 +411,7 @@ function KpiCard({
 
         <div className="mt-3.5 flex items-end justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-[24px] font-bold leading-none tracking-[-0.04em] text-slate-900 md:text-[28px] xl:text-[29px]">
+            <div className="kpi-value text-[24px] font-bold leading-none tracking-[-0.04em] text-slate-900 md:text-[28px] xl:text-[29px]">
               {fallbackText(card.displayValue)}
             </div>
             <div className="mt-1.5 text-[13px] font-medium text-slate-500">{fallbackText(card.contextLine)}</div>

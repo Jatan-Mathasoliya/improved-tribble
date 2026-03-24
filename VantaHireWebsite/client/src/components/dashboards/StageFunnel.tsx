@@ -15,6 +15,8 @@ type StageSegment = {
 };
 
 type InterviewStageDetails = {
+  stageStatus: string | null;
+  stageIssue: string | null;
   activeInterviewLoops: number;
   avgTimeInStageDays: number | null;
   interviewsScheduledToday: number | null;
@@ -95,6 +97,13 @@ function normalizeStageKey(label: string): string {
 function normalizeInterviewDetails(payload: unknown, stageLabel?: string | null): InterviewStageDetails {
   const source = (payload ?? {}) as Record<string, unknown>;
   const normalizedStage = stageLabel ? normalizeStageKey(stageLabel) : null;
+  const stageHealthMatch =
+    normalizedStage && Array.isArray(source.stageHealth)
+      ? (source.stageHealth as Array<Record<string, unknown>>).find((entry) => {
+          const stage = typeof entry.stage === "string" ? entry.stage : "";
+          return normalizeStageKey(stage) === normalizedStage;
+        })
+      : null;
   const stageBucket =
     normalizedStage &&
     typeof source.stageDetails === "object" &&
@@ -109,15 +118,23 @@ function normalizeInterviewDetails(payload: unknown, stageLabel?: string | null)
         })
       : null;
 
-  const resolved = (stageBucket || stagesArrayBucket || source) as Record<string, unknown>;
+  const resolved = (stageHealthMatch || stageBucket || stagesArrayBucket || source) as Record<string, unknown>;
   const screening =
     typeof resolved.screeningToInterview === "object" && resolved.screeningToInterview !== null
       ? (resolved.screeningToInterview as Record<string, unknown>)
       : {};
+  const avgTimeInStageDays =
+    typeof resolved.avgTimeInStageDays === "number"
+      ? resolved.avgTimeInStageDays
+      : typeof source.avgTimeInStageDays === "number"
+        ? source.avgTimeInStageDays
+        : null;
 
   return {
+    stageStatus: typeof resolved.status === "string" ? resolved.status : null,
+    stageIssue: typeof resolved.issue === "string" ? resolved.issue : null,
     activeInterviewLoops: typeof resolved.activeInterviewLoops === "number" ? resolved.activeInterviewLoops : 0,
-    avgTimeInStageDays: typeof resolved.avgTimeInStageDays === "number" ? resolved.avgTimeInStageDays : null,
+    avgTimeInStageDays,
     interviewsScheduledToday: typeof resolved.interviewsScheduledToday === "number" ? resolved.interviewsScheduledToday : null,
     screeningToInterview: {
       currentRate: typeof screening.currentRate === "number" ? screening.currentRate : null,
@@ -132,6 +149,78 @@ function normalizeInterviewDetails(payload: unknown, stageLabel?: string | null)
     periodLabel: typeof resolved.periodLabel === "string" ? resolved.periodLabel : null,
     comparisonLabel: typeof resolved.comparisonLabel === "string" ? resolved.comparisonLabel : null,
   };
+}
+
+function getStageStatCards(
+  hoveredStage: StageSegment | null,
+  details: InterviewStageDetails | undefined,
+  stageCandidateCount: number | null,
+  avgTimeInStageDays: number | null,
+): Array<{ label: string; value: string }> {
+  if (!hoveredStage) {
+    return [
+      {
+        label: recruiterDashboardCopy.funnel.avgTimeInStage,
+        value: formatStageDays(avgTimeInStageDays),
+      },
+      {
+        label: recruiterDashboardCopy.funnel.interviewsToday,
+        value: formatScheduledToday(details?.interviewsScheduledToday),
+      },
+    ];
+  }
+
+  const stageName = normalizeStageKey(hoveredStage.name);
+
+  if (stageName.includes("appl")) {
+    return [
+      {
+        label: "Stage volume",
+        value: formatCompactNumber(stageCandidateCount ?? hoveredStage.count),
+      },
+      {
+        label: "Screening rate",
+        value: formatNullablePercent(details?.screeningToInterview.currentRate),
+      },
+    ];
+  }
+
+  if (stageName.includes("screen")) {
+    return [
+      {
+        label: "Active loops",
+        value: formatCompactNumber(details?.activeInterviewLoops ?? 0),
+      },
+      {
+        label: recruiterDashboardCopy.funnel.avgTimeInStage,
+        value: formatStageDays(avgTimeInStageDays),
+      },
+    ];
+  }
+
+  if (stageName.includes("interview")) {
+    return [
+      {
+        label: recruiterDashboardCopy.funnel.interviewsToday,
+        value: formatScheduledToday(details?.interviewsScheduledToday),
+      },
+      {
+        label: recruiterDashboardCopy.funnel.avgTimeInStage,
+        value: formatStageDays(avgTimeInStageDays),
+      },
+    ];
+  }
+
+  return [
+    {
+      label: recruiterDashboardCopy.funnel.candidatesInStage,
+      value: formatCompactNumber(stageCandidateCount ?? hoveredStage.count),
+    },
+    {
+      label: recruiterDashboardCopy.funnel.avgTimeInStage,
+      value: formatStageDays(avgTimeInStageDays),
+    },
+  ];
 }
 
 function buildSummary(
@@ -149,11 +238,42 @@ function buildSummary(
   const currentRate = details?.screeningToInterview?.currentRate ?? null;
   const periodLabel = details?.periodLabel ?? "\u2014";
   const comparisonLabel = details?.comparisonLabel ?? "\u2014";
-  const subjectCount =
-    hoveredStage != null ? formatCompactNumber(stageCandidateCount ?? hoveredStage.count) : formatCompactNumber(details?.activeInterviewLoops ?? 0);
-  const prefix = hoveredStage
-    ? `In ${periodLabel}, ${subjectCount} candidates are currently in ${hoveredStage.name}. Recruiter-wide screening to interview conversion is ${formatNullablePercent(currentRate)} and has `
-    : `In ${periodLabel}, ${subjectCount} candidates are in active interview loops. Recruiter-wide screening to interview conversion is ${formatNullablePercent(currentRate)} and has `;
+  const subjectCount = hoveredStage != null
+    ? formatCompactNumber(stageCandidateCount ?? hoveredStage.count)
+    : formatCompactNumber(details?.activeInterviewLoops ?? 0);
+
+  if (hoveredStage) {
+    const stageStatus = details?.stageStatus ? `${details.stageStatus}. ` : "";
+    const stageIssue = details?.stageIssue ? `${details.stageIssue}. ` : "";
+    const prefix = `In ${periodLabel}, ${subjectCount} candidates are currently in ${hoveredStage.name}. ${stageStatus}${stageIssue}${hoveredStage.name} conversion is ${formatNullablePercent(currentRate)} and has `;
+
+    if (direction === "up" && (delta ?? 0) > 0) {
+      return {
+        prefix: prefix.replace("has ", "increased by "),
+        deltaText: formatPercent(Math.abs(delta ?? 0)),
+        suffix: ` ${comparisonLabel}.`,
+        deltaClassName: "text-[#16A34A]",
+      };
+    }
+
+    if (direction === "down" && Math.abs(delta ?? 0) > 0) {
+      return {
+        prefix: prefix.replace("has ", "decreased by "),
+        deltaText: formatPercent(Math.abs(delta ?? 0)),
+        suffix: ` ${comparisonLabel}.`,
+        deltaClassName: "text-[#DC2626]",
+      };
+    }
+
+    return {
+      prefix: prefix.replace("has ", "held at "),
+      deltaText: formatNullablePercent(currentRate),
+      suffix: ` ${comparisonLabel}.`,
+      deltaClassName: "text-[#6B7280]",
+    };
+  }
+
+  const prefix = `In ${periodLabel}, ${subjectCount} candidates are in active interview loops. Recruiter-wide screening to interview conversion is ${formatNullablePercent(currentRate)} and has `;
 
   if (direction === "up" && (delta ?? 0) > 0) {
     return {
@@ -276,7 +396,7 @@ export function StageFunnel({
         throw new Error("Failed to fetch interview stage details");
       }
       const payload = await response.json();
-      return normalizeInterviewDetails(payload);
+      return normalizeInterviewDetails(payload, hoveredStage?.name ?? null);
     },
     staleTime: 0,
     refetchOnMount: "always",
@@ -335,19 +455,16 @@ export function StageFunnel({
       ? stageDerivedMetrics.avgTimeInStageDays
       : details?.avgTimeInStageDays ?? null;
   const summary = buildSummary(details, hoveredStage, stageDerivedMetrics.stageCandidateCount);
-  const rightStat = useMemo(() => {
-    if (hoveredStage) {
-      return {
-        label: recruiterDashboardCopy.funnel.candidatesInStage,
-        value: formatCompactNumber(stageDerivedMetrics.stageCandidateCount ?? hoveredStage.count),
-      };
-    }
-
-    return {
-      label: recruiterDashboardCopy.funnel.interviewsToday,
-      value: formatScheduledToday(details?.interviewsScheduledToday),
-    };
-  }, [details, hoveredStage, stageDerivedMetrics.stageCandidateCount]);
+  const statCards = useMemo(
+    () =>
+      getStageStatCards(
+        hoveredStage,
+        details,
+        stageDerivedMetrics.stageCandidateCount,
+        effectiveAvgTimeInStageDays,
+      ),
+    [details, effectiveAvgTimeInStageDays, hoveredStage, stageDerivedMetrics.stageCandidateCount],
+  );
 
   return (
     <Card className={cn(DASHBOARD_PANEL, "rounded-[28px] bg-white/95")}>
@@ -483,35 +600,22 @@ export function StageFunnel({
                   </p>
 
                   <div className="mt-8 grid gap-4 sm:grid-cols-2">
-                    <div className="rounded-[12px] bg-white p-4">
-                      <div
-                        className="text-[10px] font-[600] uppercase tracking-[0.08em] text-[#6B7280]"
-                        style={{ fontFamily: "Inter, sans-serif" }}
-                      >
-                        {recruiterDashboardCopy.funnel.avgTimeInStage}
+                    {statCards.map((stat) => (
+                      <div key={stat.label} className="rounded-[12px] bg-white p-4">
+                        <div
+                          className="text-[10px] font-[600] uppercase tracking-[0.08em] text-[#6B7280]"
+                          style={{ fontFamily: "Inter, sans-serif" }}
+                        >
+                          {stat.label}
+                        </div>
+                        <div
+                          className="mt-2 text-[22px] font-[700] leading-tight text-[#111827]"
+                          style={{ fontFamily: "Manrope, sans-serif" }}
+                        >
+                          {stat.value}
+                        </div>
                       </div>
-                      <div
-                        className="mt-2 text-[22px] font-[700] leading-tight text-[#111827]"
-                        style={{ fontFamily: "Manrope, sans-serif" }}
-                      >
-                        {formatStageDays(effectiveAvgTimeInStageDays)}
-                      </div>
-                    </div>
-
-                    <div className="rounded-[12px] bg-white p-4">
-                      <div
-                        className="text-[10px] font-[600] uppercase tracking-[0.08em] text-[#6B7280]"
-                        style={{ fontFamily: "Inter, sans-serif" }}
-                      >
-                        {rightStat.label}
-                      </div>
-                      <div
-                        className="mt-2 text-[22px] font-[700] leading-tight text-[#111827]"
-                        style={{ fontFamily: "Manrope, sans-serif" }}
-                      >
-                        {rightStat.value}
-                      </div>
-                    </div>
+                    ))}
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">
