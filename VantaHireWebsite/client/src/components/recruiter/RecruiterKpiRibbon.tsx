@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsTouchDevice } from "@/hooks/use-touch-device";
 import { cn } from "@/lib/utils";
 import { ArrowDownRight, ArrowRight, ArrowUpRight, HelpCircle } from "lucide-react";
 
@@ -342,14 +344,20 @@ function KpiCard({
   card,
   compact = false,
   expanded = false,
+  isTouchDevice = false,
+  isMobile = false,
   onOpen,
   onClose,
+  onToggle,
 }: {
   card: KpiInsightCard;
   compact?: boolean;
   expanded?: boolean;
+  isTouchDevice?: boolean;
+  isMobile?: boolean;
   onOpen: () => void;
   onClose: () => void;
+  onToggle: () => void;
 }) {
   const status = statusMap[card.status] ?? statusMap.needs_attention;
   const trend = formatTrend(card);
@@ -363,15 +371,22 @@ function KpiCard({
           ? "shadow-[0_18px_38px_rgba(15,23,42,0.10)] -translate-y-0.5"
           : "hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(15,23,42,0.10)]",
       )}
-      onMouseEnter={onOpen}
-      onMouseLeave={onClose}
+      onMouseEnter={isTouchDevice ? undefined : onOpen}
+      onMouseLeave={isTouchDevice ? undefined : onClose}
       onFocus={onOpen}
       onBlur={onClose}
+      onClick={isTouchDevice ? onToggle : undefined}
     >
-      <div className={cn("flex flex-col p-4", compact ? "min-h-[112px]" : "min-h-[136px]")}>
+      <div
+        className={cn(
+          "flex flex-col p-4 md:p-[14px] xl:p-4",
+          compact ? "min-h-[112px] md:min-h-[112px]" : "min-h-[136px] md:min-h-[136px]",
+          isMobile && "min-h-0 h-auto",
+        )}
+      >
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-2">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+            <div className="kpi-label text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
               {card.label}
             </div>
             <span className={cn("inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold", status.badge)}>
@@ -396,7 +411,7 @@ function KpiCard({
 
         <div className="mt-3.5 flex items-end justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-[29px] font-bold leading-none tracking-[-0.04em] text-slate-900">
+            <div className="kpi-value text-[24px] font-bold leading-none tracking-[-0.04em] text-slate-900 md:text-[28px] xl:text-[29px]">
               {fallbackText(card.displayValue)}
             </div>
             <div className="mt-1.5 text-[13px] font-medium text-slate-500">{fallbackText(card.contextLine)}</div>
@@ -427,7 +442,10 @@ function LoadingCard({ compact = false }: { compact?: boolean }) {
 }
 
 export function RecruiterKpiRibbon({ data, isLoading, className }: RecruiterKpiRibbonProps) {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const isMobile = useIsMobile();
+  const isTouchDevice = useIsTouchDevice();
   const orderedCards = data
     ? [
         data.cards.pipelineHealth,
@@ -441,16 +459,46 @@ export function RecruiterKpiRibbon({ data, isLoading, className }: RecruiterKpiR
   const topCards = orderedCards.slice(0, 3);
   const bottomCards = orderedCards.slice(3, 5);
 
+  useEffect(() => {
+    if (!isTouchDevice) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!containerRef.current?.contains(event.target as Node)) {
+        setActiveCardId(null);
+      }
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [isTouchDevice]);
+
+  const handleToggle = (cardId: string) => {
+    setActiveCardId((current) => (current === cardId ? null : cardId));
+  };
+
   if (isLoading && !data) {
     return (
       <div className={cn("space-y-[14px]", className)}>
-        <div className="grid gap-[14px] md:grid-cols-3">
+        <div className="grid gap-[14px] md:hidden">
+          {[0, 1, 2, 3, 4].map((index) => (
+            <LoadingCard key={index} compact={index >= 3} />
+          ))}
+        </div>
+        <div className="hidden gap-[14px] md:grid xl:hidden md:grid-cols-2">
+          {[0, 1, 2, 3].map((index) => (
+            <LoadingCard key={index} compact={index >= 2} />
+          ))}
+          <div className="mx-auto w-full md:col-span-2 md:w-[calc(50%-7px)]">
+            <LoadingCard compact />
+          </div>
+        </div>
+        <div className="hidden gap-[14px] xl:grid xl:grid-cols-3">
           {[0, 1, 2].map((index) => (
             <LoadingCard key={index} />
           ))}
         </div>
-        <div className="flex justify-center">
-          <div className="grid w-full gap-[14px] md:w-[calc(66.666%-9.5px)] md:grid-cols-2">
+        <div className="hidden justify-center xl:flex">
+          <div className="grid w-full gap-[14px] md:grid-cols-2 xl:w-[calc(66.666%-9.5px)]">
             {[0, 1].map((index) => (
               <LoadingCard key={index} compact />
             ))}
@@ -462,21 +510,75 @@ export function RecruiterKpiRibbon({ data, isLoading, className }: RecruiterKpiR
 
   return (
     <TooltipProvider delayDuration={120}>
-      <div className={cn("space-y-[14px]", className)}>
-        <div className="flex flex-col gap-[14px] md:flex-row md:items-start">
+      <div ref={containerRef} className={cn("space-y-[14px]", className)}>
+        <div className="grid gap-[14px] md:hidden">
+          {orderedCards.map((card, index) => (
+            <div key={card.id}>
+              <KpiCard
+                card={card}
+                compact={index >= 3}
+                expanded={activeCardId === card.id}
+                onOpen={() => setActiveCardId(card.id)}
+                onClose={() => setActiveCardId((current) => (current === card.id ? null : current))}
+                onToggle={() => handleToggle(card.id)}
+                isTouchDevice={isTouchDevice}
+                isMobile={isMobile}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="hidden gap-[14px] md:grid xl:hidden md:grid-cols-2">
+          {orderedCards.slice(0, 4).map((card, index) => (
+            <div key={card.id}>
+              <KpiCard
+                card={card}
+                compact={index >= 2}
+                expanded={activeCardId === card.id}
+                onOpen={() => setActiveCardId(card.id)}
+                onClose={() => setActiveCardId((current) => (current === card.id ? null : current))}
+                onToggle={() => handleToggle(card.id)}
+                isTouchDevice={isTouchDevice}
+                isMobile={isMobile}
+              />
+            </div>
+          ))}
+          {orderedCards[4] ? (
+            <div className="mx-auto w-full md:col-span-2 md:w-[calc(50%-7px)]">
+              {(() => {
+                const lastCard = orderedCards[4]!;
+                return (
+              <KpiCard
+                card={lastCard}
+                compact
+                expanded={activeCardId === lastCard.id}
+                onOpen={() => setActiveCardId(lastCard.id)}
+                onClose={() => setActiveCardId((current) => (current === lastCard.id ? null : current))}
+                onToggle={() => handleToggle(lastCard.id)}
+                isTouchDevice={isTouchDevice}
+                isMobile={isMobile}
+              />
+                );
+              })()}
+            </div>
+          ) : null}
+        </div>
+        <div className="hidden gap-[14px] xl:flex xl:flex-row xl:items-start">
           {topCards.map((card) => (
-            <div key={card.id} className="md:min-w-0 md:flex-1">
+            <div key={card.id} className="min-w-0 xl:flex-1">
               <KpiCard
                 card={card}
                 expanded={activeCardId === card.id}
                 onOpen={() => setActiveCardId(card.id)}
                 onClose={() => setActiveCardId((current) => (current === card.id ? null : current))}
+                onToggle={() => handleToggle(card.id)}
+                isTouchDevice={isTouchDevice}
+                isMobile={isMobile}
               />
             </div>
           ))}
         </div>
         <div className="flex justify-center">
-          <div className="flex w-full flex-col gap-[14px] md:w-[calc(66.666%-9.5px)] md:flex-row md:items-start">
+          <div className="hidden w-full flex-col gap-[14px] xl:flex xl:w-[calc(66.666%-9.5px)] xl:flex-row xl:items-start">
             {bottomCards.map((card) => (
               <div key={card.id} className="md:min-w-0 md:flex-1">
                 <KpiCard
@@ -485,6 +587,9 @@ export function RecruiterKpiRibbon({ data, isLoading, className }: RecruiterKpiR
                   expanded={activeCardId === card.id}
                   onOpen={() => setActiveCardId(card.id)}
                   onClose={() => setActiveCardId((current) => (current === card.id ? null : current))}
+                  onToggle={() => handleToggle(card.id)}
+                  isTouchDevice={isTouchDevice}
+                  isMobile={isMobile}
                 />
               </div>
             ))}

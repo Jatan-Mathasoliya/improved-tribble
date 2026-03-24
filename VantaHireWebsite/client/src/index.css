@@ -208,6 +208,13 @@
     scroll-behavior: smooth;
   }
 
+  html,
+  body,
+  #root {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   /* Respect user's motion preferences */
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -219,6 +226,15 @@
       scroll-behavior: auto !important;
     }
   }
+}
+
+@media (max-width: 767px) {
+  .recruiter-dashboard .kpi-label { font-size: 10px; }
+  .recruiter-dashboard .kpi-value { font-size: 24px; }
+  .recruiter-dashboard .interview-time { font-size: 11px; }
+  .recruiter-dashboard .interview-name { font-size: 13px; }
+  .recruiter-dashboard .interview-role { font-size: 11px; }
+  .recruiter-dashboard .nav-label { font-size: 13px; }
 }
 
 @layer components {

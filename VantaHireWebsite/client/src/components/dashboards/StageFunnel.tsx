@@ -1,6 +1,8 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsTouchDevice } from "@/hooks/use-touch-device";
 import { DASHBOARD_EYEBROW, DASHBOARD_PANEL, DASHBOARD_PANEL_SOFT, DASHBOARD_TITLE } from "@/lib/dashboard-theme";
 import { recruiterDashboardCopy } from "@/lib/internal-copy";
 import { cn } from "@/lib/utils";
@@ -80,43 +82,21 @@ function formatScheduledToday(value: number | null | undefined): string {
   return `${value} Today`;
 }
 
-function formatDeltaValue(value: number | null | undefined): string {
-  if (value == null || Number.isNaN(value)) return "\u2014";
-  const sign = value > 0 ? "+" : "";
-  return `${sign}${value % 1 === 0 ? value.toFixed(0) : value.toFixed(1)}%`;
-}
-
 function normalizeStageKey(label: string): string {
   return label.trim().toLowerCase();
 }
 
-function normalizeInterviewDetails(payload: unknown, stageLabel?: string | null): InterviewStageDetails {
+function normalizeInterviewDetails(payload: unknown): InterviewStageDetails {
   const source = (payload ?? {}) as Record<string, unknown>;
-  const normalizedStage = stageLabel ? normalizeStageKey(stageLabel) : null;
-  const stageBucket =
-    normalizedStage &&
-    typeof source.stageDetails === "object" &&
-    source.stageDetails !== null
-      ? (source.stageDetails as Record<string, unknown>)[normalizedStage]
-      : null;
-  const stagesArrayBucket =
-    normalizedStage && Array.isArray(source.stages)
-      ? (source.stages as Array<Record<string, unknown>>).find((entry) => {
-          const label = typeof entry.label === "string" ? entry.label : typeof entry.stage === "string" ? entry.stage : "";
-          return normalizeStageKey(label) === normalizedStage;
-        })
-      : null;
-
-  const resolved = (stageBucket || stagesArrayBucket || source) as Record<string, unknown>;
   const screening =
-    typeof resolved.screeningToInterview === "object" && resolved.screeningToInterview !== null
-      ? (resolved.screeningToInterview as Record<string, unknown>)
+    typeof source.screeningToInterview === "object" && source.screeningToInterview !== null
+      ? (source.screeningToInterview as Record<string, unknown>)
       : {};
 
   return {
-    activeInterviewLoops: typeof resolved.activeInterviewLoops === "number" ? resolved.activeInterviewLoops : 0,
-    avgTimeInStageDays: typeof resolved.avgTimeInStageDays === "number" ? resolved.avgTimeInStageDays : null,
-    interviewsScheduledToday: typeof resolved.interviewsScheduledToday === "number" ? resolved.interviewsScheduledToday : null,
+    activeInterviewLoops: typeof source.activeInterviewLoops === "number" ? source.activeInterviewLoops : 0,
+    avgTimeInStageDays: typeof source.avgTimeInStageDays === "number" ? source.avgTimeInStageDays : null,
+    interviewsScheduledToday: typeof source.interviewsScheduledToday === "number" ? source.interviewsScheduledToday : null,
     screeningToInterview: {
       currentRate: typeof screening.currentRate === "number" ? screening.currentRate : null,
       delta: typeof screening.delta === "number" ? screening.delta : null,
@@ -127,15 +107,62 @@ function normalizeInterviewDetails(payload: unknown, stageLabel?: string | null)
       screeningCount: typeof screening.screeningCount === "number" ? screening.screeningCount : null,
       interviewCount: typeof screening.interviewCount === "number" ? screening.interviewCount : null,
     },
-    periodLabel: typeof resolved.periodLabel === "string" ? resolved.periodLabel : null,
-    comparisonLabel: typeof resolved.comparisonLabel === "string" ? resolved.comparisonLabel : null,
+    periodLabel: typeof source.periodLabel === "string" ? source.periodLabel : null,
+    comparisonLabel: typeof source.comparisonLabel === "string" ? source.comparisonLabel : null,
   };
+}
+
+function getStageStatCards(
+  hoveredStage: StageSegment | null,
+  details: InterviewStageDetails | undefined,
+  stageCandidateCount: number | null,
+  avgTimeInStageDays: number | null,
+  stageInterviewsScheduledToday: number,
+): Array<{ label: string; value: string }> {
+  if (!hoveredStage) {
+    return [
+      {
+        label: recruiterDashboardCopy.funnel.avgTimeInStage,
+        value: formatStageDays(avgTimeInStageDays),
+      },
+      {
+        label: recruiterDashboardCopy.funnel.interviewsToday,
+        value: formatScheduledToday(details?.interviewsScheduledToday),
+      },
+    ];
+  }
+
+  const stageName = normalizeStageKey(hoveredStage.name);
+  if (stageName.includes("interview")) {
+    return [
+      {
+        label: recruiterDashboardCopy.funnel.candidatesInStage,
+        value: formatCompactNumber(stageCandidateCount ?? hoveredStage.count),
+      },
+      {
+        label: recruiterDashboardCopy.funnel.interviewsToday,
+        value: formatScheduledToday(stageInterviewsScheduledToday),
+      },
+    ];
+  }
+
+  return [
+    {
+      label: recruiterDashboardCopy.funnel.candidatesInStage,
+      value: formatCompactNumber(stageCandidateCount ?? hoveredStage.count),
+    },
+    {
+      label: recruiterDashboardCopy.funnel.avgTimeInStage,
+      value: formatStageDays(avgTimeInStageDays),
+    },
+  ];
 }
 
 function buildSummary(
   details: InterviewStageDetails | undefined,
   hoveredStage: StageSegment | null,
   stageCandidateCount: number | null,
+  avgTimeInStageDays: number | null,
 ): {
   prefix: string;
   deltaText: string;
@@ -147,11 +174,44 @@ function buildSummary(
   const currentRate = details?.screeningToInterview?.currentRate ?? null;
   const periodLabel = details?.periodLabel ?? "\u2014";
   const comparisonLabel = details?.comparisonLabel ?? "\u2014";
-  const subjectCount =
-    hoveredStage != null ? formatCompactNumber(stageCandidateCount ?? hoveredStage.count) : formatCompactNumber(details?.activeInterviewLoops ?? 0);
-  const prefix = hoveredStage
-    ? `In ${periodLabel}, ${subjectCount} candidates are currently in ${hoveredStage.name}. Recruiter-wide screening to interview conversion is ${formatNullablePercent(currentRate)} and has `
-    : `In ${periodLabel}, ${subjectCount} candidates are in active interview loops. Recruiter-wide screening to interview conversion is ${formatNullablePercent(currentRate)} and has `;
+  const subjectCount = hoveredStage != null
+    ? formatCompactNumber(stageCandidateCount ?? hoveredStage.count)
+    : formatCompactNumber(details?.activeInterviewLoops ?? 0);
+
+  if (hoveredStage) {
+    const stageTiming =
+      avgTimeInStageDays != null ? ` Average time in this stage is ${formatStageDays(avgTimeInStageDays)}.` : "";
+    const prefix =
+      `In ${periodLabel}, ${subjectCount} candidates are currently in ${hoveredStage.name}.${stageTiming} ` +
+      `Recruiter-wide screening to interview conversion is ${formatNullablePercent(currentRate)} and has `;
+
+    if (direction === "up" && (delta ?? 0) > 0) {
+      return {
+        prefix: prefix.replace("has ", "increased by "),
+        deltaText: formatPercent(Math.abs(delta ?? 0)),
+        suffix: ` ${comparisonLabel}.`,
+        deltaClassName: "text-[#16A34A]",
+      };
+    }
+
+    if (direction === "down" && Math.abs(delta ?? 0) > 0) {
+      return {
+        prefix: prefix.replace("has ", "decreased by "),
+        deltaText: formatPercent(Math.abs(delta ?? 0)),
+        suffix: ` ${comparisonLabel}.`,
+        deltaClassName: "text-[#DC2626]",
+      };
+    }
+
+    return {
+      prefix: prefix.replace("has ", "held at "),
+      deltaText: formatNullablePercent(currentRate),
+      suffix: ` ${comparisonLabel}.`,
+      deltaClassName: "text-[#6B7280]",
+    };
+  }
+
+  const prefix = `In ${periodLabel}, ${subjectCount} candidates are in active interview loops. Recruiter-wide screening to interview conversion is ${formatNullablePercent(currentRate)} and has `;
 
   if (direction === "up" && (delta ?? 0) > 0) {
     return {
@@ -189,6 +249,8 @@ export function StageFunnel({
   applications = [],
   pipelineStages = [],
 }: StageFunnelProps) {
+  const isMobile = useIsMobile();
+  const isTouchDevice = useIsTouchDevice();
   const [hoveredStageIndex, setHoveredStageIndex] = useState<number | null>(null);
   const [contentVisible, setContentVisible] = useState(true);
   const [connectorPath, setConnectorPath] = useState<string>("");
@@ -258,7 +320,6 @@ export function StageFunnel({
       "/api/recruiter-dashboard/interview-stage-details",
       rangePreset,
       selectedJobId,
-      hoveredStage?.name ?? "overview",
     ],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -280,6 +341,13 @@ export function StageFunnel({
   });
 
   useEffect(() => {
+    if (!data.length) return;
+    if (isTouchDevice && hoveredStageIndex == null) {
+      setHoveredStageIndex(0);
+    }
+  }, [data.length, hoveredStageIndex, isTouchDevice]);
+
+  useEffect(() => {
     setContentVisible(false);
     const timer = window.setTimeout(() => setContentVisible(true), 70);
     return () => window.clearTimeout(timer);
@@ -291,7 +359,7 @@ export function StageFunnel({
       const panel = detailPanelRef.current;
       const stageEl = hoveredStageIndex != null ? stageRefs.current[hoveredStageIndex] : null;
 
-      if (!container || !panel || !stageEl || window.innerWidth < 1024) {
+      if (!container || !panel || !stageEl || window.innerWidth < 1024 || isMobile) {
         setShowConnector(false);
         setConnectorPath("");
         return;
@@ -316,27 +384,36 @@ export function StageFunnel({
     updateConnector();
     window.addEventListener("resize", updateConnector);
     return () => window.removeEventListener("resize", updateConnector);
-  }, [hoveredStageIndex, data.length]);
+  }, [hoveredStageIndex, data.length, isMobile]);
 
   const details = detailsQuery.data;
   const effectiveAvgTimeInStageDays =
     hoveredStage != null && stageDerivedMetrics.avgTimeInStageDays != null
       ? stageDerivedMetrics.avgTimeInStageDays
       : details?.avgTimeInStageDays ?? null;
-  const summary = buildSummary(details, hoveredStage, stageDerivedMetrics.stageCandidateCount);
-  const rightStat = useMemo(() => {
-    if (hoveredStage) {
-      return {
-        label: recruiterDashboardCopy.funnel.candidatesInStage,
-        value: formatCompactNumber(stageDerivedMetrics.stageCandidateCount ?? hoveredStage.count),
-      };
-    }
-
-    return {
-      label: recruiterDashboardCopy.funnel.interviewsToday,
-      value: formatScheduledToday(details?.interviewsScheduledToday),
-    };
-  }, [details, hoveredStage, stageDerivedMetrics.stageCandidateCount]);
+  const summary = buildSummary(
+    details,
+    hoveredStage,
+    stageDerivedMetrics.stageCandidateCount,
+    effectiveAvgTimeInStageDays,
+  );
+  const statCards = useMemo(
+    () =>
+      getStageStatCards(
+        hoveredStage,
+        details,
+        stageDerivedMetrics.stageCandidateCount,
+        effectiveAvgTimeInStageDays,
+        stageDerivedMetrics.interviewsScheduledToday,
+      ),
+    [
+      details,
+      effectiveAvgTimeInStageDays,
+      hoveredStage,
+      stageDerivedMetrics.interviewsScheduledToday,
+      stageDerivedMetrics.stageCandidateCount,
+    ],
+  );
 
   return (
     <Card className={cn(DASHBOARD_PANEL, "rounded-[28px] bg-white/95")}>
@@ -352,7 +429,7 @@ export function StageFunnel({
           {recruiterDashboardCopy.funnel.description}
         </p>
       </CardHeader>
-      <CardContent className="px-6 pb-6 pt-0 lg:px-8 lg:pb-8">
+      <CardContent className="px-4 pb-4 pt-0 sm:px-6 sm:pb-6 lg:px-6 lg:pb-6 xl:px-8 xl:pb-8">
         {isLoading ? (
           <div className="h-[420px] rounded-[24px] bg-[#F5F7FA] animate-pulse" />
         ) : data.length === 0 ? (
@@ -361,7 +438,7 @@ export function StageFunnel({
           </div>
         ) : (
           <div ref={containerRef} className="relative">
-            <div className="grid items-center gap-8 xl:grid-cols-[minmax(0,55%)_minmax(0,45%)]">
+            <div className="grid items-start gap-5 md:gap-6 xl:grid-cols-[minmax(0,55%)_minmax(0,45%)] xl:items-center xl:gap-8">
               <div className="min-w-0">
                 <div className="space-y-1">
                   {data.map((stage, index) => {
@@ -379,12 +456,18 @@ export function StageFunnel({
                                 stageRefs.current[index] = node;
                               }}
                               type="button"
-                              onClick={() => onStageClick?.(stage)}
-                              onMouseEnter={() => setHoveredStageIndex(index)}
-                              onMouseLeave={() => setHoveredStageIndex((current) => (current === index ? null : current))}
+                              onClick={() => {
+                                if (isMobile || isTouchDevice) {
+                                  setHoveredStageIndex(index);
+                                  return;
+                                }
+                                onStageClick?.(stage);
+                              }}
+                              onMouseEnter={isTouchDevice ? undefined : () => setHoveredStageIndex(index)}
+                              onMouseLeave={isTouchDevice ? undefined : () => setHoveredStageIndex((current) => (current === index ? null : current))}
                               onFocus={() => setHoveredStageIndex(index)}
                               onBlur={() => setHoveredStageIndex((current) => (current === index ? null : current))}
-                              className="group relative flex h-[76px] shrink-0 items-center justify-center bg-transparent text-center outline-none transition duration-300 ease-out focus-visible:ring-2 focus-visible:ring-[#4D41DF] focus-visible:ring-offset-2"
+                              className="group relative flex h-8 shrink-0 items-center justify-center bg-transparent text-center outline-none transition duration-300 ease-out focus-visible:ring-2 focus-visible:ring-[#4D41DF] focus-visible:ring-offset-2 md:h-[76px]"
                               style={{
                                 width: visualWidth,
                                 filter: isHovered ? "brightness(1.08)" : "none",
@@ -394,7 +477,7 @@ export function StageFunnel({
                               aria-label={`${stage.name}: ${stage.count} candidates`}
                             >
                               <span
-                                className="px-5 text-center text-[14px] font-[600] tracking-[-0.01em] text-white"
+                                className="px-3 text-center text-[12px] font-[600] tracking-[-0.01em] text-white md:px-5 md:text-[12px] xl:text-[14px]"
                                 style={{ fontFamily: "Manrope, sans-serif" }}
                               >
                                 {stage.name}
@@ -403,15 +486,15 @@ export function StageFunnel({
                           </div>
                         </div>
 
-                        <div className="w-[96px] shrink-0 text-left">
+                        <div className="w-[72px] shrink-0 text-left md:w-[84px] xl:w-[96px]">
                           <div
-                            className="text-[18px] font-[700] leading-none text-[#111827]"
+                            className="text-[16px] font-[700] leading-none text-[#111827] md:text-[17px] xl:text-[18px]"
                             style={{ fontFamily: "Manrope, sans-serif" }}
                           >
                             {formatCompactNumber(stage.count)}
                           </div>
                           <div
-                            className="mt-1 text-[12px] leading-none text-[#6B7280]"
+                            className="mt-1 text-[11px] leading-none text-[#6B7280]"
                             style={{ fontFamily: "Inter, sans-serif" }}
                           >
                             {formatPercent(percentage)}
@@ -421,11 +504,16 @@ export function StageFunnel({
                     );
                   })}
                 </div>
+                {isMobile ? (
+                  <p className="pt-3 text-[11px] font-medium text-[#7B8191]">
+                    Tap a stage to see details
+                  </p>
+                ) : null}
               </div>
 
               <div
                 ref={detailPanelRef}
-                className={cn(DASHBOARD_PANEL_SOFT, "relative p-6 shadow-[0_10px_30px_rgba(77,65,223,0.08)]")}
+                className={cn(DASHBOARD_PANEL_SOFT, "relative p-4 shadow-[0_10px_30px_rgba(77,65,223,0.08)] md:p-4 xl:p-6")}
               >
                 <div
                   className={cn(
@@ -461,35 +549,22 @@ export function StageFunnel({
                   </p>
 
                   <div className="mt-8 grid gap-4 sm:grid-cols-2">
-                    <div className="rounded-[12px] bg-white p-4">
-                      <div
-                        className="text-[10px] font-[600] uppercase tracking-[0.08em] text-[#6B7280]"
-                        style={{ fontFamily: "Inter, sans-serif" }}
-                      >
-                        {recruiterDashboardCopy.funnel.avgTimeInStage}
+                    {statCards.map((stat) => (
+                      <div key={stat.label} className="rounded-[12px] bg-white p-4">
+                        <div
+                          className="text-[10px] font-[600] uppercase tracking-[0.08em] text-[#6B7280]"
+                          style={{ fontFamily: "Inter, sans-serif" }}
+                        >
+                          {stat.label}
+                        </div>
+                        <div
+                          className="mt-2 text-[22px] font-[700] leading-tight text-[#111827]"
+                          style={{ fontFamily: "Manrope, sans-serif" }}
+                        >
+                          {stat.value}
+                        </div>
                       </div>
-                      <div
-                        className="mt-2 text-[22px] font-[700] leading-tight text-[#111827]"
-                        style={{ fontFamily: "Manrope, sans-serif" }}
-                      >
-                        {formatStageDays(effectiveAvgTimeInStageDays)}
-                      </div>
-                    </div>
-
-                    <div className="rounded-[12px] bg-white p-4">
-                      <div
-                        className="text-[10px] font-[600] uppercase tracking-[0.08em] text-[#6B7280]"
-                        style={{ fontFamily: "Inter, sans-serif" }}
-                      >
-                        {rightStat.label}
-                      </div>
-                      <div
-                        className="mt-2 text-[22px] font-[700] leading-tight text-[#111827]"
-                        style={{ fontFamily: "Manrope, sans-serif" }}
-                      >
-                        {rightStat.value}
-                      </div>
-                    </div>
+                    ))}
                   </div>
 
                   <div className="mt-4 flex flex-wrap gap-2">

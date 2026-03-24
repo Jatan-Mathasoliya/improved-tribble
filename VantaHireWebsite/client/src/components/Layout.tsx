@@ -21,6 +21,7 @@ const Layout = ({ children }: LayoutProps) => {
   const { data: orgData } = useOrganization();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [scrollPosition, setScrollPosition] = useState(0);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   // Type guard to help TypeScript narrow the user type
   const isRecruiter = user?.role === 'recruiter';
@@ -92,6 +93,25 @@ const Layout = ({ children }: LayoutProps) => {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  useEffect(() => {
+    if (!atsContext) return;
+
+    const syncSidebar = () => {
+      const width = window.innerWidth;
+      if (width >= 768 && width <= 1024) {
+        setSidebarOpen(false);
+        return;
+      }
+      if (width > 1024) {
+        setSidebarOpen(true);
+      }
+    };
+
+    syncSidebar();
+    window.addEventListener("resize", syncSidebar);
+    return () => window.removeEventListener("resize", syncSidebar);
+  }, [atsContext]);
+
   const toggleMenu = () => {
     setIsMenuOpen(!isMenuOpen);
   };
@@ -107,6 +127,8 @@ const Layout = ({ children }: LayoutProps) => {
       <div className="min-h-screen overflow-x-hidden bg-[linear-gradient(180deg,#F4F6FA_0%,#EEF2F6_100%)] text-foreground ats-theme">
         <SidebarProvider
           defaultOpen
+          open={sidebarOpen}
+          onOpenChange={setSidebarOpen}
           className="overflow-x-hidden"
           style={
             {
