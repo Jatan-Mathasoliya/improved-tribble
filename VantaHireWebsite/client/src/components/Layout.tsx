@@ -9,7 +9,6 @@ import Footer from "@/components/Footer";
 import QuickAccessBar from "@/components/QuickAccessBar";
 import vantahireLogo from "@/assets/vantahire-logo.png";
 import AtsSidebar from "@/components/AtsSidebar";
-import { AtsTopBar } from "@/components/AtsTopBar";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 
 interface LayoutProps {
@@ -139,17 +138,6 @@ const Layout = ({ children }: LayoutProps) => {
             </div>
 
             <div className="flex min-h-[calc(100svh-3.5rem)] min-w-0 flex-1 flex-col overflow-x-hidden md:min-h-svh">
-              <AtsTopBar
-                location={location}
-                navigate={setLocation}
-                onLogout={handleLogout}
-                user={user}
-                organizationData={orgData}
-                isRecruiter={isRecruiter}
-                isAdmin={isAdmin}
-                isOrgOwnerOrAdmin={isOrgOwnerOrAdmin}
-                displayName={displayName}
-              />
               <div className="min-w-0 flex-1 overflow-x-hidden">
                 {children}
               </div>

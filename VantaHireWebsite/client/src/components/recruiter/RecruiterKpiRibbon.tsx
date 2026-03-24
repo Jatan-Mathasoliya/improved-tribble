@@ -1,239 +1,495 @@
-import type { ReactNode } from "react";
+import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { DASHBOARD_PANEL, DASHBOARD_PANEL_SOFT, DASHBOARD_EYEBROW } from "@/lib/dashboard-theme";
 import { cn } from "@/lib/utils";
-import { ArrowUpRight, HelpCircle } from "lucide-react";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, HelpCircle } from "lucide-react";
 
-type KpiVariant = "pipeline" | "roles" | "apps" | "review" | "interview";
+type KpiStatus = "healthy" | "needs_attention" | "at_risk";
+type TrendDirection = "up" | "down" | "flat";
 
-type KpiItem = {
+type KpiInsightCard = {
+  id: string;
   label: string;
-  value: string | number;
-  hint?: string | undefined;
-  secondary?: string | undefined;
-  trend?: "up" | "down" | "flat" | undefined;
-  trendValue?: string | undefined;
-  tooltip?: string | undefined;
-  variant?: KpiVariant | undefined;
+  status: KpiStatus;
+  value: number | null;
+  displayValue: string | null;
+  trendDelta: number | null;
+  trendDirection: TrendDirection;
+  comparisonLabel: string | null;
+  contextLine: string | null;
+  unit?: string | null;
+  insights: Record<string, unknown> | null;
+};
+
+export type RecruiterDashboardKpiResponse = {
+  generatedAt: string;
+  range: string;
+  jobId: number | null;
+  comparisonLabel: string | null;
+  cards: {
+    pipelineHealth: KpiInsightCard;
+    activeRoles: KpiInsightCard;
+    todaysApplications: KpiInsightCard;
+    firstReviewTime: KpiInsightCard;
+    screenToInterview: KpiInsightCard;
+  };
 };
 
 interface RecruiterKpiRibbonProps {
-  items: KpiItem[];
-  heroLabel?: string | undefined;
-  heroTooltip?: string | undefined;
-  className?: string | undefined;
+  data?: RecruiterDashboardKpiResponse | null | undefined;
+  isLoading?: boolean;
+  className?: string;
 }
 
-function PipelineRingIcon({ value }: { value: string | number }) {
-  const numericValue =
-    typeof value === "number"
-      ? value
-      : Number.parseFloat(String(value).replace(/[^\d.]/g, ""));
-  const progress = Number.isFinite(numericValue) ? Math.max(0, Math.min(numericValue, 100)) : 0;
-  const radius = 19;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference * (1 - progress / 100);
+type DetailLine = {
+  label: string;
+  value: string;
+};
 
-  return (
-    <svg width="56" height="56" viewBox="0 0 56 56" aria-hidden="true" className="shrink-0">
-      <defs>
-        <linearGradient id="pipeline-ring-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#7C74FF" />
-          <stop offset="100%" stopColor="#524AE8" />
-        </linearGradient>
-      </defs>
-      <circle cx="28" cy="28" r="19" fill="none" stroke="#E9E7FF" strokeWidth="3.5" />
-      <circle
-        cx="28"
-        cy="28"
-        r="19"
-        fill="none"
-        stroke="url(#pipeline-ring-gradient)"
-        strokeWidth="3.5"
-        strokeLinecap="round"
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        transform="rotate(-90 28 28)"
-      />
-    </svg>
-  );
+const statusMap: Record<KpiStatus, { label: string; badge: string }> = {
+  healthy: {
+    label: "Healthy",
+    badge: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100",
+  },
+  needs_attention: {
+    label: "Needs attention",
+    badge: "bg-amber-50 text-amber-700 ring-1 ring-amber-100",
+  },
+  at_risk: {
+    label: "At risk",
+    badge: "bg-rose-50 text-rose-700 ring-1 ring-rose-100",
+  },
+};
+
+const tooltipMap: Record<string, string> = {
+  pipelineHealth: "AI score measuring how efficiently candidates move through your pipeline",
+  activeRoles: "Total number of open job positions currently accepting applications",
+  todaysApplications: "New candidate applications received today across all your active jobs",
+  firstReviewTime: "Average time taken by you to first respond to a new candidate application",
+  screenToInterview: "Percentage of screened candidates who successfully moved from Screening to Interview stage",
+};
+
+function fallbackText(value?: string | null) {
+  return value && value.trim() ? value : "—";
 }
 
-function RolesBarsIcon() {
-  return (
-    <div className="flex h-12 w-12 items-end justify-center gap-1">
-      <span className="w-[5px] rounded-full bg-[#DDD8FF]" style={{ height: 16 }} />
-      <span className="w-[5px] rounded-full bg-[#C7C0FF]" style={{ height: 26 }} />
-      <span className="w-[5px] rounded-full bg-[#897DFF]" style={{ height: 36 }} />
-      <span className="w-[5px] rounded-full bg-[#5B52F5]" style={{ height: 20 }} />
-    </div>
-  );
+function formatCount(value: unknown) {
+  return typeof value === "number" && !Number.isNaN(value) ? String(value) : "—";
 }
 
-function AppsTrendIcon() {
-  return (
-    <div className="flex h-9 w-14 items-center justify-center rounded-md bg-[#EAF8EE]">
-      <svg width="24" height="24" viewBox="0 0 34 34" aria-hidden="true">
-        <path
-          d="M8 22.5L14.5 16L20 21.5L27 12.5"
-          fill="none"
-          stroke="#22C55E"
-          strokeWidth="2.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <path
-          d="M23.6 12.5H27V15.9"
-          fill="none"
-          stroke="#22C55E"
-          strokeWidth="2.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-    </div>
-  );
+function formatFixed(value: unknown, digits = 1, suffix = "") {
+  if (typeof value !== "number" || Number.isNaN(value)) return "—";
+  return `${value.toFixed(digits)}${suffix}`;
 }
 
-function ReviewClockIcon() {
-  return (
-    <div className="flex h-12 w-12 items-center justify-center">
-      <svg width="46" height="46" viewBox="0 0 46 46" aria-hidden="true">
-        <circle cx="23" cy="23" r="15.5" fill="none" stroke="#F6CCB3" strokeWidth="3.5" />
-        <path
-          d="M23 23L28.5 17.5"
-          fill="none"
-          stroke="#9A4B10"
-          strokeWidth="4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle cx="23" cy="23" r="3" fill="#9A4B10" />
-      </svg>
-    </div>
-  );
+function formatPercent(value: unknown, digits = 1) {
+  return formatFixed(value, digits, "%");
 }
 
-function InterviewFlowIcon() {
-  return (
-    <div className="flex h-12 w-12 items-center justify-center">
-      <svg width="38" height="38" viewBox="0 0 46 46" aria-hidden="true">
-        <path
-          d="M12 15C12 12.8 13.8 11 16 11H22C24.2 11 26 12.8 26 15C26 17.2 24.2 19 22 19H19C16.8 19 15 20.8 15 23C15 25.2 16.8 27 19 27H27C29.2 27 31 28.8 31 31C31 33.2 29.2 35 27 35H23"
-          fill="none"
-          stroke="#5B52F5"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle cx="11" cy="15" r="3.2" fill="#5B52F5" />
-        <circle cx="35" cy="31" r="3.2" fill="#5B52F5" />
-      </svg>
-    </div>
-  );
+function stageLabelToSentence(label?: string | null) {
+  if (!label) return "—";
+  return label.replace(/\s*→\s*/g, " to ").replace(/\s*->\s*/g, " to ");
 }
 
-function renderVisual(item: KpiItem): ReactNode {
-  switch (item.variant) {
-    case "pipeline":
-      return <PipelineRingIcon value={item.value} />;
-    case "roles":
-      return <RolesBarsIcon />;
-    case "apps":
-      return <AppsTrendIcon />;
-    case "review":
-      return <ReviewClockIcon />;
-    case "interview":
-      return <InterviewFlowIcon />;
+function formatTrend(card: KpiInsightCard) {
+  if (card.trendDelta == null || Number.isNaN(card.trendDelta)) {
+    return {
+      icon: ArrowRight,
+      className: "text-slate-400",
+      text: "No change",
+    };
+  }
+
+  if (card.trendDirection === "up") {
+    return {
+      icon: ArrowUpRight,
+      className: "text-emerald-600",
+      text: `${Math.abs(card.trendDelta).toFixed(1)}%`,
+    };
+  }
+
+  if (card.trendDirection === "down") {
+    return {
+      icon: ArrowDownRight,
+      className: "text-rose-600",
+      text: `${Math.abs(card.trendDelta).toFixed(1)}%`,
+    };
+  }
+
+  return {
+    icon: ArrowRight,
+    className: "text-slate-500",
+    text: `${Math.abs(card.trendDelta).toFixed(1)}%`,
+  };
+}
+
+function getDetailLines(card: KpiInsightCard): DetailLine[] {
+  const insights = card.insights ?? {};
+
+  switch (card.id) {
+    case "pipelineHealth": {
+      const stuck = Array.isArray(insights.stuckCandidates)
+        ? (insights.stuckCandidates as Array<{ stage?: string; count?: number }>)
+        : [];
+      const strongest = (insights.strongestConvertingStage ?? null) as { label?: string; rate?: number } | null;
+      const weakest = (insights.weakestConvertingStage ?? null) as { label?: string; rate?: number } | null;
+      const delayedStages = stuck.filter((item) => item.stage && typeof item.count === "number" && item.count > 0);
+
+      return [
+        {
+          label: "Candidate stuck",
+          value: delayedStages.length
+            ? delayedStages.map((item) => `${item.stage} (${item.count})`).join(", ")
+            : "Not enough pipeline movement to highlight delays clearly",
+        },
+        {
+          label: "Best conversion",
+          value:
+            strongest?.label && typeof strongest.rate === "number"
+              ? `${stageLabelToSentence(strongest.label)} (${formatPercent(strongest.rate, 1)})`
+              : "—",
+        },
+        {
+          label: "Lowest conversion",
+          value:
+            weakest?.label && typeof weakest.rate === "number"
+              ? `${stageLabelToSentence(weakest.label)} (${formatPercent(weakest.rate, 1)})`
+              : "—",
+        },
+      ];
+    }
+    case "activeRoles": {
+      const highest = (insights.highestDemandRole ?? null) as { jobTitle?: string; applications?: number } | null;
+      const lowest = (insights.lowestCandidateVolumeRole ?? null) as { jobTitle?: string; activeCandidates?: number } | null;
+      const closingSoon = (insights.closingSoonRole ?? null) as { jobTitle?: string; daysToClose?: number } | null;
+      const hasMeaningfulRoleInsights =
+        Boolean(highest?.jobTitle && typeof highest.applications === "number" && highest.applications > 0) ||
+        Boolean(lowest?.jobTitle && typeof lowest.activeCandidates === "number" && lowest.activeCandidates > 0) ||
+        Boolean(closingSoon?.jobTitle && typeof closingSoon.daysToClose === "number");
+
+      if (!hasMeaningfulRoleInsights) {
+        return [
+          {
+            label: "Role insights",
+            value: "Not enough role activity to highlight detailed insights right now",
+          },
+        ];
+      }
+
+      return [
+        {
+          label: "Highest demand",
+          value: highest?.jobTitle ? `${highest.jobTitle} with ${formatCount(highest.applications)} applications` : "—",
+        },
+        {
+          label: "Needs sourcing",
+          value: lowest?.jobTitle ? `${lowest.jobTitle} with ${formatCount(lowest.activeCandidates)} active candidates` : "—",
+        },
+        {
+          label: "Closing soon",
+          value:
+            closingSoon?.jobTitle && typeof closingSoon.daysToClose === "number"
+              ? `${closingSoon.jobTitle} closes in ${closingSoon.daysToClose} day${closingSoon.daysToClose === 1 ? "" : "s"}`
+              : "—",
+        },
+      ];
+    }
+    case "todaysApplications": {
+      const topJob = (insights.topJobToday ?? null) as { jobTitle?: string; applications?: number } | null;
+      const newApplicationsToday = typeof insights.newApplicationsToday === "number" ? insights.newApplicationsToday : null;
+      const topJobApplications = typeof topJob?.applications === "number" ? topJob.applications : null;
+      const sevenDayAverage = typeof insights.sevenDayAverage === "number" ? insights.sevenDayAverage : null;
+
+      if ((newApplicationsToday ?? 0) <= 0 && (topJobApplications ?? 0) <= 0) {
+        return [
+          {
+            label: "Activity today",
+            value: "No meaningful application activity to highlight today",
+          },
+        ];
+      }
+
+      return [
+        {
+          label: "Today",
+          value:
+            typeof newApplicationsToday === "number" && newApplicationsToday > 0
+              ? `${newApplicationsToday} new application${newApplicationsToday === 1 ? "" : "s"} today`
+              : "—",
+        },
+        {
+          label: "Top role today",
+          value:
+            topJob?.jobTitle && (topJobApplications ?? 0) > 0
+              ? `${topJob.jobTitle} received the most today (${topJobApplications})`
+              : "Not enough activity today to identify a standout role",
+        },
+        {
+          label: "7-day average",
+          value:
+            typeof sevenDayAverage === "number" && sevenDayAverage > 0
+              ? `${sevenDayAverage.toFixed(1)} applications per day`
+              : "—",
+        },
+      ];
+    }
+    case "firstReviewTime": {
+      const progressionRate = typeof insights.progressionRate === "number" ? insights.progressionRate : null;
+      const hasMeaningfulReviewInsights =
+        typeof card.value === "number" || typeof insights.benchmark === "string" || (progressionRate ?? 0) > 0;
+
+      if (!hasMeaningfulReviewInsights) {
+        return [
+          {
+            label: "Review speed",
+            value: "Not enough recent review activity to show deeper timing insights",
+          },
+        ];
+      }
+
+      return [
+        {
+          label: "Current average",
+          value:
+            typeof card.value === "number"
+              ? `${card.value.toFixed(1)} hours to first review`
+              : "—",
+        },
+        {
+          label: "Healthy benchmark",
+          value: typeof insights.benchmark === "string" ? insights.benchmark : "—",
+        },
+        {
+          label: "Progression rate",
+          value:
+            typeof progressionRate === "number" && progressionRate > 0
+              ? `${progressionRate.toFixed(1)}% candidate progression rate`
+              : "—",
+        },
+      ];
+    }
+    case "screenToInterview": {
+      const activeInterviewLoops = typeof insights.activeInterviewLoops === "number" ? insights.activeInterviewLoops : null;
+      const interviewsScheduledToday =
+        typeof insights.interviewsScheduledToday === "number" ? insights.interviewsScheduledToday : null;
+
+      if ((card.value ?? 0) <= 0 && (activeInterviewLoops ?? 0) <= 0 && (interviewsScheduledToday ?? 0) <= 0) {
+        return [
+          {
+            label: "Interview flow",
+            value: "Not enough interview activity yet to show detailed conversion insights",
+          },
+        ];
+      }
+
+      return [
+        {
+          label: "Conversion rate",
+          value:
+            typeof card.value === "number" && card.value > 0
+              ? `${card.value.toFixed(1)}% moved from screening to interview`
+              : "—",
+        },
+        {
+          label: "Interview loops",
+          value:
+            typeof activeInterviewLoops === "number" && activeInterviewLoops > 0
+              ? `${activeInterviewLoops} candidates are currently in interview loops`
+              : "—",
+        },
+        {
+          label: "Scheduled today",
+          value:
+            typeof interviewsScheduledToday === "number" && interviewsScheduledToday > 0
+              ? `${interviewsScheduledToday} interviews are scheduled today`
+              : "—",
+        },
+      ];
+    }
     default:
-      return null;
+      return [];
   }
 }
 
-function getBottomContent(item: KpiItem) {
-  if (item.variant === "pipeline") {
-    const isHealthy = item.hint?.toLowerCase().includes("healthy");
-    return (
-      <p className={cn("mt-1.5 flex items-center gap-1 whitespace-nowrap text-[13px] font-semibold", isHealthy ? "text-[#16A34A]" : "text-[#DC2626]")}>
-        {isHealthy ? <ArrowUpRight className="h-3.5 w-3.5" /> : null}
-        <span>{isHealthy ? "Healthy" : "At risk"}</span>
-      </p>
-    );
-  }
+function DetailSection({ card, expanded = false }: { card: KpiInsightCard; expanded?: boolean }) {
+  const lines = getDetailLines(card);
 
-  if (item.variant === "apps") {
-    const isPositive = item.trend === "up" && item.trendValue;
-    return (
-      <p className={cn("mt-1.5 flex items-center gap-1 whitespace-nowrap text-[13px] font-semibold", isPositive ? "text-[#16A34A]" : "text-[#6B7280]")}>
-        {isPositive ? <ArrowUpRight className="h-3.5 w-3.5" /> : null}
-        <span>{isPositive ? `${item.trendValue} vs last week` : "vs last week"}</span>
-      </p>
-    );
-  }
-
-  if (item.variant === "review") {
-    return <p className="mt-1.5 whitespace-nowrap text-[13px] font-medium text-[#C26B2C]">{item.secondary}</p>;
-  }
-
-  if (item.variant === "interview") {
-    return <p className="mt-1.5 whitespace-nowrap text-[13px] font-medium text-[#5B52F5]">Screen -&gt; Interview</p>;
-  }
-
-  return <p className="mt-1.5 whitespace-nowrap text-[13px] font-normal text-[#6B7280]">{item.secondary}</p>;
-}
-
-export function RecruiterKpiRibbon({ items, heroLabel, heroTooltip, className }: RecruiterKpiRibbonProps) {
   return (
-    <TooltipProvider delayDuration={150}>
-      <div className={cn("grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5", className)}>
-        {items.map((item, idx) => {
-          const tooltipText = item.tooltip ?? (heroLabel === item.label ? heroTooltip : undefined);
+    <div
+      className={cn(
+        "overflow-hidden transition-[max-height,opacity,transform,margin,padding] duration-200 ease-out",
+        expanded
+          ? "mt-3.5 max-h-64 translate-y-0 border-t border-slate-100 pt-3.5 opacity-100"
+          : "max-h-0 translate-y-1 pt-0 opacity-0",
+      )}
+    >
+      <div className="space-y-1.5">
+        {lines.map((line, index) => (
+          <div key={`${card.id}-${index}`} className="flex items-start gap-2 text-[12.5px] leading-5 text-slate-600">
+            <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-slate-300" />
+            <div className="min-w-0">
+              <span className="font-medium text-slate-700">{line.label}:</span>{" "}
+              <span>{line.value}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
-          return (
-            <Card
-              key={idx}
-              className={cn(
-                DASHBOARD_PANEL,
-                "group rounded-[24px] transition-transform duration-200 hover:-translate-y-0.5",
-              )}
-            >
-              <div className="flex h-full min-h-[158px] flex-col px-5 py-5">
-                <div className="flex items-start justify-between gap-3">
-                  <div className={cn(DASHBOARD_EYEBROW, "text-[10px] tracking-[0.22em]")}>
-                    {item.label}
-                  </div>
-                  {tooltipText ? (
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          type="button"
-                          className="rounded-full text-[#334155] transition-colors hover:text-[#5B52F5]"
-                          aria-label={`About ${item.label}`}
-                        >
-                          <HelpCircle className="h-[15px] w-[15px]" strokeWidth={1.8} />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-xs text-xs leading-relaxed">
-                        {tooltipText}
-                      </TooltipContent>
-                    </Tooltip>
-                  ) : null}
-                </div>
+function KpiCard({
+  card,
+  compact = false,
+  expanded = false,
+  onOpen,
+  onClose,
+}: {
+  card: KpiInsightCard;
+  compact?: boolean;
+  expanded?: boolean;
+  onOpen: () => void;
+  onClose: () => void;
+}) {
+  const status = statusMap[card.status] ?? statusMap.needs_attention;
+  const trend = formatTrend(card);
+  const TrendIcon = trend.icon;
 
-                <div className="mt-5 flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <div className="text-[32px] font-bold leading-none tracking-[-0.03em] text-[#0F172A]">
-                      {item.value}
-                    </div>
-                    {getBottomContent(item)}
-                  </div>
-                  <div className={cn(DASHBOARD_PANEL_SOFT, "shrink-0 p-2.5")}>{renderVisual(item)}</div>
-                </div>
+  return (
+    <Card
+      className={cn(
+        "rounded-xl border-0 bg-white shadow-[0_10px_28px_rgba(15,23,42,0.06)] transition-[transform,box-shadow] duration-200 ease-out",
+        expanded
+          ? "shadow-[0_18px_38px_rgba(15,23,42,0.10)] -translate-y-0.5"
+          : "hover:-translate-y-0.5 hover:shadow-[0_18px_38px_rgba(15,23,42,0.10)]",
+      )}
+      onMouseEnter={onOpen}
+      onMouseLeave={onClose}
+      onFocus={onOpen}
+      onBlur={onClose}
+    >
+      <div className={cn("flex flex-col p-4", compact ? "min-h-[112px]" : "min-h-[136px]")}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 space-y-2">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
+              {card.label}
+            </div>
+            <span className={cn("inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold", status.badge)}>
+              {status.label}
+            </span>
+          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                className="rounded-full text-slate-400 transition-colors hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-200"
+                aria-label={`About ${card.label}`}
+              >
+                <HelpCircle className="h-4 w-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs text-xs leading-relaxed">
+              {tooltipMap[card.id] ?? card.label}
+            </TooltipContent>
+          </Tooltip>
+        </div>
+
+        <div className="mt-3.5 flex items-end justify-between gap-4">
+          <div className="min-w-0">
+            <div className="text-[29px] font-bold leading-none tracking-[-0.04em] text-slate-900">
+              {fallbackText(card.displayValue)}
+            </div>
+            <div className="mt-1.5 text-[13px] font-medium text-slate-500">{fallbackText(card.contextLine)}</div>
+          </div>
+          <div className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", trend.className)}>
+            <TrendIcon className="h-3.5 w-3.5" />
+            <span>{trend.text}</span>
+          </div>
+        </div>
+
+        <DetailSection card={card} expanded={expanded} />
+      </div>
+    </Card>
+  );
+}
+
+function LoadingCard({ compact = false }: { compact?: boolean }) {
+  return (
+    <Card className="rounded-xl border-0 bg-white shadow-[0_10px_28px_rgba(15,23,42,0.06)]">
+      <div className={cn("flex animate-pulse flex-col p-5", compact ? "min-h-[130px]" : "min-h-[160px]")}>
+        <div className="h-3 w-24 rounded-full bg-slate-200" />
+        <div className="mt-3 h-6 w-24 rounded-full bg-slate-100" />
+        <div className="mt-8 h-9 w-28 rounded-md bg-slate-200" />
+        <div className="mt-3 h-4 w-32 rounded-md bg-slate-100" />
+      </div>
+    </Card>
+  );
+}
+
+export function RecruiterKpiRibbon({ data, isLoading, className }: RecruiterKpiRibbonProps) {
+  const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const orderedCards = data
+    ? [
+        data.cards.pipelineHealth,
+        data.cards.activeRoles,
+        data.cards.todaysApplications,
+        data.cards.firstReviewTime,
+        data.cards.screenToInterview,
+      ]
+    : [];
+
+  const topCards = orderedCards.slice(0, 3);
+  const bottomCards = orderedCards.slice(3, 5);
+
+  if (isLoading && !data) {
+    return (
+      <div className={cn("space-y-[14px]", className)}>
+        <div className="grid gap-[14px] md:grid-cols-3">
+          {[0, 1, 2].map((index) => (
+            <LoadingCard key={index} />
+          ))}
+        </div>
+        <div className="flex justify-center">
+          <div className="grid w-full gap-[14px] md:w-[calc(66.666%-9.5px)] md:grid-cols-2">
+            {[0, 1].map((index) => (
+              <LoadingCard key={index} compact />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <TooltipProvider delayDuration={120}>
+      <div className={cn("space-y-[14px]", className)}>
+        <div className="flex flex-col gap-[14px] md:flex-row md:items-start">
+          {topCards.map((card) => (
+            <div key={card.id} className="md:min-w-0 md:flex-1">
+              <KpiCard
+                card={card}
+                expanded={activeCardId === card.id}
+                onOpen={() => setActiveCardId(card.id)}
+                onClose={() => setActiveCardId((current) => (current === card.id ? null : current))}
+              />
+            </div>
+          ))}
+        </div>
+        <div className="flex justify-center">
+          <div className="flex w-full flex-col gap-[14px] md:w-[calc(66.666%-9.5px)] md:flex-row md:items-start">
+            {bottomCards.map((card) => (
+              <div key={card.id} className="md:min-w-0 md:flex-1">
+                <KpiCard
+                  card={card}
+                  compact
+                  expanded={activeCardId === card.id}
+                  onOpen={() => setActiveCardId(card.id)}
+                  onClose={() => setActiveCardId((current) => (current === card.id ? null : current))}
+                />
               </div>
-            </Card>
-          );
-        })}
+            ))}
+          </div>
+        </div>
       </div>
     </TooltipProvider>
   );

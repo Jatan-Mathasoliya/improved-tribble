@@ -41,6 +41,7 @@ import {
   CreditCard,
   FileText,
   Home,
+  Inbox,
   LogOut,
   Search,
   Settings,
@@ -77,6 +78,8 @@ interface AtsSidebarProps {
 const matchesPath = (location: string, path: string) =>
   location === path || location.startsWith(`${path}/`);
 
+const ORG_MANAGEMENT_STORAGE_KEY = "ats_sidebar_org_management_open";
+
 export default function AtsSidebar({
   location,
   navigate,
@@ -91,17 +94,20 @@ export default function AtsSidebar({
 }: AtsSidebarProps) {
   const { state, isMobile } = useSidebar();
   const isCollapsed = !isMobile && state === "collapsed";
-  const [orgManagementOpen, setOrgManagementOpen] = React.useState(false);
+  const [orgManagementOpen, setOrgManagementOpen] = React.useState(() => {
+    if (typeof window === "undefined") return false;
+
+    return window.localStorage.getItem(ORG_MANAGEMENT_STORAGE_KEY) === "true";
+  });
   const [collapsedOrgOpen, setCollapsedOrgOpen] = React.useState(false);
 
   React.useEffect(() => {
-    if (isCollapsed) {
-      setOrgManagementOpen(false);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(ORG_MANAGEMENT_STORAGE_KEY, String(orgManagementOpen));
     }
-  }, [isCollapsed]);
+  }, [orgManagementOpen]);
 
   React.useEffect(() => {
-    setOrgManagementOpen(false);
     setCollapsedOrgOpen(false);
   }, [location]);
 
@@ -116,7 +122,7 @@ export default function AtsSidebar({
     {
       label: atsShellCopy.routes.applications.label,
       path: "/applications",
-      icon: Briefcase,
+      icon: Inbox,
       visible: isRecruiter || isAdmin,
       active: matchesPath(location, "/applications"),
     },
@@ -290,11 +296,11 @@ export default function AtsSidebar({
                       isActive={item.active}
                       onClick={() => item.path && navigate(item.path)}
                       className={cn(
-                        "mx-2 h-10 rounded-2xl pl-6 pr-3 text-[13px] font-medium text-[#6E7891] transition-all duration-200 hover:bg-[#FFFFFF] hover:text-[#5B54E8] hover:shadow-[0_8px_24px_rgba(15,23,42,0.05)]",
-                        "data-[active=true]:bg-[linear-gradient(135deg,#4D41DF_0%,#675DF9_100%)] data-[active=true]:text-white data-[active=true]:shadow-[0_16px_34px_rgba(77,65,223,0.22)]",
+                        "mx-2 h-10 rounded-2xl bg-transparent pl-6 pr-3 text-[13px] font-medium text-[#364152] transition-colors duration-100 ease-out hover:bg-transparent hover:text-[#242C3D]",
+                        "data-[active=true]:bg-[#ECEFFE] data-[active=true]:text-[#242C3D]",
                         "group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:h-11 group-data-[collapsible=icon]:w-11 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:rounded-xl group-data-[collapsible=icon]:px-0",
-                        "group-data-[collapsible=icon]:hover:bg-white group-data-[collapsible=icon]:data-[active=true]:bg-[linear-gradient(135deg,#4D41DF_0%,#675DF9_100%)]",
-                        "group-data-[collapsible=icon]:hover:text-[#4F46E5] group-data-[collapsible=icon]:data-[active=true]:text-white",
+                        "group-data-[collapsible=icon]:bg-transparent group-data-[collapsible=icon]:hover:bg-transparent group-data-[collapsible=icon]:data-[active=true]:bg-transparent",
+                        "group-data-[collapsible=icon]:text-[#364152] group-data-[collapsible=icon]:hover:text-[#242C3D] group-data-[collapsible=icon]:data-[active=true]:text-[#242C3D]",
                         "[&>span]:transition-opacity [&>span]:duration-150 group-data-[collapsible=icon]:[&>span]:opacity-0"
                       )}
                     >
@@ -363,13 +369,13 @@ export default function AtsSidebar({
               <button
                 type="button"
                 onClick={() => setOrgManagementOpen((open) => !open)}
-                className="mx-2 flex h-10 w-[calc(100%-1rem)] items-center justify-between rounded-2xl pl-6 pr-3 text-left transition-colors duration-200 hover:bg-white hover:shadow-[0_8px_24px_rgba(15,23,42,0.05)]"
+                className="mx-2 flex h-10 w-[calc(100%-1rem)] items-center justify-between rounded-2xl bg-transparent pl-6 pr-3 text-left transition-colors duration-100 ease-out hover:bg-transparent"
               >
-                <span className="text-[13px] font-medium text-[#6E7891]">{atsShellCopy.menu.organizationManagement}</span>
+                <span className="text-[13px] font-medium text-[#364152]">{atsShellCopy.menu.organizationManagement}</span>
                 <ChevronDown
                   className={cn(
-                    "h-4 w-4 text-[#A4A9B8] transition-transform duration-200",
-                    orgManagementOpen && "rotate-180 text-[#6C63FF]"
+                    "h-4 w-4 text-[#7B8498] transition-transform duration-150 ease-out",
+                    orgManagementOpen && "rotate-180 text-[#364152]"
                   )}
                 />
               </button>
@@ -386,7 +392,7 @@ export default function AtsSidebar({
                             tooltip={item.label}
                             isActive={item.active}
                             onClick={item.onClick ?? (() => item.path && navigate(item.path))}
-                            className="mx-2 h-10 rounded-2xl pl-6 pr-3 text-[13px] font-medium text-[#6E7891] transition-all duration-200 hover:bg-white hover:text-[#5B54E8] hover:shadow-[0_8px_24px_rgba(15,23,42,0.05)] data-[active=true]:bg-[#EEF0FF] data-[active=true]:text-[#5B54E8]"
+                            className="mx-2 h-10 rounded-2xl bg-transparent pl-6 pr-3 text-[13px] font-medium text-[#364152] transition-colors duration-100 ease-out hover:bg-transparent hover:text-[#242C3D] data-[active=true]:bg-[#ECEFFE] data-[active=true]:text-[#242C3D]"
                           >
                             <Icon className="h-4 w-4 shrink-0" />
                             <span>{item.label}</span>
