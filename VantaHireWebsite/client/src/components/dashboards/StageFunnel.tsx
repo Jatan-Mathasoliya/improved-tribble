@@ -15,8 +15,6 @@ type StageSegment = {
 };
 
 type InterviewStageDetails = {
-  stageStatus: string | null;
-  stageIssue: string | null;
   activeInterviewLoops: number;
   avgTimeInStageDays: number | null;
   interviewsScheduledToday: number | null;
@@ -84,58 +82,21 @@ function formatScheduledToday(value: number | null | undefined): string {
   return `${value} Today`;
 }
 
-function formatDeltaValue(value: number | null | undefined): string {
-  if (value == null || Number.isNaN(value)) return "\u2014";
-  const sign = value > 0 ? "+" : "";
-  return `${sign}${value % 1 === 0 ? value.toFixed(0) : value.toFixed(1)}%`;
-}
-
 function normalizeStageKey(label: string): string {
   return label.trim().toLowerCase();
 }
 
-function normalizeInterviewDetails(payload: unknown, stageLabel?: string | null): InterviewStageDetails {
+function normalizeInterviewDetails(payload: unknown): InterviewStageDetails {
   const source = (payload ?? {}) as Record<string, unknown>;
-  const normalizedStage = stageLabel ? normalizeStageKey(stageLabel) : null;
-  const stageHealthMatch =
-    normalizedStage && Array.isArray(source.stageHealth)
-      ? (source.stageHealth as Array<Record<string, unknown>>).find((entry) => {
-          const stage = typeof entry.stage === "string" ? entry.stage : "";
-          return normalizeStageKey(stage) === normalizedStage;
-        })
-      : null;
-  const stageBucket =
-    normalizedStage &&
-    typeof source.stageDetails === "object" &&
-    source.stageDetails !== null
-      ? (source.stageDetails as Record<string, unknown>)[normalizedStage]
-      : null;
-  const stagesArrayBucket =
-    normalizedStage && Array.isArray(source.stages)
-      ? (source.stages as Array<Record<string, unknown>>).find((entry) => {
-          const label = typeof entry.label === "string" ? entry.label : typeof entry.stage === "string" ? entry.stage : "";
-          return normalizeStageKey(label) === normalizedStage;
-        })
-      : null;
-
-  const resolved = (stageHealthMatch || stageBucket || stagesArrayBucket || source) as Record<string, unknown>;
   const screening =
-    typeof resolved.screeningToInterview === "object" && resolved.screeningToInterview !== null
-      ? (resolved.screeningToInterview as Record<string, unknown>)
+    typeof source.screeningToInterview === "object" && source.screeningToInterview !== null
+      ? (source.screeningToInterview as Record<string, unknown>)
       : {};
-  const avgTimeInStageDays =
-    typeof resolved.avgTimeInStageDays === "number"
-      ? resolved.avgTimeInStageDays
-      : typeof source.avgTimeInStageDays === "number"
-        ? source.avgTimeInStageDays
-        : null;
 
   return {
-    stageStatus: typeof resolved.status === "string" ? resolved.status : null,
-    stageIssue: typeof resolved.issue === "string" ? resolved.issue : null,
-    activeInterviewLoops: typeof resolved.activeInterviewLoops === "number" ? resolved.activeInterviewLoops : 0,
-    avgTimeInStageDays,
-    interviewsScheduledToday: typeof resolved.interviewsScheduledToday === "number" ? resolved.interviewsScheduledToday : null,
+    activeInterviewLoops: typeof source.activeInterviewLoops === "number" ? source.activeInterviewLoops : 0,
+    avgTimeInStageDays: typeof source.avgTimeInStageDays === "number" ? source.avgTimeInStageDays : null,
+    interviewsScheduledToday: typeof source.interviewsScheduledToday === "number" ? source.interviewsScheduledToday : null,
     screeningToInterview: {
       currentRate: typeof screening.currentRate === "number" ? screening.currentRate : null,
       delta: typeof screening.delta === "number" ? screening.delta : null,
@@ -146,8 +107,8 @@ function normalizeInterviewDetails(payload: unknown, stageLabel?: string | null)
       screeningCount: typeof screening.screeningCount === "number" ? screening.screeningCount : null,
       interviewCount: typeof screening.interviewCount === "number" ? screening.interviewCount : null,
     },
-    periodLabel: typeof resolved.periodLabel === "string" ? resolved.periodLabel : null,
-    comparisonLabel: typeof resolved.comparisonLabel === "string" ? resolved.comparisonLabel : null,
+    periodLabel: typeof source.periodLabel === "string" ? source.periodLabel : null,
+    comparisonLabel: typeof source.comparisonLabel === "string" ? source.comparisonLabel : null,
   };
 }
 
@@ -156,6 +117,7 @@ function getStageStatCards(
   details: InterviewStageDetails | undefined,
   stageCandidateCount: number | null,
   avgTimeInStageDays: number | null,
+  stageInterviewsScheduledToday: number,
 ): Array<{ label: string; value: string }> {
   if (!hoveredStage) {
     return [
@@ -171,42 +133,15 @@ function getStageStatCards(
   }
 
   const stageName = normalizeStageKey(hoveredStage.name);
-
-  if (stageName.includes("appl")) {
-    return [
-      {
-        label: "Stage volume",
-        value: formatCompactNumber(stageCandidateCount ?? hoveredStage.count),
-      },
-      {
-        label: "Screening rate",
-        value: formatNullablePercent(details?.screeningToInterview.currentRate),
-      },
-    ];
-  }
-
-  if (stageName.includes("screen")) {
-    return [
-      {
-        label: "Active loops",
-        value: formatCompactNumber(details?.activeInterviewLoops ?? 0),
-      },
-      {
-        label: recruiterDashboardCopy.funnel.avgTimeInStage,
-        value: formatStageDays(avgTimeInStageDays),
-      },
-    ];
-  }
-
   if (stageName.includes("interview")) {
     return [
       {
-        label: recruiterDashboardCopy.funnel.interviewsToday,
-        value: formatScheduledToday(details?.interviewsScheduledToday),
+        label: recruiterDashboardCopy.funnel.candidatesInStage,
+        value: formatCompactNumber(stageCandidateCount ?? hoveredStage.count),
       },
       {
-        label: recruiterDashboardCopy.funnel.avgTimeInStage,
-        value: formatStageDays(avgTimeInStageDays),
+        label: recruiterDashboardCopy.funnel.interviewsToday,
+        value: formatScheduledToday(stageInterviewsScheduledToday),
       },
     ];
   }
@@ -227,6 +162,7 @@ function buildSummary(
   details: InterviewStageDetails | undefined,
   hoveredStage: StageSegment | null,
   stageCandidateCount: number | null,
+  avgTimeInStageDays: number | null,
 ): {
   prefix: string;
   deltaText: string;
@@ -243,9 +179,11 @@ function buildSummary(
     : formatCompactNumber(details?.activeInterviewLoops ?? 0);
 
   if (hoveredStage) {
-    const stageStatus = details?.stageStatus ? `${details.stageStatus}. ` : "";
-    const stageIssue = details?.stageIssue ? `${details.stageIssue}. ` : "";
-    const prefix = `In ${periodLabel}, ${subjectCount} candidates are currently in ${hoveredStage.name}. ${stageStatus}${stageIssue}${hoveredStage.name} conversion is ${formatNullablePercent(currentRate)} and has `;
+    const stageTiming =
+      avgTimeInStageDays != null ? ` Average time in this stage is ${formatStageDays(avgTimeInStageDays)}.` : "";
+    const prefix =
+      `In ${periodLabel}, ${subjectCount} candidates are currently in ${hoveredStage.name}.${stageTiming} ` +
+      `Recruiter-wide screening to interview conversion is ${formatNullablePercent(currentRate)} and has `;
 
     if (direction === "up" && (delta ?? 0) > 0) {
       return {
@@ -382,7 +320,6 @@ export function StageFunnel({
       "/api/recruiter-dashboard/interview-stage-details",
       rangePreset,
       selectedJobId,
-      hoveredStage?.name ?? "overview",
     ],
     queryFn: async () => {
       const params = new URLSearchParams({
@@ -396,7 +333,7 @@ export function StageFunnel({
         throw new Error("Failed to fetch interview stage details");
       }
       const payload = await response.json();
-      return normalizeInterviewDetails(payload, hoveredStage?.name ?? null);
+      return normalizeInterviewDetails(payload);
     },
     staleTime: 0,
     refetchOnMount: "always",
@@ -454,7 +391,12 @@ export function StageFunnel({
     hoveredStage != null && stageDerivedMetrics.avgTimeInStageDays != null
       ? stageDerivedMetrics.avgTimeInStageDays
       : details?.avgTimeInStageDays ?? null;
-  const summary = buildSummary(details, hoveredStage, stageDerivedMetrics.stageCandidateCount);
+  const summary = buildSummary(
+    details,
+    hoveredStage,
+    stageDerivedMetrics.stageCandidateCount,
+    effectiveAvgTimeInStageDays,
+  );
   const statCards = useMemo(
     () =>
       getStageStatCards(
@@ -462,8 +404,15 @@ export function StageFunnel({
         details,
         stageDerivedMetrics.stageCandidateCount,
         effectiveAvgTimeInStageDays,
+        stageDerivedMetrics.interviewsScheduledToday,
       ),
-    [details, effectiveAvgTimeInStageDays, hoveredStage, stageDerivedMetrics.stageCandidateCount],
+    [
+      details,
+      effectiveAvgTimeInStageDays,
+      hoveredStage,
+      stageDerivedMetrics.interviewsScheduledToday,
+      stageDerivedMetrics.stageCandidateCount,
+    ],
   );
 
   return (
