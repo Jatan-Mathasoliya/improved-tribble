@@ -1,5 +1,6 @@
 import { useAuth } from "@/hooks/use-auth";
 import { useOnboardingStatus } from "@/hooks/use-onboarding-status";
+import { useOrganization } from "@/hooks/use-organization";
 import { Loader2 } from "lucide-react";
 import { Redirect, Route } from "wouter";
 import { ComponentType, LazyExoticComponent } from "react";
@@ -10,11 +11,22 @@ type LazyComponent = LazyExoticComponent<ComponentType<object>>;
 const ONBOARDING_EXEMPT_PATHS = [
   '/onboarding',
   '/org/choice',
+  '/org/settings',
   '/blocked/',
 ];
 
 function isOnboardingExempt(path: string): boolean {
   return ONBOARDING_EXEMPT_PATHS.some(exempt => path.startsWith(exempt));
+}
+
+// Paths a recruiter should still be able to reach even if their seat was removed.
+const SEAT_EXEMPT_PATHS = [
+  '/org/settings',
+  '/blocked/',
+];
+
+function isSeatExempt(path: string): boolean {
+  return SEAT_EXEMPT_PATHS.some(exempt => path.startsWith(exempt));
 }
 
 export function ProtectedRoute({
@@ -32,6 +44,9 @@ export function ProtectedRoute({
   const shouldCheckOnboarding =
     user?.role === 'recruiter' &&
     !isOnboardingExempt(path);
+  const shouldCheckSeat =
+    user?.role === 'recruiter' &&
+    !isSeatExempt(path);
 
   // Pass enabled to avoid unnecessary API calls for non-recruiters
   const {
@@ -39,9 +54,16 @@ export function ProtectedRoute({
     isLoading: onboardingLoading,
     error: onboardingError,
   } = useOnboardingStatus({ enabled: shouldCheckOnboarding });
+  const {
+    data: orgData,
+    isLoading: organizationLoading,
+  } = useOrganization({ enabled: shouldCheckSeat });
 
   // Combined loading state
-  const isFullyLoading = isLoading || (shouldCheckOnboarding && onboardingLoading);
+  const isFullyLoading =
+    isLoading ||
+    (shouldCheckOnboarding && onboardingLoading) ||
+    (shouldCheckSeat && organizationLoading);
 
   if (isFullyLoading) {
     return (
@@ -72,6 +94,16 @@ export function ProtectedRoute({
             <p className="text-muted-foreground">You don't have permission to access this page.</p>
           </div>
         </div>
+      </Route>
+    );
+  }
+
+  // Recruiters who are still in an org but have lost their seat should be
+  // redirected before protected pages load and start firing 403ing queries.
+  if (shouldCheckSeat && orgData && !orgData.membership.seatAssigned) {
+    return (
+      <Route path={path}>
+        <Redirect to="/blocked/seat-removed" />
       </Route>
     );
   }
