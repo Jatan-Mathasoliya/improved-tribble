@@ -30,6 +30,12 @@ interface EmailHistoryEntry {
   sentBy: { firstName: string; lastName: string } | null;
 }
 
+export interface EmailSendPayload {
+  templateId: number;
+  subject?: string;
+  body?: string;
+}
+
 interface ApplicationDetailPanelProps {
   application: Application;
   jobId: number;
@@ -40,7 +46,7 @@ interface ApplicationDetailPanelProps {
   onClose: () => void;
   onMoveStage: (stageId: number, notes?: string) => void;
   onScheduleInterview: (data: { date: string; time: string; location: string; notes: string }) => void;
-  onSendEmail: (templateId: number) => void;
+  onSendEmail: (payload: EmailSendPayload) => void;
   onSendForm: (formId: number, message: string) => void;
   onAddNote: (note: string) => void;
   onSetRating: (rating: number) => void;
@@ -198,7 +204,15 @@ export function ApplicationDetailPanel({
 
   const handleSendEmail = () => {
     if (!selectedTemplateId) return;
-    onSendEmail(parseInt(selectedTemplateId));
+    onSendEmail({
+      templateId: parseInt(selectedTemplateId, 10),
+      ...(showAiDraft && aiDraftSubject && aiDraftBody
+        ? {
+            subject: aiDraftSubject,
+            body: aiDraftBody,
+          }
+        : {}),
+    });
     setSelectedTemplateId("");
     setShowAiDraft(false);
     setAiDraftSubject("");
@@ -478,7 +492,7 @@ export function ApplicationDetailPanel({
                       className="w-full border-border text-foreground hover:bg-muted"
                     >
                       <Mail className="h-4 w-4 mr-2" />
-                      Send Email
+                      {showAiDraft && aiDraftSubject && aiDraftBody ? "Send AI Draft" : "Send Email"}
                     </Button>
                   </div>
                 )}

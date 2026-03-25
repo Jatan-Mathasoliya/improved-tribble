@@ -40,6 +40,32 @@ export interface FieldData {
   order: number;
 }
 
+function normalizeAiFieldType(fieldType: string): FieldData["type"] {
+  switch (fieldType) {
+    case "mcq":
+    case "scale":
+      return "select";
+    default:
+      return fieldType;
+  }
+}
+
+function normalizeAiFieldOptions(fieldType: string, options?: string[]): string | undefined {
+  const normalizedType = normalizeAiFieldType(fieldType);
+  if (normalizedType !== "select") {
+    return undefined;
+  }
+
+  const normalizedOptions =
+    fieldType === "scale" && (!options || options.length === 0)
+      ? ["1", "2", "3", "4", "5"]
+      : options;
+
+  return normalizedOptions && normalizedOptions.length > 0
+    ? normalizedOptions.join(", ")
+    : undefined;
+}
+
 export default function FormEditorPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -111,12 +137,10 @@ export default function FormEditorPage() {
       // Convert AI suggestions to FieldData format and append to existing fields
       const newFields: FieldData[] = data.fields.map((field, index) => ({
         id: `ai-field-${Date.now()}-${index}`,
-        type: field.fieldType,
+        type: normalizeAiFieldType(field.fieldType),
         label: field.label,
         required: field.required,
-        options: field.options && field.fieldType === 'select'
-          ? field.options.join(', ')
-          : undefined,
+        options: normalizeAiFieldOptions(field.fieldType, field.options),
         order: fields.length + index,
       }));
 

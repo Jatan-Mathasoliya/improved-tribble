@@ -1,6 +1,6 @@
 # Deploying to Railway
 
-This guide covers deploying the VantaHireWebsite (Express + React) to Railway, with optional SpotAxis integration.
+This guide covers deploying the VantaHireWebsite (Express + React) to Railway.
 
 ## 1) Prerequisites
 - Railway project created
@@ -47,9 +47,6 @@ Set these in Railway → Variables:
     - `BREVO_SMTP_PORT=587` (default; use 465 for SSL)
     - `BREVO_SMTP_USER=apikey` (default)
     - `BREVO_SMTP_PASSWORD=<your-brevo-smtp-key>`
-- SpotAxis integration:
-  - `SPOTAXIS_BASE_URL` (e.g. `https://your-spotaxis-app.railway.app`)
-  - `SPOTAXIS_CAREERS_URL` (e.g. `https://org-subdomain.your-spotaxis.com/jobs/`)
 - Email automation (ATS):
   - `EMAIL_AUTOMATION_ENABLED` = `true` to auto-send emails on stage changes, scheduling, and application received
 - Async AI fit scoring queue (optional):
@@ -76,11 +73,10 @@ Recommended: Prefer `DATABASE_CA_CERT` to maintain strict verification. Avoid gl
 
 ## 3) Build & Deployment Configuration
 
-**Important**: This service (VantaHireWebsite) uses **Nixpacks** for deployment, not the root Dockerfile.
+**Important**: This service (VantaHireWebsite) uses **Nixpacks** for deployment.
 
 ### Configuration Files:
 - `VantaHireWebsite/railway.json` - Defines the build/deploy configuration
-- Root `Dockerfile` - Used for SpotAxis (Python app), **NOT** for this service
 
 ### Build & Start Commands:
 The repo already defines:
@@ -97,21 +93,12 @@ Configure Railway’s health check path to `/api/health` (200 OK when healthy).
 - Set variables in Railway as described above.
 - Optional: set `MIGRATE_ON_START=true` in your Web service to auto-apply schema (drizzle-kit push) on boot.
 - Deploy. Railway builds the client to `dist/public` and the server to `dist/index.js`.
-- On successful start, logs include the bound port and optional SpotAxis config.
+- On successful start, logs include the bound port and service startup confirmation.
 - If using the async AI queue, create a separate worker service:
   - Start command: `npm run start:ai-worker`
   - Set `AI_QUEUE_ENABLED=true`, `REDIS_URL`, `GROQ_API_KEY`, and `GOOGLE_APPLICATION_CREDENTIALS`
 
-## 6) SpotAxis Integration (optional)
-When `SPOTAXIS_BASE_URL` is set:
-- VantaHire proxies SpotAxis job listings/details.
-- Job details show “Apply on SpotAxis” if an application URL exists.
-- Recruiter dashboard and job post page surface helper links:
-  - `/spotaxis/admin`, `/spotaxis/recruiter`, `/spotaxis/job/new`, `/spotaxis/jobs`
-
-If you deploy SpotAxis separately on Railway, use its public URL as `SPOTAXIS_BASE_URL`.
-
-## 7) Security Notes
+## 6) Security Notes
 
 ### Phase 1 & 2 Security Improvements Implemented:
 - ✅ **Session Security**: SameSite cookies, required SESSION_SECRET
@@ -146,7 +133,7 @@ Before deploying, verify:
 - [ ] `DATABASE_URL` is correct and SSL-enabled
 - [ ] `ADMIN_PASSWORD` is set for initial deployment
 
-## 8) Database Migrations
+## 7) Database Migrations
 
 ### Automatic Migrations (Recommended)
 The application automatically runs migrations on startup via `ensureAtsSchema()` in `server/index.ts`. This includes:
@@ -179,7 +166,7 @@ npm run seed:forms
 
 **Note**: The seed scripts are idempotent - they skip existing data and only create missing items.
 
-## 9) Troubleshooting
+## 8) Troubleshooting
 - Port binding: ensure the app logs show it's listening on the PORT Railway provided.
 - Database: verify `DATABASE_URL` and SSL options.
   - Railway Postgres: set `DATABASE_URL` and (if needed) `DATABASE_SSL=true`.

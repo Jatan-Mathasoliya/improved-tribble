@@ -56,8 +56,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        // scriptSrc: Mautic form embed requires inline scripts for form handling
-        // 'unsafe-inline' needed in both dev and prod for Mautic form functionality
+        // scriptSrc: Some marketing pages still include inline script blocks and third-party embeds.
+        // Note: 'unsafe-inline' here does not permit inline event-handler attributes such as onload=.
         // Google Tag Manager needed for analytics
         // Cashfree SDK needed for payment checkout
         scriptSrc: isDevelopment

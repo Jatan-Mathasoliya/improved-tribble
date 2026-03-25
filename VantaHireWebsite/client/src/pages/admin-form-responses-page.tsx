@@ -41,6 +41,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Redirect } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { adminFormResponsesPageCopy } from "@/lib/internal-copy";
+import { formsApi, formsQueryKeys, type FormTemplateDTO } from "@/lib/formsApi";
 
 interface FormResponseSummary {
   id: number;
@@ -67,12 +68,6 @@ interface FormResponseDetail {
     answer: string | null;
     fileUrl: string | null;
   }>;
-}
-
-interface FormTemplate {
-  id: number;
-  name: string;
-  description?: string;
 }
 
 interface AdminResponsesData {
@@ -105,11 +100,8 @@ export default function AdminFormResponsesPage() {
 
   // Fetch all form templates for filter dropdown
   const { data: templatesData } = useQuery({
-    queryKey: ["/api/forms/templates"],
-    queryFn: async () => {
-      const res = await apiRequest("GET", "/api/forms/templates");
-      return res.json();
-    },
+    queryKey: formsQueryKeys.templates(),
+    queryFn: formsApi.listTemplates,
   });
 
   // Fetch form responses with filters
@@ -139,7 +131,7 @@ export default function AdminFormResponsesPage() {
     enabled: !!selectedResponse,
   });
 
-  const templates: FormTemplate[] = templatesData?.templates || [];
+  const templates: FormTemplateDTO[] = templatesData?.templates || [];
   const responses = responsesData?.responses || [];
   const total = responsesData?.total || 0;
   const stats = responsesData?.stats || {
