@@ -1,7 +1,9 @@
 # VantaHire ATS Integration Plan
 ## Lightweight Applicant Tracking System Integration
 
-**Goal**: Add core ATS features to VantaHire using SpotAxis as reference, keeping it simple and focused.
+**Goal**: Add core ATS features to VantaHire while keeping the implementation simple and focused.
+
+> Historical note: this plan originally used the legacy SpotAxis service as a reference. That service has since been removed from this repo, so the SpotAxis-specific file paths below are archival context only.
 
 ---
 
@@ -498,30 +500,30 @@ async function changeStage(applicationId, newStageId, changedBy, notes) {
 
 ---
 
-### Phase 5: SpotAxis Code Reference Mapping
+### Phase 5: Legacy Reference Mapping
 
-#### What to Extract from SpotAxis
+#### Historical Patterns Used During ATS Design
 
-**From `/SpotAxis/companies/models.py`:**
+**Legacy reference from `/SpotAxis/companies/models.py`:**
 - `Stage` model → Our `pipelineStages` table
 - Stage ordering and company-specific stages
 
-**From `/SpotAxis/vacancies/models.py`:**
+**Legacy reference from `/SpotAxis/vacancies/models.py`:**
 - `Postulate` model (their application model) → Enhance our `applications`
 - Status tracking patterns
 - Interview date/location fields
 
-**From `/SpotAxis/activities/models.py`:**
+**Legacy reference from `/SpotAxis/activities/models.py`:**
 - `Activity` and `Notification` models → Our `applicationStageHistory`
 - Email notification triggers
 - Timeline/history tracking patterns
 
-**From `/SpotAxis/TRM/templates/` (email templates):**
+**Legacy reference from `/SpotAxis/TRM/templates/` (email templates):**
 - Email template structure
 - Variable substitution patterns
 - Professional email copy
 
-**From `/SpotAxis/vacancies/views.py`:**
+**Legacy reference from `/SpotAxis/vacancies/views.py`:**
 - Application status change logic
 - Recruiter dashboard filtering
 - PDF resume generation (already have resume URLs)
@@ -649,11 +651,11 @@ After implementation, we should have:
 - ✅ Stage change history visible
 - ✅ Email templates customizable
 - ✅ Kanban board view for visual pipeline
-- ✅ ~90% less complex than SpotAxis, 100% of needed features
+- ✅ ~90% less complex than the legacy SpotAxis service, 100% of needed features
 
 ---
 
-## 🎯 Key Differences from SpotAxis
+## 🎯 Key Differences from the Legacy SpotAxis Service
 
 | Feature | SpotAxis | VantaHire ATS |
 |---------|----------|---------------|

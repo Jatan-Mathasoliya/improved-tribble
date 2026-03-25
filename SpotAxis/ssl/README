@@ -1,5 +1,0 @@
-This directory is reserved for local TLS keys/certificates (e.g., Certbot output),
-but **must never be committed to Git**.
-
-For Railway deployments, terminate TLS at the platform/load balancer and do not
-store private keys in the container filesystem.

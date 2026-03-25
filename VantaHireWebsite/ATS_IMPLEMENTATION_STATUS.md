@@ -144,6 +144,8 @@ npx tsx server/seedATSDefaults.ts
 
 ## 🎯 Feature Comparison
 
+Historical note: this comparison uses the removed legacy SpotAxis service as a baseline only.
+
 | Feature | SpotAxis | VantaHire ATS | Status |
 |---------|----------|---------------|--------|
 | Pipeline Stages | ✅ | ✅ | ✅ Complete |

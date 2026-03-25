@@ -1,8 +1,7 @@
-# Vanta Monorepo
+# Vanta Repository
 
-This repo contains two deployable services:
+This repo currently ships one deployable service:
 - `VantaHireWebsite/`: Node.js (Express API + Vite/React UI) backed by Postgres; optional Redis + GCS + SMTP.
-- `SpotAxis/`: Python (Django) ATS, deployed separately (optional integration).
 
 ## Run Locally (VantaHireWebsite)
 
@@ -29,4 +28,3 @@ Recommended Railway setup:
 ```
 
 Create a Railway Template from this repo, then replace `YOUR_TEMPLATE_ID`.
-
