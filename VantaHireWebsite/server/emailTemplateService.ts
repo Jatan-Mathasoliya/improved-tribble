@@ -128,13 +128,29 @@ export function renderEmailTemplate(
   };
 }
 
+type SendTemplatedEmailOptions = {
+  customVariables?: Partial<TemplateVariables>;
+  subjectOverride?: string;
+  bodyOverride?: string;
+};
+
+function isSendTemplatedEmailOptions(
+  value: Partial<TemplateVariables> | SendTemplatedEmailOptions
+): value is SendTemplatedEmailOptions {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    ('customVariables' in value || 'subjectOverride' in value || 'bodyOverride' in value)
+  );
+}
+
 /**
  * Send an email using a template with application context
  */
 export async function sendTemplatedEmail(
   applicationId: number,
   templateId: number,
-  customVariables: Partial<TemplateVariables> = {}
+  customVariablesOrOptions: Partial<TemplateVariables> | SendTemplatedEmailOptions = {}
 ): Promise<void> {
   // Fetch application with job and recruiter data
   const application = await db.query.applications.findFirst({
@@ -168,6 +184,10 @@ export async function sendTemplatedEmail(
     throw new Error(`Email template ${templateId} not found`);
   }
 
+  const options = isSendTemplatedEmailOptions(customVariablesOrOptions)
+    ? customVariablesOrOptions
+    : { customVariables: customVariablesOrOptions };
+
   // Build variables from application data
   const variables: TemplateVariables = {
     candidate_name: application.name,
@@ -176,11 +196,17 @@ export async function sendTemplatedEmail(
       ? `${application.job.postedBy.firstName || ''} ${application.job.postedBy.lastName || ''}`.trim()
       : 'Hiring Team',
     company_name: 'VantaHire',
-    ...customVariables,
+    ...options.customVariables,
   };
 
   // Render template
-  const { subject, body } = renderEmailTemplate(template, variables);
+  const rendered = renderEmailTemplate(template, variables);
+  const subject = options.subjectOverride && options.subjectOverride.trim().length > 0
+    ? options.subjectOverride
+    : rendered.subject;
+  const body = options.bodyOverride && options.bodyOverride.trim().length > 0
+    ? options.bodyOverride
+    : rendered.body;
 
   let previewUrl: string | null = null;
   let status: 'success' | 'failed' = 'success';

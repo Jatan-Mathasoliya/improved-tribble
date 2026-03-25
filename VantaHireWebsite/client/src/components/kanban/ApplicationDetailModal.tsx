@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Application, EmailTemplate, PipelineStage } from "@shared/schema";
 import { FormTemplateDTO } from "@/lib/formsApi";
-import { ApplicationDetailPanel } from "./ApplicationDetailPanel";
+import { ApplicationDetailPanel, type EmailSendPayload } from "./ApplicationDetailPanel";
 import { Download, FileText, ExternalLink, AlertCircle } from "lucide-react";
 
 interface ApplicationDetailModalProps {
@@ -21,7 +21,7 @@ interface ApplicationDetailModalProps {
   onClose: () => void;
   onMoveStage: (stageId: number, notes?: string) => void;
   onScheduleInterview: (data: { date: string; time: string; location: string; notes: string }) => void;
-  onSendEmail: (templateId: number) => void;
+  onSendEmail: (payload: EmailSendPayload) => void;
   onSendForm: (formId: number, message: string) => void;
   onAddNote: (note: string) => void;
   onSetRating: (rating: number) => void;

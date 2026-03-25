@@ -37,6 +37,13 @@ const updateEmailTemplateSchema = z.object({
   isDefault: z.boolean().optional(),
 });
 
+const sendEmailSchema = z.object({
+  templateId: z.number().int().positive(),
+  customizations: z.record(z.string()).optional(),
+  subject: z.string().min(1).max(500).optional(),
+  body: z.string().min(1).optional(),
+});
+
 const emailDraftSchema = z.object({
   templateId: z.number().int().positive(),
   applicationId: z.number().int().positive(),
@@ -168,11 +175,12 @@ export function registerCommunicationsRoutes(
         res.status(400).json({ error: 'Invalid ID parameter' });
         return;
       }
-      const { templateId, customizations } = req.body as { templateId: number; customizations?: Record<string,string> };
-      if (!templateId) {
-        res.status(400).json({ error: 'templateId required' });
+      const parsed = sendEmailSchema.safeParse(req.body);
+      if (!parsed.success) {
+        res.status(400).json({ error: 'Validation error', details: parsed.error.errors });
         return;
       }
+      const { templateId, customizations, subject, body } = parsed.data;
       const appData = await storage.getApplication(appId);
       if (!appData) {
         res.status(404).json({ error: 'application not found' });
@@ -183,7 +191,12 @@ export function registerCommunicationsRoutes(
         res.status(404).json({ error: 'template not found' });
         return;
       }
-      await sendTemplatedEmail(appId, templateId, customizations || {});
+      const sendOptions = {
+        customVariables: customizations || {},
+        ...(subject ? { subjectOverride: subject } : {}),
+        ...(body ? { bodyOverride: body } : {}),
+      };
+      await sendTemplatedEmail(appId, templateId, sendOptions);
       res.json({ success: true });
       return;
     } catch (e) { next(e); }
