@@ -37,7 +37,6 @@
    AI_WORKER_INTERACTIVE_CONCURRENCY=2
    AI_WORKER_BATCH_CONCURRENCY=1
    GOOGLE_APPLICATION_CREDENTIALS=<path-to-service-account-json>
-   SPOTAXIS_BASE_URL=<your-value>
    ```
 
 4. **Deploy**
@@ -56,14 +55,6 @@
    - Set `AI_QUEUE_ENABLED=true` on both web and worker services
    - Set `GROQ_API_KEY` and `GOOGLE_APPLICATION_CREDENTIALS` on the worker
 
-### SpotAxis Integration (Optional)
-
-If deploying SpotAxis alongside VantaHire:
-
-1. Deploy SpotAxis to Railway as a separate service
-2. Set `SPOTAXIS_BASE_URL` to your SpotAxis deployment URL
-3. Set `SPOTAXIS_CAREERS_URL` to your SpotAxis careers page URL
-
 ## Environment Variables Reference
 
 | Variable | Required | Description |
@@ -81,8 +72,6 @@ If deploying SpotAxis alongside VantaHire:
 | `AI_WORKER_INTERACTIVE_CONCURRENCY` | No | Worker concurrency for single-item jobs (default 2) |
 | `AI_WORKER_BATCH_CONCURRENCY` | No | Worker concurrency for batch jobs (default 1) |
 | `GOOGLE_APPLICATION_CREDENTIALS` | No | Service account JSON path for resume downloads in the worker |
-| `SPOTAXIS_BASE_URL` | No | Base URL for SpotAxis integration |
-| `SPOTAXIS_CAREERS_URL` | No | Careers page URL for SpotAxis |
 | `NOTIFICATION_EMAIL` | No | Email for system notifications |
 
 ## Verifying Deployment

@@ -241,7 +241,6 @@ Now that environment is configured:
 These are **optional** and working with sensible defaults:
 
 - `NOTIFICATION_GROQ_API_KEY` - For AI features (already set as GROQ_API_KEY)
-- `SPOTAXIS_BASE_URL` - For SpotAxis integration (not needed)
 - `DATABASE_CA_CERT` - For external DB with custom CA (Railway internal doesn't need)
 
 ---
