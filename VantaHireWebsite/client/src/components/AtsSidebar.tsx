@@ -237,7 +237,8 @@ export default function AtsSidebar({
   const initials = `${user?.firstName?.[0] ?? ""}${user?.lastName?.[0] ?? user?.username?.[0] ?? "U"}`.toUpperCase();
   const accountSubtitle = user?.username ?? "";
   const currentPlanName = subscription?.plan?.displayName || "Free";
-  const shouldShowUpgradePlan = !subscription?.plan;
+  const planName = subscription?.plan?.name?.toLowerCase();
+  const shouldShowUpgradePlan = !planName || planName === "free";
 
   return (
     <Sidebar
