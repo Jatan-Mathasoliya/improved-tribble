@@ -1,5 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 
+interface UseOrganizationOptions {
+  enabled?: boolean;
+}
+
 // Types
 export interface Organization {
   id: number;
@@ -110,11 +114,14 @@ async function fetchJoinRequests() {
 }
 
 // Hooks
-export function useOrganization() {
+export function useOrganization(options: UseOrganizationOptions = {}) {
+  const { enabled = true } = options;
+
   return useQuery<{ organization: Organization; membership: Membership } | null>({
     queryKey: ['organization', 'current'],
     queryFn: fetchCurrentOrganization,
     staleTime: 1000 * 60, // 1 minute
+    enabled,
   });
 }
 
