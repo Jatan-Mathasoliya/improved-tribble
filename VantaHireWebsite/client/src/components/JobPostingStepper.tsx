@@ -1029,7 +1029,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
 
                   {useDefaultPipeline && pipelineStages.length > 0 && (
                     <div className="flex flex-wrap gap-2 ml-7">
-                      {pipelineStages.sort((a, b) => (a.order - b.order) || (a.id - b.id)).map((stage) => (
+                      {[...pipelineStages].sort((a, b) => (a.order - b.order) || (a.id - b.id)).map((stage) => (
                         <Badge
                           key={stage.id}
                           variant="outline"

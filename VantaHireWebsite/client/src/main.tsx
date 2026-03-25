@@ -1,7 +1,6 @@
 import { hydrateRoot, createRoot } from "react-dom/client";
 import { HelmetProvider } from "react-helmet-async";
 import App from "./App";
-import { ErrorBoundary } from "./components/ErrorBoundary";
 import "./index.css";
 import "./styles/public-theme.css";
 
@@ -9,9 +8,7 @@ const rootEl = document.getElementById("root")!;
 
 const app = (
   <HelmetProvider>
-    <ErrorBoundary>
-      <App />
-    </ErrorBoundary>
+    <App />
   </HelmetProvider>
 );
 

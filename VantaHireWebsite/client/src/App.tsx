@@ -1,10 +1,11 @@
-import { Switch, Route, Redirect } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import { ProtectedRoute } from "@/lib/protected-route";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import { CookieConsent, AnalyticsOnConsent } from "@/components/CookieConsent";
@@ -178,6 +179,18 @@ function Router() {
   );
 }
 
+function RouteScopedBoundary() {
+  const [location] = useLocation();
+
+  return (
+    <ErrorBoundary key={location}>
+      <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
+        <Router />
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+
 /** Wraps children in TourProvider only when user is authenticated */
 function AuthenticatedTours({ children }: { children: React.ReactNode }) {
   const { user } = useAuth();
@@ -202,9 +215,7 @@ function App() {
             {/* Inject analytics only after consent */}
             <AnalyticsOnConsent />
             <CookieConsent />
-            <Suspense fallback={<div className="p-8 text-center">Loading...</div>}>
-              <Router />
-            </Suspense>
+            <RouteScopedBoundary />
           </AuthenticatedTours>
         </TooltipProvider>
       </AuthProvider>

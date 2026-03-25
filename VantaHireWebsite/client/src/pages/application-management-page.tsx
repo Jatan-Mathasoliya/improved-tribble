@@ -221,12 +221,10 @@ export default function ApplicationManagementPage() {
   });
 
   // ATS: Fetch form templates
-  const { data: formTemplates = [] } = useQuery<FormTemplateDTO[]>({
-    queryKey: ["/api/forms/templates"],
-    queryFn: async () => {
-      const result = await formsApi.listTemplates();
-      return result.templates;
-    },
+  const { data: formTemplates = [] } = useQuery({
+    queryKey: formsQueryKeys.templates(),
+    queryFn: formsApi.listTemplates,
+    select: (data) => data.templates,
   });
 
   // ATS: Fetch form invitation quota (remaining daily invites)
@@ -1522,7 +1520,7 @@ export default function ApplicationManagementPage() {
           <div className="min-h-[600px] rounded-lg border border-border bg-card shadow-sm p-4 overflow-auto" data-tour="kanban-board">
             <KanbanBoard
               applications={filteredApplications}
-              pipelineStages={pipelineStages.sort((a, b) => (a.order - b.order) || (a.id - b.id))}
+              pipelineStages={[...pipelineStages].sort((a, b) => (a.order - b.order) || (a.id - b.id))}
               selectedIds={selectedApplications}
               onToggleSelect={handleToggleSelect}
               onOpenDetails={handleOpenDetails}
