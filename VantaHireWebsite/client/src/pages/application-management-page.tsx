@@ -64,6 +64,7 @@ import { FormsModal } from "@/components/FormsModal";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { BulkActionBar } from "@/components/kanban/BulkActionBar";
 import { ApplicationDetailModal } from "@/components/kanban/ApplicationDetailModal";
+import type { EmailSendPayload } from "@/components/kanban/ApplicationDetailPanel";
 import { PageHeaderSkeleton, FilterBarSkeleton, KanbanBoardSkeleton } from "@/components/skeletons";
 import { JobSubNav } from "@/components/JobSubNav";
 import { UploadDialog } from "@/components/bulk-import/UploadDialog";
@@ -104,6 +105,7 @@ export default function ApplicationManagementPage() {
   const [bulkFormsProgress, setBulkFormsProgress] = useState<{ sent: number; total: number }>({ sent: 0, total: 0 });
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
   const [showFormsDialog, setShowFormsDialog] = useState(false);
+  const [emailDialogApp, setEmailDialogApp] = useState<Application | null>(null);
   const [showBatchInterviewDialog, setShowBatchInterviewDialog] = useState(false);
   const [batchInterviewDate, setBatchInterviewDate] = useState("");
   const [batchInterviewTime, setBatchInterviewTime] = useState("");
@@ -544,14 +546,15 @@ export default function ApplicationManagementPage() {
 
   // ATS: Send email mutation
   const sendEmailMutation = useMutation({
-    mutationFn: async ({ applicationId, templateId }: { applicationId: number; templateId: number }) => {
+    mutationFn: async ({ applicationId, ...payload }: { applicationId: number } & EmailSendPayload) => {
       const res = await apiRequest("POST", `/api/applications/${applicationId}/send-email`, {
-        templateId,
+        ...payload,
       });
       return await res.json();
     },
     onSuccess: () => {
       setShowEmailDialog(false);
+      setEmailDialogApp(null);
       setSelectedTemplateId(null);
       toast({
         title: "Email sent",
@@ -927,11 +930,11 @@ export default function ApplicationManagementPage() {
     });
   };
 
-  const handleSendEmailFromPanel = (templateId: number) => {
+  const handleSendEmailFromPanel = (payload: EmailSendPayload) => {
     if (!selectedApp) return;
     sendEmailMutation.mutate({
       applicationId: selectedApp.id,
-      templateId,
+      ...payload,
     });
   };
 
@@ -1532,7 +1535,9 @@ export default function ApplicationManagementPage() {
               onQuickEmail={(appId) => {
                 const app = applications?.find(a => a.id === appId);
                 if (app) {
-                  handleOpenDetails(app);
+                  setEmailDialogApp(app);
+                  setSelectedTemplateId(null);
+                  setShowEmailDialog(true);
                 }
               }}
               onQuickInterview={(appId) => {
@@ -1677,10 +1682,20 @@ export default function ApplicationManagementPage() {
         </Dialog>
 
         {/* Email Sending Dialog */}
-        <Dialog key={`email-${selectedApp?.id ?? 'none'}`} open={showEmailDialog} onOpenChange={setShowEmailDialog}>
+        <Dialog
+          key={`email-${(emailDialogApp ?? selectedApp)?.id ?? 'none'}`}
+          open={showEmailDialog}
+          onOpenChange={(open) => {
+            setShowEmailDialog(open);
+            if (!open) {
+              setEmailDialogApp(null);
+              setSelectedTemplateId(null);
+            }
+          }}
+        >
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Send Email - {selectedApp?.name}</DialogTitle>
+              <DialogTitle>Send Email - {(emailDialogApp ?? selectedApp)?.name}</DialogTitle>
               <DialogDescription>
                 Select a template to send to this candidate
               </DialogDescription>
@@ -1714,10 +1729,10 @@ export default function ApplicationManagementPage() {
               )}
               <Button
                 onClick={() =>
-                  selectedApp &&
+                  (emailDialogApp ?? selectedApp) &&
                   selectedTemplateId &&
                   sendEmailMutation.mutate({
-                    applicationId: selectedApp.id,
+                    applicationId: (emailDialogApp ?? selectedApp)!.id,
                     templateId: selectedTemplateId,
                   })
                 }

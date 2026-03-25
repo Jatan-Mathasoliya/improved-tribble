@@ -513,7 +513,7 @@ Be specific, practical, and encouraging. Focus on recruiter best practices. Retu
 export interface FormFieldSuggestion {
   label: string;
   description?: string;
-  fieldType: 'short_text' | 'long_text' | 'mcq' | 'scale';
+  fieldType: 'short_text' | 'long_text' | 'yes_no' | 'select';
   required: boolean;
   options?: string[];
 }
@@ -525,6 +525,37 @@ export interface FormQuestionsResult {
     input: number;
     output: number;
   };
+}
+
+function normalizeAiQuestionType(fieldType: string | undefined): FormFieldSuggestion['fieldType'] {
+  switch (fieldType) {
+    case 'mcq':
+    case 'scale':
+      return 'select';
+    case 'yes_no':
+    case 'select':
+    case 'short_text':
+    case 'long_text':
+      return fieldType;
+    default:
+      return 'long_text';
+  }
+}
+
+function normalizeAiQuestionOptions(
+  originalType: string | undefined,
+  normalizedType: FormFieldSuggestion['fieldType'],
+  options: string[] | undefined
+): string[] | undefined {
+  if (normalizedType !== 'select') {
+    return undefined;
+  }
+
+  if (originalType === 'scale') {
+    return options && options.length > 0 ? options : ['1', '2', '3', '4', '5'];
+  }
+
+  return options && options.length > 0 ? options : undefined;
 }
 
 /**
@@ -572,16 +603,16 @@ For each question, provide:
 - **fieldType** (string): One of:
   - "short_text": For brief answers (name, URL, single sentence)
   - "long_text": For detailed answers (paragraphs, explanations)
-  - "mcq": For multiple choice (provide options array)
-  - "scale": For rating scales (1-5, strongly disagree to strongly agree)
+  - "yes_no": For binary questions that need a yes/no answer
+  - "select": For multiple choice or rating questions (provide options array)
 - **required** (boolean): Whether this question is mandatory
-- **options** (array of strings, only for mcq): The multiple choice options
+- **options** (array of strings, only for select): The dropdown options
 
 Return a JSON object with a "fields" array containing 5-8 questions. Make questions:
 - Specific and actionable (not generic)
 - Relevant to the job description and skills
 - Progressive in difficulty (start easier, get more specific)
-- Diverse in format (mix text, MCQ, and scales)
+- Diverse in format (mix text, yes/no, and selects)
 
 Return only valid JSON.`;
 
@@ -608,13 +639,15 @@ Return only valid JSON.`;
 
     // Map validated fields to expected format
     const validatedFields: FormFieldSuggestion[] = (result.fields ?? []).map(field => {
+      const normalizedType = normalizeAiQuestionType(field.fieldType);
       const base: FormFieldSuggestion = {
         label: field.label ?? 'Untitled Question',
-        fieldType: field.fieldType ?? 'long_text',
+        fieldType: normalizedType,
         required: field.required ?? false,
       };
       if (field.description) base.description = field.description;
-      if (field.fieldType === 'mcq' && field.options) base.options = field.options;
+      const normalizedOptions = normalizeAiQuestionOptions(field.fieldType, normalizedType, field.options);
+      if (normalizedOptions) base.options = normalizedOptions;
       return base;
     });
 

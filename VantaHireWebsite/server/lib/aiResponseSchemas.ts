@@ -92,7 +92,7 @@ export type PipelineActionsResponse = z.infer<typeof PipelineActionsResponseSche
 export const FormFieldSchema = z.object({
   label: z.string().default('Untitled Question'),
   description: z.string().optional(),
-  fieldType: z.enum(['short_text', 'long_text', 'mcq', 'scale']).default('long_text'),
+  fieldType: z.enum(['short_text', 'long_text', 'yes_no', 'select', 'mcq', 'scale']).default('long_text'),
   required: z.boolean().default(false),
   options: z.array(z.string()).optional(),
 });
