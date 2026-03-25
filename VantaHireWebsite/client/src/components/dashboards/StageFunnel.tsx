@@ -258,6 +258,7 @@ export function StageFunnel({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const detailPanelRef = useRef<HTMLDivElement | null>(null);
   const stageRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const hoverLeaveTimeoutRef = useRef<number | null>(null);
 
   const hoveredStage = hoveredStageIndex != null ? data[hoveredStageIndex] ?? null : null;
   const maxCount = useMemo(() => Math.max(...data.map((stage) => stage.count), 1), [data]);
@@ -341,6 +342,14 @@ export function StageFunnel({
   });
 
   useEffect(() => {
+    return () => {
+      if (hoverLeaveTimeoutRef.current != null) {
+        window.clearTimeout(hoverLeaveTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     if (!data.length) return;
     if (isTouchDevice && hoveredStageIndex == null) {
       setHoveredStageIndex(0);
@@ -415,6 +424,25 @@ export function StageFunnel({
     ],
   );
 
+  const openStageHover = (index: number) => {
+    if (hoverLeaveTimeoutRef.current != null) {
+      window.clearTimeout(hoverLeaveTimeoutRef.current);
+      hoverLeaveTimeoutRef.current = null;
+    }
+    setHoveredStageIndex(index);
+  };
+
+  const closeStageHover = (index: number) => {
+    if (isTouchDevice) return;
+    if (hoverLeaveTimeoutRef.current != null) {
+      window.clearTimeout(hoverLeaveTimeoutRef.current);
+    }
+    hoverLeaveTimeoutRef.current = window.setTimeout(() => {
+      setHoveredStageIndex((current) => (current === index ? null : current));
+      hoverLeaveTimeoutRef.current = null;
+    }, 120);
+  };
+
   return (
     <Card className={cn(DASHBOARD_PANEL, "rounded-[28px] bg-white/95")}>
       <CardHeader className="pb-2">
@@ -438,19 +466,36 @@ export function StageFunnel({
           </div>
         ) : (
           <div ref={containerRef} className="relative">
-            <div className="grid items-start gap-5 md:gap-6 xl:grid-cols-[minmax(0,55%)_minmax(0,45%)] xl:items-center xl:gap-8">
-              <div className="min-w-0">
-                <div className="space-y-1">
+            <div className="grid items-center gap-5 md:gap-6 xl:grid-cols-[minmax(0,55%)_minmax(0,45%)] xl:items-center xl:gap-8">
+              <div className="min-w-0 self-center">
+                <div className="space-y-3 md:space-y-3.5">
                   {data.map((stage, index) => {
                     const ratio = Math.max(stage.count / maxCount, 0);
-                    const visualWidth = `${35 + Math.pow(ratio, 0.42) * 65}%`;
+                    const fillWidth = `${Math.max(ratio * 100, stage.count > 0 ? 10 : 0)}%`;
                     const percentage = stage.percentage ?? (totalCount > 0 ? (stage.count / totalCount) * 100 : 0);
                     const isHovered = hoveredStageIndex === index;
+                    const isRejected = normalizeStageKey(stage.name).includes("reject");
+                    const fillColor = isRejected ? "#A8A1B8" : "#6D4CFF";
 
                     return (
-                      <div key={`${stage.name}-${stage.stageId ?? index}`} className="flex items-center gap-6">
+                      <div
+                        key={`${stage.name}-${stage.stageId ?? index}`}
+                        className={cn(
+                          "grid grid-cols-[minmax(84px,120px)_minmax(0,1fr)_72px] items-center gap-3 rounded-2xl px-2 py-1.5 transition-colors duration-200 md:grid-cols-[minmax(104px,136px)_minmax(0,1fr)_84px] md:gap-4 xl:grid-cols-[minmax(120px,150px)_minmax(0,1fr)_96px] xl:gap-5",
+                          isHovered && "bg-[#F3F0FF]",
+                        )}
+                      >
+                        <div className="min-w-0 text-right">
+                          <span
+                            className="block truncate text-[12px] font-[600] tracking-[-0.01em] text-[#221B3A] md:text-[13px] xl:text-[14px]"
+                            style={{ fontFamily: "Manrope, sans-serif" }}
+                          >
+                            {stage.name}
+                          </span>
+                        </div>
+
                         <div className="flex-1">
-                          <div className="flex justify-center">
+                          <div className="flex">
                             <button
                               ref={(node) => {
                                 stageRefs.current[index] = node;
@@ -463,32 +508,31 @@ export function StageFunnel({
                                 }
                                 onStageClick?.(stage);
                               }}
-                              onMouseEnter={isTouchDevice ? undefined : () => setHoveredStageIndex(index)}
-                              onMouseLeave={isTouchDevice ? undefined : () => setHoveredStageIndex((current) => (current === index ? null : current))}
-                              onFocus={() => setHoveredStageIndex(index)}
-                              onBlur={() => setHoveredStageIndex((current) => (current === index ? null : current))}
-                              className="group relative flex h-8 shrink-0 items-center justify-center bg-transparent text-center outline-none transition duration-300 ease-out focus-visible:ring-2 focus-visible:ring-[#4D41DF] focus-visible:ring-offset-2 md:h-[76px]"
+                              onMouseEnter={isTouchDevice ? undefined : () => openStageHover(index)}
+                              onMouseLeave={isTouchDevice ? undefined : () => closeStageHover(index)}
+                              onFocus={() => openStageHover(index)}
+                              onBlur={() => closeStageHover(index)}
+                              className="group relative flex h-[16px] w-full items-center justify-start overflow-hidden rounded-full bg-transparent text-left outline-none transition duration-300 ease-out focus-visible:ring-2 focus-visible:ring-[#4D41DF] focus-visible:ring-offset-2 md:h-[18px]"
                               style={{
-                                width: visualWidth,
                                 filter: isHovered ? "brightness(1.08)" : "none",
-                                clipPath: "polygon(14px 0%, calc(100% - 14px) 0%, 100% 100%, 0% 100%)",
-                                background: STAGE_COLORS[index] ?? STAGE_COLORS[STAGE_COLORS.length - 1],
                               }}
                               aria-label={`${stage.name}: ${stage.count} candidates`}
                             >
-                              <span
-                                className="px-3 text-center text-[12px] font-[600] tracking-[-0.01em] text-white md:px-5 md:text-[12px] xl:text-[14px]"
-                                style={{ fontFamily: "Manrope, sans-serif" }}
-                              >
-                                {stage.name}
-                              </span>
+                              <div className="absolute inset-0 rounded-full bg-[#F1F3F7]" />
+                              <div
+                                className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-300 ease-out"
+                                style={{
+                                  width: fillWidth,
+                                  background: fillColor,
+                                }}
+                              />
                             </button>
                           </div>
                         </div>
 
-                        <div className="w-[72px] shrink-0 text-left md:w-[84px] xl:w-[96px]">
+                        <div className="w-[72px] shrink-0 text-right md:w-[84px] xl:w-[96px]">
                           <div
-                            className="text-[16px] font-[700] leading-none text-[#111827] md:text-[17px] xl:text-[18px]"
+                            className="text-[15px] font-[700] leading-none text-[#111827] md:text-[16px] xl:text-[17px]"
                             style={{ fontFamily: "Manrope, sans-serif" }}
                           >
                             {formatCompactNumber(stage.count)}
@@ -513,11 +557,11 @@ export function StageFunnel({
 
               <div
                 ref={detailPanelRef}
-                className={cn(DASHBOARD_PANEL_SOFT, "relative p-4 shadow-[0_10px_30px_rgba(77,65,223,0.08)] md:p-4 xl:p-6")}
+                className={cn(DASHBOARD_PANEL_SOFT, "relative min-h-[360px] p-4 shadow-[0_10px_30px_rgba(77,65,223,0.08)] md:p-4 xl:min-h-[372px] xl:p-6")}
               >
                 <div
                   className={cn(
-                    "transition-opacity ease-out",
+                    "flex min-h-full flex-col transition-opacity ease-out",
                     contentVisible ? "opacity-100" : "opacity-0",
                   )}
                   style={{ transitionDuration: `${CONTENT_FADE_MS}ms` }}
@@ -533,14 +577,14 @@ export function StageFunnel({
                   </div>
 
                   <h3
-                    className="mt-9 text-[24px] font-[700] leading-tight text-[#191C1E]"
+                    className="mt-9 min-h-[60px] text-[24px] font-[700] leading-tight text-[#191C1E]"
                     style={{ fontFamily: "Manrope, sans-serif" }}
                   >
                     {hoveredStage ? `${hoveredStage.name} ${recruiterDashboardCopy.funnel.snapshotSuffix}` : recruiterDashboardCopy.funnel.overviewTitle}
                   </h3>
 
                   <p
-                    className="mt-6 max-w-[30rem] text-[14px] leading-[1.6] text-[#464555]"
+                    className="mt-6 min-h-[92px] max-w-[30rem] text-[14px] leading-[1.6] text-[#464555]"
                     style={{ fontFamily: "Inter, sans-serif" }}
                   >
                     {summary.prefix}

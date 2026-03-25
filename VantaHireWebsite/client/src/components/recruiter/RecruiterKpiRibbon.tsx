@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 import { ArrowDownRight, ArrowRight, ArrowUpRight, HelpCircle } from "lucide-react";
 
 type KpiStatus = "healthy" | "needs_attention" | "at_risk";
-type TrendDirection = "up" | "down" | "flat";
+type TrendDirection = "up" | "down" | "flat" | "neutral";
 
 type KpiInsightCard = {
   id: string;
@@ -27,6 +27,7 @@ export type RecruiterDashboardKpiResponse = {
   generatedAt: string;
   range: string;
   jobId: number | null;
+  scope?: "job" | "all";
   comparisonLabel: string | null;
   cards: {
     pipelineHealth: KpiInsightCard;
@@ -46,7 +47,35 @@ interface RecruiterKpiRibbonProps {
 type DetailLine = {
   label: string;
   value: string;
+  className?: string;
+  linkLabel?: string;
+  linkHref?: string;
 };
+
+type PipelineMainBlocker = {
+  description?: string;
+  stage?: string;
+  count?: number;
+  avgDaysStuck?: number | null;
+} | null;
+
+type PipelineQuickWin = {
+  action?: string;
+  estimatedImpactPoints?: number;
+  ctaLabel?: string;
+  ctaHref?: string;
+} | null;
+
+type PipelineStageHealthItem = {
+  stage?: string;
+  status?: string;
+  issue?: string | null;
+};
+
+type PipelineConversionStage = {
+  label?: string;
+  rate?: number;
+} | null;
 
 const statusMap: Record<KpiStatus, { label: string; badge: string }> = {
   healthy: {
@@ -60,6 +89,21 @@ const statusMap: Record<KpiStatus, { label: string; badge: string }> = {
   at_risk: {
     label: "At risk",
     badge: "bg-rose-50 text-rose-700 ring-1 ring-rose-100",
+  },
+};
+
+const pipelineStatusMap: Record<KpiStatus, { label: string; badge: string }> = {
+  healthy: {
+    label: "Healthy",
+    badge: "bg-[#DCFCE7] text-[#16A34A]",
+  },
+  needs_attention: {
+    label: "Needs Attention",
+    badge: "bg-[#FEF3C7] text-[#D97706]",
+  },
+  at_risk: {
+    label: "At Risk",
+    badge: "bg-[#FEE2E2] text-[#DC2626]",
   },
 };
 
@@ -125,41 +169,254 @@ function formatTrend(card: KpiInsightCard) {
   };
 }
 
+function getPipelineHealthDetailLines(card: KpiInsightCard): DetailLine[] {
+  if (!card.insights) return [];
+
+  const insights = card.insights;
+  const mainBlocker = (insights.mainBlocker ?? null) as { description?: string } | null;
+  const quickWin = (insights.quickWin ?? null) as {
+    action?: string;
+    estimatedImpactPoints?: number;
+    ctaLabel?: string;
+    ctaHref?: string;
+  } | null;
+  const stageHealth = Array.isArray(insights.stageHealth)
+    ? (insights.stageHealth as Array<{ stage?: string; status?: string; issue?: string | null }>)
+    : [];
+  const strongest = (insights.strongestConvertingStage ?? null) as { label?: string; rate?: number } | null;
+  const weakest = (insights.weakestConvertingStage ?? null) as { label?: string; rate?: number } | null;
+
+  const lines: DetailLine[] = [];
+
+  if (mainBlocker?.description) {
+    lines.push({
+      label: "Main blocker",
+      value: `⚠️ ${mainBlocker.description}`,
+      className: "text-[#DC2626]",
+    });
+  }
+
+  const criticalStages = stageHealth.filter((item) => item.status === "critical" && item.stage && item.issue);
+  if (criticalStages.length > 0) {
+    criticalStages.forEach((item) => {
+      lines.push({
+        label: "Stage issue",
+        value: `📉 ${item.stage}: ${item.issue}`,
+        className: "text-[#D97706]",
+      });
+    });
+  } else {
+    lines.push({
+      label: "Stage issue",
+      value: "✅ All stages converting normally",
+      className: "text-[#16A34A]",
+    });
+  }
+
+  if (strongest?.label && typeof strongest.rate === "number") {
+    lines.push({
+      label: "Conversion",
+      value: `↑ Strongest: ${stageLabelToSentence(strongest.label)} at ${formatPercent(strongest.rate, 1)}`,
+      className: "text-[#16A34A]",
+    });
+  }
+
+  if (weakest?.label && typeof weakest.rate === "number") {
+    lines.push({
+      label: "Conversion",
+      value: `↓ Weakest: ${stageLabelToSentence(weakest.label)} at ${formatPercent(weakest.rate, 1)}`,
+      className: "text-[#DC2626]",
+    });
+  }
+
+      if (quickWin?.action && typeof quickWin.estimatedImpactPoints === "number") {
+        const quickWinLine: DetailLine = {
+          label: "Quick win",
+          value: `💡 ${quickWin.action} — could improve score by ${quickWin.estimatedImpactPoints} points`,
+          className: "text-[#4D41DF] font-semibold",
+        };
+        if (quickWin.ctaLabel && quickWin.ctaHref) {
+          quickWinLine.linkLabel = quickWin.ctaLabel;
+          quickWinLine.linkHref = quickWin.ctaHref;
+        }
+        lines.push(quickWinLine);
+      }
+
+  return lines;
+}
+
+function getPipelineHealthInsights(card: KpiInsightCard) {
+  const insights = card.insights ?? {};
+
+  const mainBlocker = (insights.mainBlocker ?? null) as PipelineMainBlocker;
+  const quickWin = (insights.quickWin ?? null) as PipelineQuickWin;
+  const stageHealth = Array.isArray(insights.stageHealth)
+    ? (insights.stageHealth as PipelineStageHealthItem[])
+    : [];
+  const strongest = (insights.strongestConvertingStage ?? null) as PipelineConversionStage;
+  const weakest = (insights.weakestConvertingStage ?? null) as PipelineConversionStage;
+
+  return { mainBlocker, quickWin, stageHealth, strongest, weakest };
+}
+
+function PipelineStatusDot({ color }: { color: string }) {
+  return <span className="mt-[4px] h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: color }} aria-hidden="true" />;
+}
+
+function PipelineHoverSectionLabel({ children }: { children: string }) {
+  return (
+    <div
+      className="text-[10px] font-semibold uppercase leading-4"
+      style={{ color: "#9CA3AF", letterSpacing: "0.07em", fontFamily: "Inter, sans-serif" }}
+    >
+      {children}
+    </div>
+  );
+}
+
+function PipelineHoverTextLine({
+  dotColor,
+  children,
+}: {
+  dotColor: string;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className="flex items-start gap-2 text-[12px] leading-[1.45]"
+      style={{ color: "#464555", fontFamily: "Inter, sans-serif" }}
+    >
+      <PipelineStatusDot color={dotColor} />
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+function PipelineHealthDetailSection({ card, expanded = false }: { card: KpiInsightCard; expanded?: boolean }) {
+  const { mainBlocker, quickWin, stageHealth, strongest, weakest } = getPipelineHealthInsights(card);
+  const criticalStages = stageHealth.filter((item) => item.status === "critical" && item.stage && item.issue);
+  const sharedIssue = criticalStages[0]?.issue?.trim() ?? "";
+  const criticalStageNames = criticalStages.map((item) => item.stage?.trim()).filter(Boolean) as string[];
+  const blockerText =
+    mainBlocker?.stage && typeof mainBlocker.count === "number" && typeof mainBlocker.avgDaysStuck === "number"
+      ? `${mainBlocker.count} candidate${mainBlocker.count === 1 ? "" : "s"} stuck in ${mainBlocker.stage} for ${mainBlocker.avgDaysStuck}+ days`
+      : mainBlocker?.description?.trim() ?? "";
+
+  return (
+    <div
+      className={cn(
+        "overflow-hidden transition-[max-height,opacity,transform,margin] duration-200 ease-out",
+        expanded ? "mt-3.5 max-h-[272px] translate-y-0 opacity-100" : "max-h-0 translate-y-1 opacity-0",
+      )}
+    >
+      <div
+        className={cn(
+          "pipeline-health-hover-scroll rounded-[12px] bg-white p-4",
+          expanded ? "overflow-y-auto" : "overflow-y-hidden",
+        )}
+        style={{
+          maxHeight: expanded ? "272px" : undefined,
+          scrollbarWidth: expanded ? "thin" : "auto",
+          scrollbarColor: expanded ? "transparent transparent" : undefined,
+        }}
+      >
+        <style>
+          {`
+            .pipeline-health-hover-scroll::-webkit-scrollbar { width: 4px; }
+            .pipeline-health-hover-scroll::-webkit-scrollbar-track { background: transparent; }
+            .pipeline-health-hover-scroll::-webkit-scrollbar-thumb { background: transparent; border-radius: 999px; }
+            .pipeline-health-hover-scroll:hover { scrollbar-color: #C4C0FF transparent; }
+            .pipeline-health-hover-scroll:hover::-webkit-scrollbar-thumb { background: #C4C0FF; }
+            .pipeline-health-hover-scroll:focus-within { scrollbar-color: #C4C0FF transparent; }
+            .pipeline-health-hover-scroll:focus-within::-webkit-scrollbar-thumb { background: #C4C0FF; }
+            .pipeline-health-hover-scroll::-webkit-scrollbar-thumb:hover { background: #6C63FF; }
+          `}
+        </style>
+        <div className={cn(expanded ? "" : "overflow-hidden")}>
+          {blockerText ? (
+            <section className="m-0">
+              <PipelineHoverSectionLabel>MAIN BLOCKER</PipelineHoverSectionLabel>
+              <div className="mt-1.5">
+                <div
+                  className="flex items-start gap-2 text-[12px] leading-[1.45]"
+                  style={{ color: "#191C1E", fontFamily: "Inter, sans-serif" }}
+                >
+                  <PipelineStatusDot color="#DC2626" />
+                  <div className="min-w-0">{blockerText}</div>
+                </div>
+              </div>
+            </section>
+          ) : null}
+
+          <section className={blockerText ? "mt-3" : "m-0"}>
+            <PipelineHoverSectionLabel>STAGE ISSUES</PipelineHoverSectionLabel>
+            <div className="mt-1.5">
+              {criticalStageNames.length > 0 && sharedIssue ? (
+                <PipelineHoverTextLine dotColor="#DC2626">
+                  {criticalStageNames.join(", ")}: {sharedIssue}
+                </PipelineHoverTextLine>
+              ) : (
+                <PipelineHoverTextLine dotColor="#16A34A">
+                  <span style={{ color: "#16A34A" }}>All stages converting normally</span>
+                </PipelineHoverTextLine>
+              )}
+            </div>
+          </section>
+
+          {(strongest?.label && typeof strongest.rate === "number") || (weakest?.label && typeof weakest.rate === "number") ? (
+            <section className="mt-3">
+              <PipelineHoverSectionLabel>CONVERSION</PipelineHoverSectionLabel>
+              <div className="mt-1.5 space-y-1.5">
+                {strongest?.label && typeof strongest.rate === "number" ? (
+                  <PipelineHoverTextLine dotColor="#16A34A">
+                    Strongest: {stageLabelToSentence(strongest.label)} - {formatPercent(strongest.rate, 1)}
+                  </PipelineHoverTextLine>
+                ) : null}
+                {weakest?.label && typeof weakest.rate === "number" ? (
+                  <PipelineHoverTextLine dotColor="#DC2626">
+                    Weakest: {stageLabelToSentence(weakest.label)} - {formatPercent(weakest.rate, 1)}
+                  </PipelineHoverTextLine>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          {quickWin?.action && typeof quickWin.estimatedImpactPoints === "number" ? (
+            <section className="mt-3">
+              <PipelineHoverSectionLabel>QUICK WIN</PipelineHoverSectionLabel>
+              <div className="mt-1.5">
+                <div
+                  className="text-[12px] leading-[1.45]"
+                  style={{ color: "#464555", fontFamily: "Inter, sans-serif" }}
+                >
+                  {quickWin.action} - could improve score by {quickWin.estimatedImpactPoints} points
+                </div>
+                {quickWin.ctaLabel && quickWin.ctaHref ? (
+                  <div className="mt-1.5">
+                    <a
+                      href={quickWin.ctaHref}
+                      className="text-[11px] font-semibold hover:underline"
+                      style={{ color: "#4D41DF", fontFamily: "Inter, sans-serif" }}
+                    >
+                      {quickWin.ctaLabel}
+                    </a>
+                  </div>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function getDetailLines(card: KpiInsightCard): DetailLine[] {
   const insights = card.insights ?? {};
 
   switch (card.id) {
-    case "pipelineHealth": {
-      const stuck = Array.isArray(insights.stuckCandidates)
-        ? (insights.stuckCandidates as Array<{ stage?: string; count?: number }>)
-        : [];
-      const strongest = (insights.strongestConvertingStage ?? null) as { label?: string; rate?: number } | null;
-      const weakest = (insights.weakestConvertingStage ?? null) as { label?: string; rate?: number } | null;
-      const delayedStages = stuck.filter((item) => item.stage && typeof item.count === "number" && item.count > 0);
-
-      return [
-        {
-          label: "Candidate stuck",
-          value: delayedStages.length
-            ? delayedStages.map((item) => `${item.stage} (${item.count})`).join(", ")
-            : "Not enough pipeline movement to highlight delays clearly",
-        },
-        {
-          label: "Best conversion",
-          value:
-            strongest?.label && typeof strongest.rate === "number"
-              ? `${stageLabelToSentence(strongest.label)} (${formatPercent(strongest.rate, 1)})`
-              : "—",
-        },
-        {
-          label: "Lowest conversion",
-          value:
-            weakest?.label && typeof weakest.rate === "number"
-              ? `${stageLabelToSentence(weakest.label)} (${formatPercent(weakest.rate, 1)})`
-              : "—",
-        },
-      ];
-    }
+    case "pipelineHealth":
+      return getPipelineHealthDetailLines(card);
     case "activeRoles": {
       const highest = (insights.highestDemandRole ?? null) as { jobTitle?: string; applications?: number } | null;
       const lowest = (insights.lowestCandidateVolumeRole ?? null) as { jobTitle?: string; activeCandidates?: number } | null;
@@ -314,6 +571,10 @@ function getDetailLines(card: KpiInsightCard): DetailLine[] {
 }
 
 function DetailSection({ card, expanded = false }: { card: KpiInsightCard; expanded?: boolean }) {
+  if (card.id === "pipelineHealth") {
+    return <PipelineHealthDetailSection card={card} expanded={expanded} />;
+  }
+
   const lines = getDetailLines(card);
 
   return (
@@ -327,11 +588,18 @@ function DetailSection({ card, expanded = false }: { card: KpiInsightCard; expan
     >
       <div className="space-y-1.5">
         {lines.map((line, index) => (
-          <div key={`${card.id}-${index}`} className="flex items-start gap-2 text-[12.5px] leading-5 text-slate-600">
+          <div key={`${card.id}-${index}`} className={cn("flex items-start gap-2 text-[12.5px] leading-5 text-slate-600", line.className)}>
             <span className="mt-[7px] h-1 w-1 shrink-0 rounded-full bg-slate-300" />
             <div className="min-w-0">
               <span className="font-medium text-slate-700">{line.label}:</span>{" "}
               <span>{line.value}</span>
+              {line.linkLabel && line.linkHref ? (
+                <div className="mt-1.5">
+                  <a href={line.linkHref} className="text-[11px] font-medium text-[#4D41DF] hover:underline">
+                    {line.linkLabel}
+                  </a>
+                </div>
+              ) : null}
             </div>
           </div>
         ))}
@@ -359,9 +627,17 @@ function KpiCard({
   onClose: () => void;
   onToggle: () => void;
 }) {
-  const status = statusMap[card.status] ?? statusMap.needs_attention;
+  const status = card.id === "pipelineHealth"
+    ? pipelineStatusMap[card.status] ?? pipelineStatusMap.needs_attention
+    : statusMap[card.status] ?? statusMap.needs_attention;
   const trend = formatTrend(card);
   const TrendIcon = trend.icon;
+  const showStatus = !(card.id === "pipelineHealth" && fallbackText(card.displayValue) === "—");
+  const showTrend = !(card.id === "pipelineHealth" && (card.trendDelta == null || Number.isNaN(card.trendDelta)));
+  const trendText =
+    card.id === "pipelineHealth"
+      ? `${card.trendDirection === "down" ? "↓" : card.trendDirection === "up" ? "↑" : "→"} ${Math.abs(card.trendDelta ?? 0).toFixed(1)}% ${fallbackText(card.comparisonLabel)}`
+      : trend.text;
 
   return (
     <Card
@@ -389,9 +665,11 @@ function KpiCard({
             <div className="kpi-label text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-400">
               {card.label}
             </div>
-            <span className={cn("inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold", status.badge)}>
-              {status.label}
-            </span>
+            {showStatus ? (
+              <span className={cn("inline-flex rounded-full px-2.5 py-1 text-[11px] font-semibold", status.badge)}>
+                {status.label}
+              </span>
+            ) : null}
           </div>
           <Tooltip>
             <TooltipTrigger asChild>
@@ -416,10 +694,12 @@ function KpiCard({
             </div>
             <div className="mt-1.5 text-[13px] font-medium text-slate-500">{fallbackText(card.contextLine)}</div>
           </div>
-          <div className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", trend.className)}>
-            <TrendIcon className="h-3.5 w-3.5" />
-            <span>{trend.text}</span>
-          </div>
+          {showTrend ? (
+            <div className={cn("inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold", trend.className)}>
+              <TrendIcon className="h-3.5 w-3.5" />
+              <span>{trendText}</span>
+            </div>
+          ) : null}
         </div>
 
         <DetailSection card={card} expanded={expanded} />
@@ -442,10 +722,19 @@ function LoadingCard({ compact = false }: { compact?: boolean }) {
 }
 
 export function RecruiterKpiRibbon({ data, isLoading, className }: RecruiterKpiRibbonProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
-  const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const isMobile = useIsMobile();
   const isTouchDevice = useIsTouchDevice();
+  const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const closeTimeoutRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (closeTimeoutRef.current) {
+        window.clearTimeout(closeTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const orderedCards = data
     ? [
         data.cards.pipelineHealth,
@@ -459,46 +748,16 @@ export function RecruiterKpiRibbon({ data, isLoading, className }: RecruiterKpiR
   const topCards = orderedCards.slice(0, 3);
   const bottomCards = orderedCards.slice(3, 5);
 
-  useEffect(() => {
-    if (!isTouchDevice) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!containerRef.current?.contains(event.target as Node)) {
-        setActiveCardId(null);
-      }
-    };
-
-    document.addEventListener("pointerdown", handlePointerDown);
-    return () => document.removeEventListener("pointerdown", handlePointerDown);
-  }, [isTouchDevice]);
-
-  const handleToggle = (cardId: string) => {
-    setActiveCardId((current) => (current === cardId ? null : cardId));
-  };
-
   if (isLoading && !data) {
     return (
       <div className={cn("space-y-[14px]", className)}>
-        <div className="grid gap-[14px] md:hidden">
-          {[0, 1, 2, 3, 4].map((index) => (
-            <LoadingCard key={index} compact={index >= 3} />
-          ))}
-        </div>
-        <div className="hidden gap-[14px] md:grid xl:hidden md:grid-cols-2">
-          {[0, 1, 2, 3].map((index) => (
-            <LoadingCard key={index} compact={index >= 2} />
-          ))}
-          <div className="mx-auto w-full md:col-span-2 md:w-[calc(50%-7px)]">
-            <LoadingCard compact />
-          </div>
-        </div>
-        <div className="hidden gap-[14px] xl:grid xl:grid-cols-3">
+        <div className="grid gap-[14px] md:grid-cols-3">
           {[0, 1, 2].map((index) => (
             <LoadingCard key={index} />
           ))}
         </div>
-        <div className="hidden justify-center xl:flex">
-          <div className="grid w-full gap-[14px] md:grid-cols-2 xl:w-[calc(66.666%-9.5px)]">
+        <div className="flex justify-center">
+          <div className="grid w-full gap-[14px] md:w-[calc(66.666%-9.5px)] md:grid-cols-2">
             {[0, 1].map((index) => (
               <LoadingCard key={index} compact />
             ))}
@@ -508,88 +767,59 @@ export function RecruiterKpiRibbon({ data, isLoading, className }: RecruiterKpiR
     );
   }
 
+  const handleOpen = (cardId: string) => {
+    if (closeTimeoutRef.current) {
+      window.clearTimeout(closeTimeoutRef.current);
+      closeTimeoutRef.current = null;
+    }
+    setActiveCardId(cardId);
+  };
+
+  const handleClose = (cardId: string) => {
+    if (isTouchDevice) return;
+    if (closeTimeoutRef.current) {
+      window.clearTimeout(closeTimeoutRef.current);
+    }
+    closeTimeoutRef.current = window.setTimeout(() => {
+      setActiveCardId((current) => (current === cardId ? null : current));
+    }, 80);
+  };
+
+  const handleToggle = (cardId: string) => {
+    setActiveCardId((current) => (current === cardId ? null : cardId));
+  };
+
   return (
     <TooltipProvider delayDuration={120}>
-      <div ref={containerRef} className={cn("space-y-[14px]", className)}>
-        <div className="grid gap-[14px] md:hidden">
-          {orderedCards.map((card, index) => (
-            <div key={card.id}>
-              <KpiCard
-                card={card}
-                compact={index >= 3}
-                expanded={activeCardId === card.id}
-                onOpen={() => setActiveCardId(card.id)}
-                onClose={() => setActiveCardId((current) => (current === card.id ? null : current))}
-                onToggle={() => handleToggle(card.id)}
-                isTouchDevice={isTouchDevice}
-                isMobile={isMobile}
-              />
-            </div>
-          ))}
-        </div>
-        <div className="hidden gap-[14px] md:grid xl:hidden md:grid-cols-2">
-          {orderedCards.slice(0, 4).map((card, index) => (
-            <div key={card.id}>
-              <KpiCard
-                card={card}
-                compact={index >= 2}
-                expanded={activeCardId === card.id}
-                onOpen={() => setActiveCardId(card.id)}
-                onClose={() => setActiveCardId((current) => (current === card.id ? null : current))}
-                onToggle={() => handleToggle(card.id)}
-                isTouchDevice={isTouchDevice}
-                isMobile={isMobile}
-              />
-            </div>
-          ))}
-          {orderedCards[4] ? (
-            <div className="mx-auto w-full md:col-span-2 md:w-[calc(50%-7px)]">
-              {(() => {
-                const lastCard = orderedCards[4]!;
-                return (
-              <KpiCard
-                card={lastCard}
-                compact
-                expanded={activeCardId === lastCard.id}
-                onOpen={() => setActiveCardId(lastCard.id)}
-                onClose={() => setActiveCardId((current) => (current === lastCard.id ? null : current))}
-                onToggle={() => handleToggle(lastCard.id)}
-                isTouchDevice={isTouchDevice}
-                isMobile={isMobile}
-              />
-                );
-              })()}
-            </div>
-          ) : null}
-        </div>
-        <div className="hidden gap-[14px] xl:flex xl:flex-row xl:items-start">
+      <div className={cn("space-y-[14px]", className)}>
+        <div className="grid grid-cols-1 items-start gap-[14px] md:grid-cols-3">
           {topCards.map((card) => (
-            <div key={card.id} className="min-w-0 xl:flex-1">
+            <div key={card.id} className="min-w-0">
               <KpiCard
                 card={card}
                 expanded={activeCardId === card.id}
-                onOpen={() => setActiveCardId(card.id)}
-                onClose={() => setActiveCardId((current) => (current === card.id ? null : current))}
-                onToggle={() => handleToggle(card.id)}
-                isTouchDevice={isTouchDevice}
                 isMobile={isMobile}
+                isTouchDevice={isTouchDevice}
+                onOpen={() => handleOpen(card.id)}
+                onClose={() => handleClose(card.id)}
+                onToggle={() => handleToggle(card.id)}
               />
             </div>
           ))}
         </div>
         <div className="flex justify-center">
-          <div className="hidden w-full flex-col gap-[14px] xl:flex xl:w-[calc(66.666%-9.5px)] xl:flex-row xl:items-start">
+          <div className="grid w-full grid-cols-1 items-start gap-[14px] md:w-[calc(66.666%-9.5px)] md:grid-cols-2">
             {bottomCards.map((card) => (
-              <div key={card.id} className="md:min-w-0 md:flex-1">
+              <div key={card.id} className="min-w-0">
                 <KpiCard
                   card={card}
                   compact
                   expanded={activeCardId === card.id}
-                  onOpen={() => setActiveCardId(card.id)}
-                  onClose={() => setActiveCardId((current) => (current === card.id ? null : current))}
-                  onToggle={() => handleToggle(card.id)}
-                  isTouchDevice={isTouchDevice}
                   isMobile={isMobile}
+                  isTouchDevice={isTouchDevice}
+                  onOpen={() => handleOpen(card.id)}
+                  onClose={() => handleClose(card.id)}
+                  onToggle={() => handleToggle(card.id)}
                 />
               </div>
             ))}

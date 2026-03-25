@@ -29,6 +29,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { Organization, Membership } from "@/hooks/use-organization";
+import { useSubscription } from "@/hooks/use-subscription";
 import { cn } from "@/lib/utils";
 import type { User as SelectUser } from "@shared/schema";
 import type { LucideIcon } from "lucide-react";
@@ -93,6 +94,7 @@ export default function AtsSidebar({
   displayName,
 }: AtsSidebarProps) {
   const { state, isMobile } = useSidebar();
+  const { data: subscription } = useSubscription();
   const isCollapsed = !isMobile && state === "collapsed";
   const [orgManagementOpen, setOrgManagementOpen] = React.useState(() => {
     if (typeof window === "undefined") return false;
@@ -164,13 +166,6 @@ export default function AtsSidebar({
       active: matchesPath(location, "/admin/email-templates"),
     },
     {
-      label: atsShellCopy.routes.pricing.label,
-      path: "/pricing",
-      icon: CreditCard,
-      visible: isRecruiter || isAdmin,
-      active: location === "/pricing",
-    },
-    {
       label: atsShellCopy.routes.adminDashboard.label,
       path: "/admin",
       icon: Shield,
@@ -238,8 +233,12 @@ export default function AtsSidebar({
   const orgManagementItems = visibleAccountItems.filter(
     (item) => item.label !== "Logout" && item.label !== "Profile Settings"
   );
+  const logoutItem = visibleAccountItems.find((item) => item.label === atsShellCopy.routes.logout.label);
   const initials = `${user?.firstName?.[0] ?? ""}${user?.lastName?.[0] ?? user?.username?.[0] ?? "U"}`.toUpperCase();
   const accountSubtitle = user?.username ?? "";
+  const currentPlanName = subscription?.plan?.displayName || "Free";
+  const planName = subscription?.plan?.name?.toLowerCase();
+  const shouldShowUpgradePlan = !planName || planName === "free";
 
   return (
     <Sidebar
@@ -412,53 +411,64 @@ export default function AtsSidebar({
         <div className="w-full">
           <div className="mb-2 h-px w-full bg-[#E6EAF3]" />
           <div className="overflow-hidden transition-all duration-200">
-            <button
-              type="button"
-              onClick={() => profileSettingsItem?.path && navigate(profileSettingsItem.path)}
-              className={cn(
-                "mx-2 flex h-12 w-[calc(100%-1rem)] items-center gap-3 rounded-2xl border border-transparent bg-white/75 pl-4 pr-2 text-left shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition-colors duration-200 hover:border-[#E6EAF3] hover:bg-white",
-                isCollapsed && "mx-auto h-11 w-11 justify-center rounded-2xl px-0 hover:bg-[#F6F7FD]"
-              )}
-              title={profileSettingsItem?.label ?? "Profile Settings"}
-            >
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#E5E4FF] text-sm font-semibold text-[#6C63FF]">
-                {initials}
-              </div>
-              <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
-                <div className="truncate text-sm font-semibold text-[#20263A]">{displayName}</div>
-                <div className="truncate text-xs text-[#8D94A7]">{accountSubtitle}</div>
-              </div>
-              <ChevronRight className="h-4 w-4 shrink-0 text-[#A4A9B8] group-data-[collapsible=icon]:hidden" />
-            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button
+                  type="button"
+                  className={cn(
+                    "mx-2 flex h-12 w-[calc(100%-1rem)] items-center gap-3 rounded-2xl border border-transparent bg-white/75 pl-4 pr-2 text-left shadow-[0_10px_24px_rgba(15,23,42,0.04)] transition-colors duration-200 hover:border-[#E6EAF3] hover:bg-white",
+                    isCollapsed && "mx-auto h-11 w-11 justify-center rounded-2xl px-0 hover:bg-[#F6F7FD]"
+                  )}
+                  title={profileSettingsItem?.label ?? "Profile Settings"}
+                >
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#E5E4FF] text-sm font-semibold text-[#6C63FF]">
+                    {initials}
+                  </div>
+                  <div className="min-w-0 flex-1 group-data-[collapsible=icon]:hidden">
+                    <div className="truncate text-sm font-semibold text-[#20263A]">{displayName}</div>
+                    <div className="truncate text-xs text-[#8D94A7]">{accountSubtitle}</div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 shrink-0 text-[#A4A9B8] group-data-[collapsible=icon]:hidden" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" side={isCollapsed ? "right" : "top"} sideOffset={12} className="w-60 rounded-xl border-[#E6E8F0] p-2">
+                {profileSettingsItem && (
+                  <DropdownMenuItem
+                    onClick={() => profileSettingsItem.path && navigate(profileSettingsItem.path)}
+                    className="cursor-pointer rounded-lg px-2 py-2 text-[13px] font-medium text-[#364152] focus:bg-[#F1F2FB] focus:text-[#242C3D]"
+                  >
+                    <Settings className="mr-2 h-4 w-4" />
+                    <span>{profileSettingsItem.label}</span>
+                  </DropdownMenuItem>
+                )}
+                <DropdownMenuLabel className="px-2 py-2 text-[12px] font-medium text-[#6E7891]">
+                  Current Plan :- {currentPlanName}
+                </DropdownMenuLabel>
+                {shouldShowUpgradePlan && (
+                  <DropdownMenuItem
+                    onClick={() => navigate("/pricing")}
+                    className="cursor-pointer rounded-lg px-2 py-2 text-[13px] font-medium text-[#364152] focus:bg-[#F1F2FB] focus:text-[#242C3D]"
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    <span>Upgrade Plan</span>
+                  </DropdownMenuItem>
+                )}
+                {logoutItem && (
+                  <>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={logoutItem.onClick}
+                      className="cursor-pointer rounded-lg px-2 py-2 text-[13px] font-medium text-[#E35D5B] focus:bg-[#FFF1F1] focus:text-[#D84C49]"
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>{logoutItem.label}</span>
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
-
-        {visibleAccountItems
-          .filter((item) => item.label === "Logout")
-          .map((item) => {
-            const Icon = item.icon;
-
-            return (
-              <SidebarMenu key={item.label} className="w-full">
-                <SidebarMenuItem>
-                  <SidebarMenuButton
-                    tooltip={item.label}
-                    isActive={false}
-                    onClick={item.onClick}
-                  className={cn(
-                      "mx-2 h-10 rounded-2xl pl-6 pr-3 text-sm font-medium text-[#E35D5B] transition-all duration-200 hover:bg-[#FFF1F1] hover:text-[#D84C49]",
-                      "group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:h-11 group-data-[collapsible=icon]:w-11 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:rounded-2xl group-data-[collapsible=icon]:px-0",
-                      "group-data-[collapsible=icon]:hover:bg-transparent",
-                      "[&>span]:transition-opacity [&>span]:duration-150 group-data-[collapsible=icon]:[&>span]:opacity-0"
-                    )}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span>{item.label}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              </SidebarMenu>
-            );
-          })}
       </SidebarFooter>
 
       <SidebarRail className="after:bg-[#CFD6EA]" />
