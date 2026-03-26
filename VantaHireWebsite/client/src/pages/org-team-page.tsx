@@ -116,7 +116,10 @@ export default function OrgTeamPage() {
   const [reassignToUserId, setReassignToUserId] = useState<number | null>(null);
 
   // Fetch jobs for member being removed
-  const { data: memberJobs } = useMemberJobs(memberToRemove?.id ?? null);
+  const {
+    data: memberJobs,
+    isLoading: memberJobsLoading,
+  } = useMemberJobs(memberToRemove?.id ?? null);
 
   const isOwnerOrAdmin = orgData?.membership?.role === 'owner' || orgData?.membership?.role === 'admin';
 
@@ -176,16 +179,31 @@ export default function OrgTeamPage() {
 
     // Set member to remove and open reassign dialog to check for jobs
     setMemberToRemove(member);
+    setReassignToUserId(null);
     setReassignDialogOpen(true);
   };
 
   // Actually remove the member (after reassignment prompt)
   const confirmRemoveMember = async () => {
     if (!memberToRemove) return;
+    const memberHasJobs = (memberJobs?.length ?? 0) > 0;
+
+    if (memberJobsLoading) {
+      return;
+    }
+
+    if (memberHasJobs && !reassignToUserId) {
+      toast({
+        title: orgTeamPageCopy.toasts.memberHasJobsTitle,
+        description: orgTeamPageCopy.toasts.memberHasJobsError,
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
       // If there are jobs and reassignToUserId is set, reassign first
-      if (memberJobs && memberJobs.length > 0 && reassignToUserId) {
+      if (memberHasJobs && reassignToUserId) {
         await reassignJobs.mutateAsync({
           fromMemberId: memberToRemove.id,
           toUserId: reassignToUserId,
@@ -208,6 +226,16 @@ export default function OrgTeamPage() {
       });
     }
   };
+
+  const memberHasJobs = (memberJobs?.length ?? 0) > 0;
+  const eligibleReassignmentMembers = members
+    ?.filter((m) => m.id !== memberToRemove?.id && m.seatAssigned) ?? [];
+  const removalBlockedByJobs = memberHasJobs && !reassignToUserId;
+  const removeMemberDisabled =
+    removeMember.isPending ||
+    reassignJobs.isPending ||
+    memberJobsLoading ||
+    removalBlockedByJobs;
 
   const handleJoinRequestResponse = async (request: JoinRequest, status: 'approved' | 'rejected') => {
     try {
@@ -665,9 +693,14 @@ export default function OrgTeamPage() {
               {memberToRemove && (
                 <>
                   You are removing {memberToRemove.user.firstName || memberToRemove.user.username} from the organization.
-                  {memberJobs && memberJobs.length > 0 && (
+                  {memberJobsLoading && (
+                    <span className="block mt-2 text-muted-foreground">
+                      {orgTeamPageCopy.dialogs.checkingJobs}
+                    </span>
+                  )}
+                  {!memberJobsLoading && memberHasJobs && (
                     <span className="block mt-2 text-amber-600">
-                      This member has {memberJobs.length} job{memberJobs.length !== 1 ? 's' : ''}. Would you like to reassign them?
+                      This member has {memberJobs?.length ?? 0} job{(memberJobs?.length ?? 0) !== 1 ? 's' : ''}. Would you like to reassign them?
                     </span>
                   )}
                 </>
@@ -675,21 +708,25 @@ export default function OrgTeamPage() {
             </DialogDescription>
           </DialogHeader>
 
-          {memberJobs && memberJobs.length > 0 && members && (
+          {memberJobsLoading && (
+            <div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              {orgTeamPageCopy.dialogs.checkingJobs}
+            </div>
+          )}
+
+          {memberHasJobs && members && (
             <div className="py-4">
               <Label htmlFor="reassignTo">Reassign jobs to</Label>
               <Select
-                value={reassignToUserId?.toString() || "none"}
-                onValueChange={(v) => setReassignToUserId(v === "none" ? null : parseInt(v))}
+                value={reassignToUserId?.toString() || ""}
+                onValueChange={(v) => setReassignToUserId(parseInt(v, 10))}
               >
                 <SelectTrigger className="mt-2">
                   <SelectValue placeholder={orgTeamPageCopy.dialogs.reassignPlaceholder} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">{orgTeamPageCopy.dialogs.noReassign}</SelectItem>
-                  {members
-                    .filter(m => m.id !== memberToRemove?.id && m.seatAssigned)
-                    .map((m) => (
+                  {eligibleReassignmentMembers.map((m) => (
                       <SelectItem key={m.userId} value={m.userId.toString()}>
                         {m.user.firstName || m.user.username}
                         {m.role === 'owner' && ' (Owner)'}
@@ -698,6 +735,14 @@ export default function OrgTeamPage() {
                     ))}
                 </SelectContent>
               </Select>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {orgTeamPageCopy.dialogs.jobsMustBeReassigned}
+              </p>
+              {eligibleReassignmentMembers.length === 0 && (
+                <p className="mt-2 text-sm text-destructive">
+                  {orgTeamPageCopy.dialogs.noEligibleAssignee}
+                </p>
+              )}
             </div>
           )}
 
@@ -708,12 +753,12 @@ export default function OrgTeamPage() {
             <Button
               variant="destructive"
               onClick={confirmRemoveMember}
-              disabled={removeMember.isPending || reassignJobs.isPending}
+              disabled={removeMemberDisabled}
             >
-              {(removeMember.isPending || reassignJobs.isPending) && (
+              {(removeMember.isPending || reassignJobs.isPending || memberJobsLoading) && (
                 <Loader2 className="h-4 w-4 mr-2 animate-spin" />
               )}
-              Remove Member
+              {removalBlockedByJobs ? orgTeamPageCopy.dialogs.removeBlocked : "Remove Member"}
             </Button>
           </DialogFooter>
         </DialogContent>

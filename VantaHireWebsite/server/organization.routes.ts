@@ -342,6 +342,12 @@ export function registerOrganizationRoutes(
         return;
       }
 
+      const ownedJobs = await getUserJobsInOrg(memberToRemove.userId, orgResult.organization.id);
+      if (ownedJobs.length > 0) {
+        res.status(400).json({ error: "Reassign this member's jobs before removing access" });
+        return;
+      }
+
       await removeMember(memberId);
 
       res.json({ success: true });
