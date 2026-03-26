@@ -7,6 +7,7 @@ import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Loader2, AlertCircle, RefreshCw } from "lucide-react";
 import Layout from "@/components/Layout";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import OrgSetupStep from "@/components/onboarding/OrgSetupStep";
 import ProfileStep from "@/components/onboarding/ProfileStep";
 import PlanSelectionStep from "@/components/onboarding/PlanSelectionStep";
@@ -35,6 +36,8 @@ export default function OnboardingPage() {
   // Local state for current step (allows manual navigation)
   const [currentStep, setCurrentStep] = useState<OnboardingStep>('org');
   const [creditsToastShown, setCreditsToastShown] = useState(false);
+  const [stepCompletionError, setStepCompletionError] = useState<string | null>(null);
+  const [isStepStatusRetrying, setIsStepStatusRetrying] = useState(false);
 
   // Initialize step from server status (URL step is ignored to prevent bypass)
   useEffect(() => {
@@ -88,8 +91,14 @@ export default function OnboardingPage() {
 
   // Handle step advancement
   const handleStepComplete = async (step: OnboardingStep) => {
+    setStepCompletionError(null);
+    setIsStepStatusRetrying(true);
     try {
       const result = await refetch();
+      if (result.isError) {
+        setStepCompletionError(onboardingPageCopy.error.description);
+        return;
+      }
       const nextStatus = result.data;
 
       if (nextStatus && nextStatus.needsOnboarding === false) {
@@ -106,19 +115,13 @@ export default function OnboardingPage() {
         setLocation(`/onboarding?${params.toString()}`, { replace: true });
         return;
       }
-      toast({
-        title: onboardingPageCopy.error.title,
-        description: onboardingPageCopy.error.description,
-        variant: "destructive",
-      });
+      setStepCompletionError(onboardingPageCopy.error.description);
       return;
     } catch {
-      toast({
-        title: onboardingPageCopy.error.title,
-        description: onboardingPageCopy.error.description,
-        variant: "destructive",
-      });
+      setStepCompletionError(onboardingPageCopy.error.description);
       return;
+    } finally {
+      setIsStepStatusRetrying(false);
     }
   };
 
@@ -139,7 +142,7 @@ export default function OnboardingPage() {
   }
 
   // Error state - show error with retry option
-  if (statusError && user?.role === 'recruiter') {
+  if (statusError && user?.role === 'recruiter' && !status) {
     return (
       <Layout>
         <div className="flex items-center justify-center min-h-[60vh]">
@@ -204,6 +207,33 @@ export default function OnboardingPage() {
 
           {/* Step Content */}
           <div className="bg-card rounded-xl border border-border p-6 md:p-8">
+            {stepCompletionError && (
+              <Alert className="mb-6 border-destructive/30 bg-destructive/5">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>{onboardingPageCopy.error.title}</AlertTitle>
+                <AlertDescription className="space-y-3">
+                  <p>{stepCompletionError}</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleStepComplete(currentStep)}
+                    disabled={isStepStatusRetrying}
+                  >
+                    {isStepStatusRetrying ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        {onboardingPageCopy.error.retry}
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="h-4 w-4 mr-2" />
+                        {onboardingPageCopy.error.retry}
+                      </>
+                    )}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )}
             {currentStep === 'org' && (
               <OrgSetupStep
                 onComplete={() => handleStepComplete('org')}

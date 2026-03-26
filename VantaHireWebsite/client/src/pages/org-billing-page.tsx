@@ -46,6 +46,7 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import {
   CreditCard,
@@ -65,11 +66,11 @@ export default function OrgBillingPage() {
   const queryClient = useQueryClient();
   const { data: orgData } = useOrganization();
   const { data: subscription, isLoading: subLoading } = useSubscription();
-  const { data: commercialConfig } = useCommercialConfig();
-  const { data: seatUsage } = useSeatUsage();
-  const { data: invoices } = useInvoices();
-  const { data: credits } = useAiCredits();
-  const { data: creditUsage } = useAiCreditUsage();
+  const { data: commercialConfig, isLoading: commercialConfigLoading } = useCommercialConfig();
+  const { data: seatUsage, isLoading: seatUsageLoading } = useSeatUsage();
+  const { data: invoices, isLoading: invoicesLoading } = useInvoices();
+  const { data: credits, isLoading: creditsLoading } = useAiCredits();
+  const { data: creditUsage, isLoading: creditUsageLoading } = useAiCreditUsage();
   const createCheckout = useCreateCheckout();
   const createCreditPackCheckout = useCreateCreditPackCheckout();
   const cancelSubscription = useCancelSubscription();
@@ -259,6 +260,10 @@ export default function OrgBillingPage() {
     : 0;
   const orgCreditDetails = creditUsage?.orgDetails;
   const creditLedger = creditUsage?.orgLedger ?? [];
+  const isPlanSectionLoading = subLoading || commercialConfigLoading || seatUsageLoading;
+  const isCreditsSectionLoading = creditsLoading || creditUsageLoading;
+  const showCreditsSection = isCreditsSectionLoading || !!credits;
+  const showInvoicesSection = invoicesLoading || !!invoices?.length;
 
   const formatCreditLedgerType = (type: string, metadata?: Record<string, any> | null) => {
     if (type === "cycle_reset") return "Monthly allocation reset";
@@ -419,7 +424,16 @@ export default function OrgBillingPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {subscription && (
+          {isPlanSectionLoading ? (
+            <div className="grid gap-4 md:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="rounded-lg bg-slate-50 p-4 space-y-3">
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-8 w-20" />
+                </div>
+              ))}
+            </div>
+          ) : subscription ? (
             <div className="grid md:grid-cols-3 gap-4">
               <div className="p-4 bg-slate-50 rounded-lg">
                 <div className="flex items-center gap-2 text-muted-foreground mb-1">
@@ -444,6 +458,10 @@ export default function OrgBillingPage() {
                   {hasValidCurrentPeriodEnd ? format(currentPeriodEndDate, 'MMM d, yyyy') : "—"}
                 </p>
               </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+              Billing details will appear once subscription data is available.
             </div>
           )}
 
@@ -496,7 +514,7 @@ export default function OrgBillingPage() {
       </Card>
 
       {/* AI Credits */}
-      {credits && (
+      {showCreditsSection && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -508,6 +526,19 @@ export default function OrgBillingPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {isCreditsSectionLoading ? (
+              <div className="space-y-4">
+                <Skeleton className="h-20 w-full rounded-lg" />
+                <Skeleton className="h-2 w-full" />
+                <div className="grid gap-3 md:grid-cols-4">
+                  {Array.from({ length: 4 }).map((_, index) => (
+                    <Skeleton key={index} className="h-20 w-full rounded-lg" />
+                  ))}
+                </div>
+                <Skeleton className="h-40 w-full rounded-lg" />
+              </div>
+            ) : credits ? (
+              <>
             {creditUsagePercent >= 50 && (
               <div className={`flex items-start justify-between gap-4 rounded-lg border p-4 ${
                 creditUsagePercent >= 100
@@ -648,6 +679,12 @@ export default function OrgBillingPage() {
                 </Table>
               </div>
             )}
+              </>
+            ) : (
+              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                AI credit details will appear once your organization uses or is allocated credits.
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
@@ -716,12 +753,19 @@ export default function OrgBillingPage() {
       )}
 
       {/* Invoices */}
-      {invoices && invoices.length > 0 && (
+      {showInvoicesSection && (
         <Card>
           <CardHeader>
             <CardTitle>Invoices</CardTitle>
           </CardHeader>
           <CardContent>
+            {invoicesLoading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 3 }).map((_, index) => (
+                  <Skeleton key={index} className="h-12 w-full rounded-lg" />
+                ))}
+              </div>
+            ) : invoices && invoices.length > 0 ? (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -762,6 +806,11 @@ export default function OrgBillingPage() {
                 ))}
               </TableBody>
             </Table>
+            ) : (
+              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
+                Invoices will appear here after your first successful billing event.
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
