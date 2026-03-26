@@ -68,18 +68,11 @@ export default function CandidateDashboard() {
     location: "",
   });
   const [newSkill, setNewSkill] = useState("");
-  const [isVisible, setIsVisible] = useState(false);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [resumeLabel, setResumeLabel] = useState("");
   const [resumeIsDefault, setResumeIsDefault] = useState(false);
   const [uploadingResume, setUploadingResume] = useState(false);
   const MAX_RESUME_SIZE = 5 * 1024 * 1024; // 5MB client-side guard
-
-  // Fade-in animation on mount
-  useEffect(() => {
-    const timer = setTimeout(() => setIsVisible(true), 200);
-    return () => clearTimeout(timer);
-  }, []);
 
   // Redirect if not authenticated - candidates go to candidate auth page
   if (!user) {
@@ -490,7 +483,7 @@ export default function CandidateDashboard() {
   };
 
   const ApplicationCard = ({ application }: { application: ApplicationWithJob }) => (
-    <Card className="mb-4 bg-muted/50 backdrop-blur-sm border-border">
+    <Card className="mb-4 border-border">
       <CardHeader>
         <div className="flex items-start justify-between">
           <div className="flex-1">
@@ -523,7 +516,7 @@ export default function CandidateDashboard() {
 
         {/* AI Fit Analysis */}
         {fitScoring && application.aiFitScore !== null && application.aiFitReasons && Array.isArray(application.aiFitReasons) ? (
-          <div className="mb-3 p-3 bg-gradient-to-r from-purple-500/10 to-blue-500/10 rounded-lg border-l-4 border-primary">
+          <div className="mb-3 p-3 bg-primary/5 rounded-lg border-l-4 border-primary">
             <Label className="text-primary font-medium text-sm flex items-center gap-2">
               <Brain className="w-4 h-4" />
               AI Fit Analysis
@@ -556,7 +549,7 @@ export default function CandidateDashboard() {
         )}
 
         {application.coverLetter && (
-          <div className="mb-3 p-3 bg-muted/30 rounded-lg">
+          <div className="mb-3 p-3 bg-muted/50 rounded-lg">
             <Label className="text-foreground font-medium text-sm">Your Cover Letter</Label>
             <p className="text-muted-foreground text-sm mt-1">{application.coverLetter}</p>
           </div>
@@ -628,25 +621,17 @@ export default function CandidateDashboard() {
 
   return (
     <Layout>
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
-        {/* Premium background effects */}
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHZpZXdCb3g9IjAgMCAyMCAyMCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48Y2lyY2xlIGN4PSIxIiBjeT0iMSIgcj0iMSIgZmlsbD0id2hpdGUiIGZpbGwtb3BhY2l0eT0iMC4wNSIvPjwvc3ZnPg==')] opacity-10"></div>
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-[100px] animate-pulse-slow"></div>
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-info/10 rounded-full blur-[100px] animate-pulse-slow" style={{ animationDelay: '1.2s' }}></div>
-        
-        <div className={`container mx-auto px-4 py-8 relative z-10 transition-opacity duration-1000 ${isVisible ? 'opacity-100' : 'opacity-0'}`}>
+      <div>
+        <div className="container mx-auto px-4 py-8">
           <div className="max-w-6xl mx-auto">
-            {/* Premium Header */}
-            <div className="mb-12 pt-16">
-              <div className="w-20 h-1.5 bg-gradient-to-r from-[#7B38FB] to-[#FF5BA8] rounded-full mb-6 animate-slide-right"></div>
-              <div className="flex items-center gap-3 mb-4">
-                <Target className="h-8 w-8 text-[#7B38FB]" />
-                <h1 className="text-4xl md:text-5xl font-bold">
-                  <span className="animate-gradient-text">{candidateDashboardCopy.header.titlePrimary}</span>
-                  <span className="text-foreground ml-3">{candidateDashboardCopy.header.titleSecondary}</span>
+            <div className="mb-8">
+              <div className="flex items-center gap-3 mb-2">
+                <Target className="h-7 w-7 text-primary" />
+                <h1 className="text-3xl font-bold text-foreground">
+                  {candidateDashboardCopy.header.titlePrimary} {candidateDashboardCopy.header.titleSecondary}
                 </h1>
               </div>
-              <p className="text-lg md:text-xl text-muted-foreground max-w-2xl leading-relaxed animate-slide-up" style={{ animationDelay: '0.3s' }}>
+              <p className="text-muted-foreground max-w-2xl">
                 {candidateDashboardCopy.header.subtitle}
               </p>
             </div>
@@ -674,7 +659,7 @@ export default function CandidateDashboard() {
 
             {/* AI Limits Display */}
             {fitScoring && aiLimits && (
-              <Card className="mb-6 bg-gradient-to-r from-purple-500/10 to-blue-500/10 backdrop-blur-sm border-primary/30">
+              <Card className="mb-6 border-border">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -748,14 +733,14 @@ export default function CandidateDashboard() {
 
           {/* Main Content */}
           <Tabs defaultValue="profile" className="w-full">
-            <TabsList className="grid w-full grid-cols-3 bg-muted/50 border-border">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="applications">My Applications ({stats.total})</TabsTrigger>
               <TabsTrigger value="resumes">Resume Library</TabsTrigger>
             </TabsList>
 
             <TabsContent value="profile" className="mt-6" data-tour="profile-settings">
-              <Card className="bg-muted/50 backdrop-blur-sm border-border">
+              <Card className="border-border">
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div>
@@ -782,7 +767,7 @@ export default function CandidateDashboard() {
                           placeholder="Tell us about yourself..."
                           value={profileData.bio}
                           onChange={(e) => setProfileData({ ...profileData, bio: e.target.value })}
-                          className="bg-muted/30 border-border text-foreground placeholder:text-muted-foreground"
+                          className="border-border text-foreground"
                         />
                       </div>
 
@@ -793,7 +778,7 @@ export default function CandidateDashboard() {
                           placeholder="City, Country"
                           value={profileData.location}
                           onChange={(e) => setProfileData({ ...profileData, location: e.target.value })}
-                          className="bg-muted/30 border-border text-foreground placeholder:text-muted-foreground"
+                          className="border-border text-foreground"
                         />
                       </div>
 
@@ -804,7 +789,7 @@ export default function CandidateDashboard() {
                           placeholder="https://linkedin.com/in/yourprofile"
                           value={profileData.linkedin}
                           onChange={(e) => setProfileData({ ...profileData, linkedin: e.target.value })}
-                          className="bg-muted/30 border-border text-foreground placeholder:text-muted-foreground"
+                          className="border-border text-foreground"
                         />
                       </div>
 
@@ -816,7 +801,7 @@ export default function CandidateDashboard() {
                             value={newSkill}
                             onChange={(e) => setNewSkill(e.target.value)}
                             onKeyPress={(e) => e.key === 'Enter' && handleAddSkill()}
-                            className="bg-muted/30 border-border text-foreground placeholder:text-muted-foreground"
+                            className="border-border text-foreground"
                           />
                           <Button onClick={handleAddSkill} variant="outline" size="sm">
                             <Plus className="w-4 h-4" />
@@ -930,7 +915,7 @@ export default function CandidateDashboard() {
 
             <TabsContent value="applications" className="mt-6" data-tour="application-status">
               {fitScoring && applications && applications.length > 0 && (
-                <div className="mb-4 bg-muted/30 backdrop-blur-sm border border-border rounded-lg p-4">
+                <div className="mb-4 border border-border rounded-lg p-4">
                   {asyncFit.isProcessing ? (
                     // Show progress when async job is active
                     <div className="space-y-3">
@@ -995,7 +980,7 @@ export default function CandidateDashboard() {
                   <ApplicationCard key={application.id} application={application} />
                 ))
               ) : (
-                <Card className="bg-muted/50 backdrop-blur-sm border-border">
+                <Card className="border-border">
                   <CardContent className="p-8 text-center">
                     <Briefcase className="w-16 h-16 text-muted-foreground mx-auto mb-4" />
                     <h3 className="text-xl font-semibold text-foreground mb-2">No Applications Yet</h3>
@@ -1014,7 +999,7 @@ export default function CandidateDashboard() {
 
             <TabsContent value="resumes" className="mt-6">
               {/* Upload Resume Section */}
-              <Card className="bg-muted/50 backdrop-blur-sm border-border mb-6">
+              <Card className="border-border mb-6">
                 <CardHeader>
                   <CardTitle className="text-foreground flex items-center gap-2">
                     <Upload className="w-5 h-5" />
@@ -1032,7 +1017,7 @@ export default function CandidateDashboard() {
                         value={resumeLabel}
                         onChange={(e) => setResumeLabel(e.target.value)}
                         placeholder="e.g., Software Engineer Resume"
-                        className="bg-muted/30 border-border text-foreground"
+                        className="border-border text-foreground"
                         required
                       />
                     </div>
@@ -1043,7 +1028,7 @@ export default function CandidateDashboard() {
                         type="file"
                         accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                         onChange={(e) => setResumeFile(e.target.files?.[0] || null)}
-                        className="bg-muted/30 border-border text-foreground"
+                        className="border-border text-foreground"
                         required
                       />
                     </div>
@@ -1083,7 +1068,7 @@ export default function CandidateDashboard() {
               </Card>
 
               {/* Resume List */}
-              <Card className="bg-muted/50 backdrop-blur-sm border-border">
+              <Card className="border-border">
                 <CardHeader>
                   <CardTitle className="text-foreground">Your Resumes ({resumes?.length || 0}/3)</CardTitle>
                   <CardDescription className="text-muted-foreground">
@@ -1101,7 +1086,7 @@ export default function CandidateDashboard() {
                       {resumes.map((resume) => (
                         <div
                           key={resume.id}
-                          className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border border-border"
+                          className="flex items-center justify-between p-4 bg-muted/50 rounded-lg border border-border"
                         >
                           <div className="flex-1">
                             <div className="flex items-center gap-2">

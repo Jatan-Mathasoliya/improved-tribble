@@ -27,6 +27,7 @@ const Layout = ({ children }: LayoutProps) => {
   const isRecruiter = user?.role === 'recruiter';
   const isAdmin = user?.role === 'super_admin';
   const isHiringManager = user?.role === 'hiring_manager';
+  const isCandidate = user?.role === 'candidate';
 
   // Organization role checks
   const orgRole = orgData?.membership?.role;
@@ -48,7 +49,7 @@ const Layout = ({ children }: LayoutProps) => {
   };
 
   // ATS context detection - determines if we should use light ATS theme
-  const atsUser = isRecruiter || isAdmin || isHiringManager;
+  const atsUser = isRecruiter || isAdmin || isHiringManager || isCandidate;
 
   const isAtsRoute = (path: string): boolean => {
     const atsRoutes = [
@@ -61,6 +62,8 @@ const Layout = ({ children }: LayoutProps) => {
       '/analytics',
       '/clients',
       '/hiring-manager',
+      '/onboarding',
+      '/my-dashboard',
       '/profile/settings',
       '/org/settings',
       '/org/team',
@@ -152,6 +155,7 @@ const Layout = ({ children }: LayoutProps) => {
             isRecruiter={isRecruiter}
             isAdmin={isAdmin}
             isHiringManager={isHiringManager}
+            isCandidate={isCandidate}
             isOrgOwner={isOrgOwner}
             isOrgOwnerOrAdmin={isOrgOwnerOrAdmin}
             displayName={displayName}

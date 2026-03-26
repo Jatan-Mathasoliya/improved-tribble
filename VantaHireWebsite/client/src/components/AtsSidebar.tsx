@@ -72,6 +72,7 @@ interface AtsSidebarProps {
   isRecruiter: boolean;
   isAdmin: boolean;
   isHiringManager: boolean;
+  isCandidate: boolean;
   isOrgOwner: boolean;
   isOrgOwnerOrAdmin: boolean;
   displayName: string;
@@ -91,6 +92,7 @@ export default function AtsSidebar({
   isRecruiter,
   isAdmin,
   isHiringManager,
+  isCandidate,
   isOrgOwner,
   isOrgOwnerOrAdmin,
   displayName,
@@ -118,10 +120,12 @@ export default function AtsSidebar({
   const mainItems: NavItem[] = [
     {
       label: atsShellCopy.routes.dashboard.label,
-      path: isHiringManager ? "/hiring-manager" : "/recruiter-dashboard",
+      path: isCandidate ? "/my-dashboard" : isHiringManager ? "/hiring-manager" : "/recruiter-dashboard",
       icon: Home,
-      visible: isRecruiter || isAdmin || isHiringManager,
-      active: isHiringManager
+      visible: isRecruiter || isAdmin || isHiringManager || isCandidate,
+      active: isCandidate
+        ? location === "/my-dashboard"
+        : isHiringManager
         ? location === "/hiring-manager" || /^\/hiring-manager\/jobs\/\d+\/review/.test(location)
         : location === "/recruiter-dashboard",
     },

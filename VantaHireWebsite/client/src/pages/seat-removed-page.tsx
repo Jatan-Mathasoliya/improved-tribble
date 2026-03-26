@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { AlertCircle, Mail, LogOut } from "lucide-react";
 import { useLocation } from "wouter";
 import { Helmet } from "react-helmet-async";
+import Layout from "@/components/Layout";
 
 /**
  * Page shown to users whose seat has been removed from their organization.
@@ -27,7 +28,7 @@ export default function SeatRemovedPage() {
   const orgName = orgData?.organization?.name || "your organization";
 
   return (
-    <>
+    <Layout>
       <Helmet>
         <title>Seat Removed | VantaHire</title>
         <meta name="robots" content="noindex, nofollow" />
@@ -84,6 +85,6 @@ export default function SeatRemovedPage() {
           </CardContent>
         </Card>
       </div>
-    </>
+    </Layout>
   );
 }
