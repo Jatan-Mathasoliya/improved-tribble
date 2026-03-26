@@ -49,8 +49,8 @@ function SortableFieldCard({ field, isSelected, onSelect, onRemove, onDuplicate,
     <div ref={setNodeRef} style={style} className={cn("mb-3", isDragging && "opacity-50")}>
       <Card
         className={cn(
-          "bg-white/5 border-white/10 hover:bg-white/10 transition-all cursor-pointer",
-          isSelected && "ring-2 ring-purple-400",
+          "bg-card border-border hover:bg-accent/50 transition-all cursor-pointer",
+          isSelected && "ring-2 ring-primary",
           hasError && "border-red-400/50"
         )}
         onClick={onSelect}
@@ -61,7 +61,7 @@ function SortableFieldCard({ field, isSelected, onSelect, onRemove, onDuplicate,
             <button
               {...attributes}
               {...listeners}
-              className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-white mt-1 focus:outline-none focus:ring-2 focus:ring-purple-400 rounded"
+              className="cursor-grab active:cursor-grabbing text-muted-foreground hover:text-foreground mt-1 focus:outline-none focus:ring-2 focus:ring-primary rounded"
               onClick={(e) => e.stopPropagation()}
               aria-label={`Drag to reorder ${field.label || 'field'}`}
             >
@@ -82,7 +82,7 @@ function SortableFieldCard({ field, isSelected, onSelect, onRemove, onDuplicate,
                       </Badge>
                     )}
                   </div>
-                  <p className="text-white text-sm font-medium mt-1 truncate">
+                  <p className="text-foreground text-sm font-medium mt-1 truncate">
                     {field.label || <span className="text-muted-foreground italic">Untitled field</span>}
                   </p>
                   {field.type === "select" && field.options && (
@@ -106,7 +106,7 @@ function SortableFieldCard({ field, isSelected, onSelect, onRemove, onDuplicate,
                 variant="ghost"
                 size="sm"
                 onClick={onDuplicate}
-                className="h-7 w-7 p-0 text-muted-foreground hover:text-white hover:bg-white/10"
+                className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground hover:bg-accent"
                 title="Duplicate field"
               >
                 <Copy className="w-3.5 h-3.5" />
@@ -170,7 +170,7 @@ export function FormCanvas({
       <div className="p-6">
         <div className="mb-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-white font-semibold text-lg">Form Canvas</h2>
+            <h2 className="text-foreground font-semibold text-lg">Form Canvas</h2>
             <Badge
               variant="outline"
               className={cn(
@@ -197,7 +197,7 @@ export function FormCanvas({
 
         {fields.length === 0 ? (
           <Card className={cn(
-            "bg-white/5 border-white/10 border-dashed transition-colors",
+            "bg-card border-border border-dashed transition-colors",
             isOver && "border-primary bg-primary/10"
           )}>
             <CardContent className="py-12 text-center">

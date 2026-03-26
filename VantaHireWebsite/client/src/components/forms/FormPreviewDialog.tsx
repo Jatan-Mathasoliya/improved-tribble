@@ -27,7 +27,7 @@ export function FormPreviewDialog({ open, onOpenChange, templateName, fields }: 
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto bg-card border-border">
         <DialogHeader>
-          <DialogTitle className="text-white text-2xl flex items-center gap-2">
+          <DialogTitle className="text-foreground text-2xl flex items-center gap-2">
             Form Preview
             <Badge variant="outline" className="text-xs border-primary/50 text-primary">
               Candidate View
@@ -41,7 +41,7 @@ export function FormPreviewDialog({ open, onOpenChange, templateName, fields }: 
         <div className="mt-6">
           {/* Form Header */}
           <div className="mb-6 pb-6 border-b border-border">
-            <h2 className="text-2xl font-bold text-white">
+            <h2 className="text-2xl font-bold text-foreground">
               {templateName || "Untitled Form"}
             </h2>
             <p className="text-muted-foreground text-sm mt-2">
@@ -51,7 +51,7 @@ export function FormPreviewDialog({ open, onOpenChange, templateName, fields }: 
 
           {/* Form Fields */}
           {fields.length === 0 ? (
-            <Card className="bg-white/5 border-white/10 border-dashed">
+            <Card className="bg-card border-border border-dashed">
               <CardContent className="py-12 text-center">
                 <p className="text-muted-foreground">No fields to preview. Add fields to see them here.</p>
               </CardContent>
@@ -60,7 +60,7 @@ export function FormPreviewDialog({ open, onOpenChange, templateName, fields }: 
             <div className="space-y-6">
               {fields.map((field) => (
                 <div key={field.id} className="space-y-2">
-                  <Label className="text-white text-base">
+                  <Label className="text-foreground text-base">
                     {field.label || <span className="text-muted-foreground italic">Untitled field</span>}
                     {field.required && <span className="text-destructive ml-1">*</span>}
                   </Label>
@@ -68,7 +68,7 @@ export function FormPreviewDialog({ open, onOpenChange, templateName, fields }: 
                   {field.type === "short_text" && (
                     <Input
                       placeholder="Enter your response..."
-                      className="bg-white/5 border-white/20 text-white placeholder:text-muted-foreground"
+                      className="bg-background border-input text-foreground placeholder:text-muted-foreground"
                     />
                   )}
 
@@ -76,7 +76,7 @@ export function FormPreviewDialog({ open, onOpenChange, templateName, fields }: 
                     <Textarea
                       placeholder="Enter your detailed response..."
                       rows={4}
-                      className="bg-white/5 border-white/20 text-white placeholder:text-muted-foreground resize-none"
+                      className="bg-background border-input text-foreground placeholder:text-muted-foreground resize-none"
                     />
                   )}
 
@@ -84,12 +84,12 @@ export function FormPreviewDialog({ open, onOpenChange, templateName, fields }: 
                     <Input
                       type="email"
                       placeholder="your.email@example.com"
-                      className="bg-white/5 border-white/20 text-white placeholder:text-muted-foreground"
+                      className="bg-background border-input text-foreground placeholder:text-muted-foreground"
                     />
                   )}
 
                   {field.type === "yes_no" && (
-                    <div className="flex items-center gap-3 p-4 bg-white/5 rounded-lg border border-white/20">
+                    <div className="flex items-center gap-3 p-4 bg-muted/40 rounded-lg border border-border">
                       <Switch />
                       <span className="text-muted-foreground text-sm">Toggle to select Yes/No</span>
                     </div>
@@ -97,7 +97,7 @@ export function FormPreviewDialog({ open, onOpenChange, templateName, fields }: 
 
                   {field.type === "select" && (
                     <Select>
-                      <SelectTrigger className="bg-white/5 border-white/20 text-white">
+                      <SelectTrigger className="bg-background border-input text-foreground">
                         <SelectValue placeholder="Select an option..." />
                       </SelectTrigger>
                       <SelectContent>
@@ -122,7 +122,7 @@ export function FormPreviewDialog({ open, onOpenChange, templateName, fields }: 
                   {field.type === "date" && (
                     <Input
                       type="date"
-                      className="bg-white/5 border-white/20 text-white"
+                      className="bg-background border-input text-foreground"
                     />
                   )}
 
@@ -130,7 +130,7 @@ export function FormPreviewDialog({ open, onOpenChange, templateName, fields }: 
                     <div className="space-y-2">
                       <Input
                         type="file"
-                        className="bg-white/5 border-white/20 text-white file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary/100 file:text-white hover:file:bg-primary"
+                        className="bg-background border-input text-foreground file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-medium file:bg-primary file:text-primary-foreground hover:file:bg-primary/90"
                       />
                       <p className="text-muted-foreground text-xs">
                         Supported formats: PDF, DOC, DOCX, TXT (max 10MB)
@@ -145,7 +145,7 @@ export function FormPreviewDialog({ open, onOpenChange, templateName, fields }: 
                 <Button
                   disabled
                   size="lg"
-                  className="w-full bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white"
+                  className="w-full"
                 >
                   Submit Form
                 </Button>

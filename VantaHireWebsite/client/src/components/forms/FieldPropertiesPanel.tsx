@@ -63,7 +63,7 @@ export function FieldPropertiesPanel({ field, onUpdateField, errors }: FieldProp
     <div className="h-full bg-card border-l border-border overflow-y-auto">
       <div className="p-6 space-y-6">
         <div>
-          <h2 className="text-white font-semibold text-lg">Field Properties</h2>
+          <h2 className="text-foreground font-semibold text-lg">Field Properties</h2>
           <p className="text-muted-foreground text-sm mt-1">
             Configure the selected field
           </p>
@@ -71,14 +71,14 @@ export function FieldPropertiesPanel({ field, onUpdateField, errors }: FieldProp
 
         {/* Field Type */}
         <div className="space-y-2">
-          <Label htmlFor="field-type" className="text-muted-foreground/50">
+          <Label htmlFor="field-type" className="text-foreground">
             Field Type
           </Label>
           <Select
             value={field.type}
             onValueChange={(value) => onUpdateField({ type: value })}
           >
-            <SelectTrigger id="field-type" className="bg-white/5 border-white/20 text-white">
+            <SelectTrigger id="field-type" className="bg-background border-input text-foreground">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -96,7 +96,7 @@ export function FieldPropertiesPanel({ field, onUpdateField, errors }: FieldProp
 
         {/* Field Label */}
         <div className="space-y-2">
-          <Label htmlFor="field-label" className="text-muted-foreground/50">
+          <Label htmlFor="field-label" className="text-foreground">
             Question/Label <span className="text-destructive">*</span>
           </Label>
           <Textarea
@@ -105,7 +105,7 @@ export function FieldPropertiesPanel({ field, onUpdateField, errors }: FieldProp
             onChange={(e) => onUpdateField({ label: e.target.value })}
             placeholder="e.g., What is your full legal name?"
             rows={3}
-            className="bg-white/5 border-white/20 text-white resize-none"
+            className="bg-background border-input text-foreground placeholder:text-muted-foreground resize-none"
           />
           {labelError ? (
             <div className="flex items-center gap-1 text-destructive text-sm">
@@ -120,9 +120,9 @@ export function FieldPropertiesPanel({ field, onUpdateField, errors }: FieldProp
         </div>
 
         {/* Required Toggle */}
-        <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/10">
+        <div className="flex items-center justify-between p-3 bg-muted/40 rounded-lg border border-border">
           <div className="flex-1">
-            <Label htmlFor="field-required" className="text-muted-foreground/50 cursor-pointer">
+            <Label htmlFor="field-required" className="text-foreground cursor-pointer">
               Required Field
             </Label>
             <p className="text-muted-foreground text-xs mt-1">
@@ -139,7 +139,7 @@ export function FieldPropertiesPanel({ field, onUpdateField, errors }: FieldProp
         {/* Options (for select fields) */}
         {field.type === "select" && (
           <div className="space-y-2">
-            <Label htmlFor="field-options" className="text-muted-foreground/50">
+            <Label htmlFor="field-options" className="text-foreground">
               Dropdown Options <span className="text-destructive">*</span>
             </Label>
             <Textarea
@@ -148,7 +148,7 @@ export function FieldPropertiesPanel({ field, onUpdateField, errors }: FieldProp
               onChange={(e) => onUpdateField({ options: e.target.value })}
               placeholder="Option 1, Option 2, Option 3"
               rows={4}
-              className="bg-white/5 border-white/20 text-white resize-none"
+              className="bg-background border-input text-foreground placeholder:text-muted-foreground resize-none"
             />
             {optionsError ? (
               <div className="flex items-center gap-1 text-destructive text-sm">
@@ -189,10 +189,10 @@ export function FieldPropertiesPanel({ field, onUpdateField, errors }: FieldProp
 
         {/* Field Preview */}
         <div className="space-y-2">
-          <Label className="text-muted-foreground/50">Preview</Label>
-          <Card className="bg-white/5 border-white/10">
+          <Label className="text-foreground">Preview</Label>
+          <Card className="bg-card border-border">
             <CardContent className="p-4">
-              <Label className="text-white text-sm">
+              <Label className="text-foreground text-sm">
                 {field.label || <span className="text-muted-foreground italic">Untitled field</span>}
                 {field.required && <span className="text-destructive ml-1">*</span>}
               </Label>
@@ -200,7 +200,7 @@ export function FieldPropertiesPanel({ field, onUpdateField, errors }: FieldProp
                 <Input
                   disabled
                   placeholder="Text input..."
-                  className="mt-2 bg-white/10 border-white/20 text-muted-foreground"
+                  className="mt-2 bg-background border-input text-muted-foreground"
                 />
               )}
               {field.type === "long_text" && (
@@ -208,7 +208,7 @@ export function FieldPropertiesPanel({ field, onUpdateField, errors }: FieldProp
                   disabled
                   placeholder="Text area..."
                   rows={3}
-                  className="mt-2 bg-white/10 border-white/20 text-muted-foreground resize-none"
+                  className="mt-2 bg-background border-input text-muted-foreground resize-none"
                 />
               )}
               {field.type === "email" && (
@@ -216,7 +216,7 @@ export function FieldPropertiesPanel({ field, onUpdateField, errors }: FieldProp
                   disabled
                   type="email"
                   placeholder="email@example.com"
-                  className="mt-2 bg-white/10 border-white/20 text-muted-foreground"
+                  className="mt-2 bg-background border-input text-muted-foreground"
                 />
               )}
               {field.type === "yes_no" && (
@@ -227,7 +227,7 @@ export function FieldPropertiesPanel({ field, onUpdateField, errors }: FieldProp
               )}
               {field.type === "select" && (
                 <Select disabled>
-                  <SelectTrigger className="mt-2 bg-white/10 border-white/20 text-muted-foreground">
+                  <SelectTrigger className="mt-2 bg-background border-input text-muted-foreground">
                     <SelectValue placeholder="Select an option..." />
                   </SelectTrigger>
                 </Select>
@@ -236,14 +236,14 @@ export function FieldPropertiesPanel({ field, onUpdateField, errors }: FieldProp
                 <Input
                   disabled
                   type="date"
-                  className="mt-2 bg-white/10 border-white/20 text-muted-foreground"
+                  className="mt-2 bg-background border-input text-muted-foreground"
                 />
               )}
               {field.type === "file" && (
                 <Input
                   disabled
                   type="file"
-                  className="mt-2 bg-white/10 border-white/20 text-muted-foreground"
+                  className="mt-2 bg-background border-input text-muted-foreground"
                 />
               )}
             </CardContent>
