@@ -68,6 +68,8 @@ export function FeedbackPanel({ applicationId, jobId, canAdd = true }: FeedbackP
       // Invalidate and refetch
       queryClient.invalidateQueries({ queryKey: ["/api/applications", applicationId, "feedback"] });
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "applications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/hiring-manager/jobs", jobId, "applications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/hiring-manager/jobs"] });
 
       toast({
         title: "Feedback Added",

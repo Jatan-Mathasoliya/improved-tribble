@@ -1309,6 +1309,29 @@ export const hiringManagerDashboardCopy = {
   },
 } as const;
 
+export const hiringManagerReviewPageCopy = {
+  header: {
+    back: "Back to Dashboard",
+    title: "Candidate Review",
+    subtitle: "Review applicants for your assigned role and leave structured feedback.",
+  },
+  sections: {
+    candidates: "Candidates",
+    feedback: "Feedback",
+    loading: "Loading candidates...",
+    empty: "No candidates found for this job yet.",
+    emptyHint: "Once applications arrive, you can review them here.",
+    inaccessibleJob: "This job is no longer available for your review.",
+    chooseCandidate: "Select a candidate to review their profile and feedback.",
+    awaitingFeedback: "Awaiting feedback",
+    alreadyReviewed: "Reviewed by you",
+  },
+  stats: {
+    totalCandidates: "Total Candidates",
+    awaitingFeedback: "Awaiting Your Feedback",
+  },
+} as const;
+
 export const candidateDashboardCopy = {
   header: {
     titlePrimary: "Candidate",

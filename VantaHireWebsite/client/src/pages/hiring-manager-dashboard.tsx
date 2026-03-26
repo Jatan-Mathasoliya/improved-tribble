@@ -83,7 +83,7 @@ export default function HiringManagerDashboard() {
   );
 
   const handleViewJob = (jobId: number) => {
-    setLocation(`/jobs/${jobId}/applications`);
+    setLocation(`/hiring-manager/jobs/${jobId}/review`);
   };
 
   return (

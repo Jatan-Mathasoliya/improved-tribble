@@ -81,6 +81,20 @@ export function registerApplicationsRoutes(
   csrfProtection: CsrfMiddleware,
   upload: Multer
 ): void {
+  const ensureHiringManagerOwnsApplication = async (userId: number, applicationId: number) => {
+    const application = await storage.getApplication(applicationId);
+    if (!application) {
+      return { ok: false as const, status: 404, error: 'Application not found' };
+    }
+
+    const job = await storage.getJob(application.jobId);
+    if (!job || job.hiringManagerId !== userId) {
+      return { ok: false as const, status: 403, error: 'Access denied' };
+    }
+
+    return { ok: true as const };
+  };
+
   // ============= APPLICATION SUBMISSION ROUTES =============
 
   // Submit job application with resume upload
@@ -2011,6 +2025,14 @@ export function registerApplicationsRoutes(
         return;
       }
 
+      if (req.user!.role === 'hiring_manager') {
+        const access = await ensureHiringManagerOwnsApplication(req.user!.id, appId);
+        if (!access.ok) {
+          res.status(access.status).json({ error: access.error });
+          return;
+        }
+      }
+
       const feedback = await db
         .select({
           id: applicationFeedback.id,
@@ -2061,6 +2083,14 @@ export function registerApplicationsRoutes(
       if (!Number.isFinite(appId) || appId <= 0 || !Number.isInteger(appId)) {
         res.status(400).json({ error: 'Invalid ID parameter' });
         return;
+      }
+
+      if (req.user!.role === 'hiring_manager') {
+        const access = await ensureHiringManagerOwnsApplication(req.user!.id, appId);
+        if (!access.ok) {
+          res.status(access.status).json({ error: access.error });
+          return;
+        }
       }
 
       const validation = insertApplicationFeedbackSchema.safeParse({
