@@ -67,6 +67,7 @@ import type { EmailSendPayload } from "@/components/kanban/ApplicationDetailPane
 import { PageHeaderSkeleton, FilterBarSkeleton, KanbanBoardSkeleton } from "@/components/skeletons";
 import { JobSubNav } from "@/components/JobSubNav";
 import { UploadDialog } from "@/components/bulk-import/UploadDialog";
+import { describeBulkFailures, type BulkFailureDetail } from "@/lib/bulk-action-failures";
 import { applicationManagementCopy } from "@/lib/internal-copy";
 
 export default function ApplicationManagementPage() {
@@ -123,26 +124,6 @@ export default function ApplicationManagementPage() {
   const [showAISummaryDialog, setShowAISummaryDialog] = useState(false);
   const [aiSummaryJobId, setAiSummaryJobId] = useState<number | null>(null);
   const [regenerateSummaries, setRegenerateSummaries] = useState(false);
-
-  type BulkFailureDetail = {
-    applicationId: number;
-    error?: string;
-  };
-
-  const describeBulkFailures = (failures: BulkFailureDetail[], fallbackLabel = "candidate") => {
-    if (failures.length === 0) {
-      return "";
-    }
-    const lookup = new Map((applications || []).map((app) => [app.id, app.name || app.email || `Application ${app.id}`]));
-    const preview = failures.slice(0, 3).map((failure) => {
-      const label = lookup.get(failure.applicationId) || `${fallbackLabel} ${failure.applicationId}`;
-      return failure.error ? `${label} (${failure.error})` : label;
-    });
-    const remainder = failures.length - preview.length;
-    return remainder > 0
-      ? `${preview.join(", ")} and ${remainder} more`
-      : preview.join(", ");
-  };
 
   type JobShortlistSummary = {
     id: number;
@@ -439,7 +420,7 @@ export default function ApplicationManagementPage() {
       if (data.failed && data.failed.length > 0) {
         toast({
           title: "Bulk update completed with issues",
-          description: `${data.updatedCount} updated. Failed: ${describeBulkFailures(data.failed, "application")}`,
+          description: `${data.updatedCount} updated. Failed: ${describeBulkFailures(data.failed, applications || [], "application")}`,
           variant: "destructive",
         });
       } else {
@@ -621,7 +602,7 @@ export default function ApplicationManagementPage() {
       if (summary.failed.length > 0) {
         toast({
           title: "Bulk email completed with issues",
-          description: `Sent: ${summary.success}. Failed: ${describeBulkFailures(summary.failed)}`,
+          description: `Sent: ${summary.success}. Failed: ${describeBulkFailures(summary.failed, applications || [])}`,
           variant: "destructive",
         });
       } else {
@@ -686,7 +667,7 @@ export default function ApplicationManagementPage() {
       if (summary.failed.length > 0) {
         toast({
           title: "Bulk forms completed with issues",
-          description: `Created: ${summary.created}. Not sent to: ${describeBulkFailures(summary.failed)}`,
+          description: `Created: ${summary.created}. Not sent to: ${describeBulkFailures(summary.failed, applications || [])}`,
           variant: "destructive",
         });
       } else {
@@ -739,7 +720,7 @@ export default function ApplicationManagementPage() {
       if (data.failed && data.failed.length > 0) {
         toast({
           title: "Batch interviews completed with issues",
-          description: `${data.scheduledCount} of ${data.total} scheduled. Failed: ${describeBulkFailures(data.failed)}`,
+          description: `${data.scheduledCount} of ${data.total} scheduled. Failed: ${describeBulkFailures(data.failed, applications || [])}`,
           variant: "destructive",
         });
       } else {
@@ -944,7 +925,7 @@ export default function ApplicationManagementPage() {
     if (failed.length > 0) {
       toast({
         title: "Bulk move completed with issues",
-        description: `${applicationManagementCopy.toasts.movedPrefix} ${success}. Failed: ${describeBulkFailures(failed)}`,
+        description: `${applicationManagementCopy.toasts.movedPrefix} ${success}. Failed: ${describeBulkFailures(failed, applications || [])}`,
         variant: "destructive",
       });
     } else {

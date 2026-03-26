@@ -7,10 +7,17 @@ const authState = {
   isLoading: false,
 };
 
+let currentLocation = '/recruiter-dashboard';
+
 const onboardingState = {
   status: undefined as any,
   isLoading: false,
   error: null as any,
+};
+
+const organizationState = {
+  data: undefined as any,
+  isLoading: false,
 };
 
 vi.mock('@/hooks/use-auth', () => ({
@@ -21,9 +28,14 @@ vi.mock('@/hooks/use-onboarding-status', () => ({
   useOnboardingStatus: () => onboardingState,
 }));
 
+vi.mock('@/hooks/use-organization', () => ({
+  useOrganization: () => organizationState,
+}));
+
 vi.mock('wouter', () => ({
   Route: ({ children }: { children: React.ReactNode }) => <div data-testid="route">{children}</div>,
   Redirect: ({ to }: { to: string }) => <div data-testid="redirect" data-to={to} />,
+  useLocation: () => [currentLocation, vi.fn()],
 }));
 
 const ProtectedContent = () => <div data-testid="protected-content">Protected</div>;
@@ -32,12 +44,15 @@ describe('ProtectedRoute onboarding gate', () => {
   beforeEach(() => {
     authState.user = null;
     authState.isLoading = false;
+    currentLocation = '/recruiter-dashboard';
     onboardingState.status = undefined;
     onboardingState.isLoading = false;
     onboardingState.error = null;
+    organizationState.data = undefined;
+    organizationState.isLoading = false;
   });
 
-  it('redirects unauthenticated users to /auth', () => {
+  it('redirects unauthenticated recruiter users to /auth with the original destination', () => {
     render(
       <ProtectedRoute
         path="/recruiter-dashboard"
@@ -47,7 +62,22 @@ describe('ProtectedRoute onboarding gate', () => {
     );
 
     const redirect = screen.getByTestId('redirect');
-    expect(redirect.getAttribute('data-to')).toBe('/auth');
+    expect(redirect.getAttribute('data-to')).toBe('/auth?redirect=%2Frecruiter-dashboard');
+  });
+
+  it('redirects unauthenticated candidate users to /candidate-auth with the original destination', () => {
+    currentLocation = '/my-dashboard';
+
+    render(
+      <ProtectedRoute
+        path="/my-dashboard"
+        component={ProtectedContent}
+        requiredRole={['candidate']}
+      />
+    );
+
+    const redirect = screen.getByTestId('redirect');
+    expect(redirect.getAttribute('data-to')).toBe('/candidate-auth?redirect=%2Fmy-dashboard');
   });
 
   it('redirects recruiters who need onboarding to the current step', () => {

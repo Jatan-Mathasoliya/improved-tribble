@@ -187,7 +187,7 @@ maybeDescribe('Onboarding Gate', () => {
       expect(res.body.hasOrganization).toBe(true);
     });
 
-    it('returns needsOnboarding=false for recruiter with onboardingCompletedAt set', async () => {
+    it('does not treat onboardingCompletedAt alone as complete when the recruiter has no organization', async () => {
       const user = await createRecruiterUser({
         username: `completed_${Date.now()}@example.com`,
         password: 'password',
@@ -211,8 +211,8 @@ maybeDescribe('Onboarding Gate', () => {
       const res = await agent.get('/api/onboarding-status');
 
       expect(res.status).toBe(200);
-      expect(res.body.needsOnboarding).toBe(false);
-      expect(res.body.currentStep).toBe('complete');
+      expect(res.body.needsOnboarding).toBe(true);
+      expect(res.body.currentStep).toBe('org');
     });
 
     it('returns needsOnboarding=false for non-recruiter roles', async () => {
@@ -311,6 +311,49 @@ maybeDescribe('Onboarding Gate', () => {
       await db.update(organizationMembers)
         .set({ joinedAt: twoDaysAgo })
         .where(eq(organizationMembers.userId, user.id));
+
+      const agent = request.agent(app);
+      await agent.post('/api/login').send({
+        username: user.username,
+        password: 'password',
+        expectedRole: ['recruiter'],
+      });
+
+      const res = await agent.get('/api/onboarding-status');
+
+      expect(res.status).toBe(200);
+      expect(res.body.needsOnboarding).toBe(true);
+      expect(res.body.currentStep).toBe('profile');
+    });
+
+    it('does not auto-complete for established user missing only phone', async () => {
+      const user = await createRecruiterUser({
+        username: `established_nophone_${Date.now()}@example.com`,
+        password: 'password',
+        role: 'recruiter',
+        emailVerified: true,
+        firstName: 'Test',
+        lastName: 'User',
+      });
+      created.userIds.push(user.id);
+
+      const org = await createOrganizationWithOwner({
+        name: `Established No Phone Org ${Date.now()}`,
+        ownerId: user.id,
+      });
+      created.orgIds.push(org.id);
+
+      const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+      await db.update(organizationMembers)
+        .set({ joinedAt: twoDaysAgo })
+        .where(eq(organizationMembers.userId, user.id));
+
+      const [profile] = await db.insert(userProfiles).values({
+        userId: user.id,
+        company: 'Test Company',
+        phone: null,
+      }).returning();
+      created.profileIds.push(profile.id);
 
       const agent = request.agent(app);
       await agent.post('/api/login').send({
@@ -554,6 +597,77 @@ maybeDescribe('Onboarding Gate', () => {
       // Invited member with complete profile in org with active plan should be auto-completed
       expect(res.body.needsOnboarding).toBe(false);
       expect(res.body.currentStep).toBe('complete');
+    });
+
+    it('does not auto-complete invited member with active paid plan when phone is missing', async () => {
+      const owner = await createRecruiterUser({
+        username: `inviteowner_nophone_${Date.now()}@example.com`,
+        password: 'password',
+        role: 'recruiter',
+        emailVerified: true,
+      });
+      created.userIds.push(owner.id);
+
+      await db.update(users)
+        .set({ onboardingCompletedAt: new Date() })
+        .where(eq(users.id, owner.id));
+
+      const org = await createOrganizationWithOwner({
+        name: `Invite Owner No Phone Org ${Date.now()}`,
+        ownerId: owner.id,
+      });
+      created.orgIds.push(org.id);
+
+      const { plan } = await ensurePlan('pro');
+      const now = new Date();
+      const [subscription] = await db.insert(organizationSubscriptions).values({
+        organizationId: org.id,
+        planId: plan.id,
+        status: 'active',
+        billingCycle: 'monthly',
+        startDate: now,
+        currentPeriodStart: now,
+        currentPeriodEnd: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+      }).returning();
+      created.subscriptionIds.push(subscription.id);
+
+      const invitedUser = await createRecruiterUser({
+        username: `invitedmember_nophone_${Date.now()}@example.com`,
+        password: 'password',
+        role: 'recruiter',
+        emailVerified: true,
+        firstName: 'Invited',
+        lastName: 'Member',
+      });
+      created.userIds.push(invitedUser.id);
+
+      const member = await addOrganizationMember({
+        organizationId: org.id,
+        userId: invitedUser.id,
+        role: 'member',
+        seatAssigned: true,
+      });
+      created.memberIds.push(member.id);
+
+      const [profile] = await db.insert(userProfiles).values({
+        userId: invitedUser.id,
+        company: 'Test Company',
+        phone: null,
+      }).returning();
+      created.profileIds.push(profile.id);
+
+      const agent = request.agent(app);
+      await agent.post('/api/login').send({
+        username: invitedUser.username,
+        password: 'password',
+        expectedRole: ['recruiter'],
+      });
+
+      const res = await agent.get('/api/onboarding-status');
+
+      expect(res.status).toBe(200);
+      expect(res.body.needsOnboarding).toBe(true);
+      expect(res.body.currentStep).toBe('profile');
     });
   });
 });
