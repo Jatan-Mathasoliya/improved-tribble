@@ -2209,15 +2209,27 @@ export function registerApplicationsRoutes(
         }
       }
 
-      const updatedCount = await storage.updateApplicationsStatus(
-        applicationIds.map(id => parseInt(id)),
-        status,
-        notes
+      const normalizedIds = applicationIds.map(id => parseInt(id));
+      const existingApplications = await Promise.all(
+        normalizedIds.map((id) => storage.getApplication(id))
       );
+      const foundIds = existingApplications
+        .filter((app): app is NonNullable<typeof app> => !!app)
+        .map((app) => app.id);
+      const missingIds = normalizedIds.filter((id) => !foundIds.includes(id));
+
+      const updatedCount = foundIds.length > 0
+        ? await storage.updateApplicationsStatus(foundIds, status, notes)
+        : 0;
 
       res.json({
         success: true,
+        total: normalizedIds.length,
         updatedCount,
+        failed: missingIds.map((applicationId) => ({
+          applicationId,
+          error: "Application not found",
+        })),
         message: `${updatedCount} applications updated successfully`
       });
       return;

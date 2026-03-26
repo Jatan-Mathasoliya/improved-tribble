@@ -124,6 +124,26 @@ export default function ApplicationManagementPage() {
   const [aiSummaryJobId, setAiSummaryJobId] = useState<number | null>(null);
   const [regenerateSummaries, setRegenerateSummaries] = useState(false);
 
+  type BulkFailureDetail = {
+    applicationId: number;
+    error?: string;
+  };
+
+  const describeBulkFailures = (failures: BulkFailureDetail[], fallbackLabel = "candidate") => {
+    if (failures.length === 0) {
+      return "";
+    }
+    const lookup = new Map((applications || []).map((app) => [app.id, app.name || app.email || `Application ${app.id}`]));
+    const preview = failures.slice(0, 3).map((failure) => {
+      const label = lookup.get(failure.applicationId) || `${fallbackLabel} ${failure.applicationId}`;
+      return failure.error ? `${label} (${failure.error})` : label;
+    });
+    const remainder = failures.length - preview.length;
+    return remainder > 0
+      ? `${preview.join(", ")} and ${remainder} more`
+      : preview.join(", ");
+  };
+
   type JobShortlistSummary = {
     id: number;
     title: string | null;
@@ -413,13 +433,21 @@ export default function ApplicationManagementPage() {
       });
       return await res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (data: { updatedCount: number; total?: number; failed?: BulkFailureDetail[] }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "applications"] });
       setSelectedApplications([]);
-      toast({
-        title: applicationManagementCopy.toasts.bulkUpdateSuccessTitle,
-        description: `${data.updatedCount} applications updated successfully.`,
-      });
+      if (data.failed && data.failed.length > 0) {
+        toast({
+          title: "Bulk update completed with issues",
+          description: `${data.updatedCount} updated. Failed: ${describeBulkFailures(data.failed, "application")}`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: applicationManagementCopy.toasts.bulkUpdateSuccessTitle,
+          description: `${data.updatedCount} applications updated successfully.`,
+        });
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -567,15 +595,18 @@ export default function ApplicationManagementPage() {
   const sendBulkEmailsMutation = useMutation({
     mutationFn: async ({ applicationIds, templateId }: { applicationIds: number[]; templateId: number }) => {
       let success = 0;
-      let failed = 0;
+      const failed: BulkFailureDetail[] = [];
       setBulkProgress({ sent: 0, total: applicationIds.length });
       for (const id of applicationIds) {
         try {
           const res = await apiRequest("POST", `/api/applications/${id}/send-email`, { templateId });
           await res.json();
           success++;
-        } catch (_) {
-          failed++;
+        } catch (error: any) {
+          failed.push({
+            applicationId: id,
+            error: error?.message || "Failed to send email",
+          });
         } finally {
           setBulkProgress((p) => ({ sent: Math.min(p.sent + 1, applicationIds.length), total: applicationIds.length }));
         }
@@ -587,10 +618,18 @@ export default function ApplicationManagementPage() {
       setBulkTemplateId(null);
       setSelectedApplications([]);
       setBulkProgress({ sent: 0, total: 0 });
-      toast({
-        title: applicationManagementCopy.toasts.bulkEmailSentTitle,
-        description: `Sent: ${summary.success}, Failed: ${summary.failed}`,
-      });
+      if (summary.failed.length > 0) {
+        toast({
+          title: "Bulk email completed with issues",
+          description: `Sent: ${summary.success}. Failed: ${describeBulkFailures(summary.failed)}`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: applicationManagementCopy.toasts.bulkEmailSentTitle,
+          description: `Sent: ${summary.success}, Failed: 0`,
+        });
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -605,9 +644,7 @@ export default function ApplicationManagementPage() {
   const sendBulkFormsMutation = useMutation({
     mutationFn: async ({ applicationIds, formId, customMessage }: { applicationIds: number[]; formId: number; customMessage?: string }) => {
       let created = 0;
-      let duplicate = 0;
-      let unauthorized = 0;
-      let failed = 0;
+      const failed: BulkFailureDetail[] = [];
       setBulkFormsProgress({ sent: 0, total: applicationIds.length });
 
       for (const appId of applicationIds) {
@@ -619,14 +656,15 @@ export default function ApplicationManagementPage() {
           });
           created++;
         } catch (err: any) {
-          // Categorize errors by status code
+          let reason = "Failed to send form";
           if (err.status === 409 || (err.message && err.message.includes('already been sent'))) {
-            duplicate++;
+            reason = "Invitation already exists";
           } else if (err.status === 403 || (err.message && err.message.includes('Unauthorized'))) {
-            unauthorized++;
-          } else {
-            failed++;
+            reason = "Unauthorized";
+          } else if (err?.message) {
+            reason = err.message;
           }
+          failed.push({ applicationId: appId, error: reason });
         } finally {
           setBulkFormsProgress(p => ({
             sent: Math.min(p.sent + 1, applicationIds.length),
@@ -635,7 +673,7 @@ export default function ApplicationManagementPage() {
         }
       }
 
-      return { summary: { total: applicationIds.length, created, duplicate, unauthorized, failed } };
+      return { summary: { total: applicationIds.length, created, failed } };
     },
     onSuccess: ({ summary }) => {
       setShowBulkFormsDialog(false);
@@ -645,10 +683,18 @@ export default function ApplicationManagementPage() {
       setBulkFormsProgress({ sent: 0, total: 0 });
       // Invalidate invitation quota to refresh remaining count
       queryClient.invalidateQueries({ queryKey: formsQueryKeys.invitationQuota() });
-      toast({
-        title: applicationManagementCopy.toasts.bulkFormsSentTitle,
-        description: `Created: ${summary.created}, Duplicates: ${summary.duplicate}, Failed: ${summary.failed}`,
-      });
+      if (summary.failed.length > 0) {
+        toast({
+          title: "Bulk forms completed with issues",
+          description: `Created: ${summary.created}. Not sent to: ${describeBulkFailures(summary.failed)}`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: applicationManagementCopy.toasts.bulkFormsSentTitle,
+          description: `Created: ${summary.created}, Failed: 0`,
+        });
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -681,7 +727,7 @@ export default function ApplicationManagementPage() {
       });
       return await res.json();
     },
-    onSuccess: (data: { total: number; scheduledCount: number; failedCount: number }) => {
+    onSuccess: (data: { total: number; scheduledCount: number; failedCount: number; failed?: BulkFailureDetail[] }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "applications"] });
       setShowBatchInterviewDialog(false);
       setBatchInterviewDate("");
@@ -690,10 +736,18 @@ export default function ApplicationManagementPage() {
       setBatchLocation("");
       setBatchNotes("");
       setBatchStageId("");
-      toast({
-        title: applicationManagementCopy.toasts.batchInterviewsScheduledTitle,
-        description: `${data.scheduledCount} of ${data.total} candidates scheduled.`,
-      });
+      if (data.failed && data.failed.length > 0) {
+        toast({
+          title: "Batch interviews completed with issues",
+          description: `${data.scheduledCount} of ${data.total} scheduled. Failed: ${describeBulkFailures(data.failed)}`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: applicationManagementCopy.toasts.batchInterviewsScheduledTitle,
+          description: `${data.scheduledCount} of ${data.total} candidates scheduled.`,
+        });
+      }
     },
     onError: (error: Error) => {
       toast({
@@ -858,7 +912,7 @@ export default function ApplicationManagementPage() {
     }
 
     let success = 0;
-    let failed = 0;
+    const failed: BulkFailureDetail[] = [];
     const total = selectedApplications.length;
 
     setBulkProgress({ sent: 0, total });
@@ -872,8 +926,11 @@ export default function ApplicationManagementPage() {
           try {
             await updateStageMutation.mutateAsync({ applicationId: id, stageId });
             success++;
-          } catch {
-            failed++;
+          } catch (error: any) {
+            failed.push({
+              applicationId: id,
+              error: error?.message || "Failed to move stage",
+            });
           } finally {
             setBulkProgress((p) => ({ sent: Math.min(p.sent + 1, total), total }));
           }
@@ -884,10 +941,18 @@ export default function ApplicationManagementPage() {
     setBulkProgress({ sent: 0, total: 0 });
     setSelectedApplications([]);
 
-    toast({
-      title: applicationManagementCopy.toasts.bulkMoveCompleteTitle,
-      description: `${applicationManagementCopy.toasts.movedPrefix} ${success}, ${applicationManagementCopy.toasts.failedPrefix} ${failed}`,
-    });
+    if (failed.length > 0) {
+      toast({
+        title: "Bulk move completed with issues",
+        description: `${applicationManagementCopy.toasts.movedPrefix} ${success}. Failed: ${describeBulkFailures(failed)}`,
+        variant: "destructive",
+      });
+    } else {
+      toast({
+        title: applicationManagementCopy.toasts.bulkMoveCompleteTitle,
+        description: `${applicationManagementCopy.toasts.movedPrefix} ${success}, ${applicationManagementCopy.toasts.failedPrefix} 0`,
+      });
+    }
   };
 
   const handleBulkSendEmails = async (templateId: number) => {
