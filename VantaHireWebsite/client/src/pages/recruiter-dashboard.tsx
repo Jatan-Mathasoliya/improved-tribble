@@ -193,14 +193,19 @@ export default function RecruiterDashboard() {
       const key = app.currentStage ? String(app.currentStage) : "unassigned";
       counts[key] = (counts[key] || 0) + 1;
     });
+
+    // The recruiter dashboard should only visualize stages that are actually
+    // in play for the current recruiter/job filter, not the org's full stage catalog.
     const sortedStages = [...pipelineStages].sort((a, b) => (a.order - b.order) || (a.id - b.id));
-    const mapped = sortedStages.map((stage) => ({
-      name: stage.name,
-      count: counts[String(stage.id)] || 0,
-      color: stage.color || "#64748b",
-      order: stage.order,
-      stageId: stage.id,
-    }));
+    const mapped = sortedStages
+      .filter((stage) => (counts[String(stage.id)] || 0) > 0)
+      .map((stage) => ({
+        name: stage.name,
+        count: counts[String(stage.id)] || 0,
+        color: stage.color || "#64748b",
+        order: stage.order,
+        stageId: stage.id,
+      }));
     const unassigned = counts["unassigned"]
       ? [{ name: "Unassigned", count: counts["unassigned"], color: "#94a3b8", order: -1 }]
       : [];
