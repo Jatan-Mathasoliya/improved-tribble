@@ -25,14 +25,11 @@ interface Application {
   appliedAt: Date;
   currentStage: number | null;
   jobId: number;
+  hmFeedbackCount?: number;
 }
 
 interface ApplicationWithJob extends Application {
   jobTitle: string;
-}
-
-interface FeedbackCount {
-  [applicationId: number]: number;
 }
 
 export default function HiringManagerDashboard() {
@@ -80,37 +77,9 @@ export default function HiringManagerDashboard() {
 
   const allApplications: ApplicationWithJob[] = allApplicationsData || [];
 
-  // Fetch feedback counts for each application
-  const { data: feedbackCounts = {} } = useQuery<FeedbackCount>({
-    queryKey: ["/api/hiring-manager/feedback-counts", allApplications.map(a => a.id)],
-    queryFn: async () => {
-      if (allApplications.length === 0) return {};
-
-      const feedbackPromises = allApplications.map(async (app) => {
-        try {
-          const response = await fetch(`/api/applications/${app.id}/feedback`);
-          if (!response.ok) return { appId: app.id, count: 0 };
-          const feedback = await response.json();
-          // Count feedback from this hiring manager
-          const myFeedbackCount = feedback.filter((fb: any) => fb.authorId === user.id).length;
-          return { appId: app.id, count: myFeedbackCount };
-        } catch {
-          return { appId: app.id, count: 0 };
-        }
-      });
-
-      const results = await Promise.all(feedbackPromises);
-      return results.reduce((acc, { appId, count }) => {
-        acc[appId] = count;
-        return acc;
-      }, {} as FeedbackCount);
-    },
-    enabled: allApplications.length > 0,
-  });
-
   // Applications needing feedback (where hiring manager hasn't given feedback yet)
   const applicationsNeedingFeedback = allApplications.filter(
-    (app) => (feedbackCounts[app.id] || 0) === 0
+    (app) => (app.hmFeedbackCount ?? 0) === 0
   );
 
   const handleViewJob = (jobId: number) => {
@@ -207,7 +176,7 @@ export default function HiringManagerDashboard() {
               {myJobs.map((job) => {
                 const jobApplications = allApplications.filter((app) => app.jobId === job.id);
                 const needingFeedback = jobApplications.filter(
-                  (app) => (feedbackCounts[app.id] || 0) === 0
+                  (app) => (app.hmFeedbackCount ?? 0) === 0
                 ).length;
 
                 return (

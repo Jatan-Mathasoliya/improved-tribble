@@ -808,7 +808,37 @@ export function registerApplicationsRoutes(
       }
 
       const applicationsList = await storage.getApplicationsByJob(jobId);
-      res.json(applicationsList);
+      if (applicationsList.length === 0) {
+        res.json([]);
+        return;
+      }
+
+      const applicationIds = applicationsList.map((application) => application.id);
+      const feedbackRows = await db
+        .select({
+          applicationId: applicationFeedback.applicationId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(applicationFeedback)
+        .where(
+          and(
+            inArray(applicationFeedback.applicationId, applicationIds),
+            eq(applicationFeedback.authorId, req.user!.id),
+          )
+        )
+        .groupBy(applicationFeedback.applicationId);
+
+      const feedbackCounts = feedbackRows.reduce((acc: Record<number, number>, row: typeof feedbackRows[number]) => {
+        acc[row.applicationId] = row.count;
+        return acc;
+      }, {});
+
+      const applicationsWithFeedback = applicationsList.map((application) => ({
+        ...application,
+        hmFeedbackCount: feedbackCounts[application.id] ?? 0,
+      }));
+
+      res.json(applicationsWithFeedback);
       return;
     } catch (error) {
       next(error);
