@@ -106,18 +106,19 @@ export default function OnboardingPage() {
         setLocation(`/onboarding?${params.toString()}`, { replace: true });
         return;
       }
+      toast({
+        title: onboardingPageCopy.error.title,
+        description: onboardingPageCopy.error.description,
+        variant: "destructive",
+      });
+      return;
     } catch {
-      // Fallback to local progression if refetch fails
-    }
-
-    const currentIndex = STEP_ORDER.indexOf(step);
-    const nextStep = STEP_ORDER[currentIndex + 1];
-    if (nextStep) {
-      setCurrentStep(nextStep);
-      // Update URL to match current step.
-      const params = new URLSearchParams();
-      params.set('step', nextStep);
-      setLocation(`/onboarding?${params.toString()}`, { replace: true });
+      toast({
+        title: onboardingPageCopy.error.title,
+        description: onboardingPageCopy.error.description,
+        variant: "destructive",
+      });
+      return;
     }
   };
 
