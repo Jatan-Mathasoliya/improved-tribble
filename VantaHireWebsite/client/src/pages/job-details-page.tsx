@@ -21,6 +21,7 @@ import Layout from "@/components/Layout";
 import { useAuth } from "@/hooks/use-auth";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DEFAULT_SITE_URL, generateJobPostingJsonLd, generateJobMetaDescription, getJobCanonicalUrl } from "@/lib/seoHelpers";
+import { useAIFeatures } from "@/hooks/use-ai-features";
 
 // Types for audit log
 interface AuditLogEntry {
@@ -85,18 +86,8 @@ export default function JobDetailsPage() {
     },
   });
 
-  // Check if AI features are enabled (standardized endpoint)
-  const { data: aiFeatures } = useQuery<{ resumeAdvisor: boolean; fitScoring: boolean }>({
-    queryKey: ["/api/ai/features"],
-    queryFn: async () => {
-      const response = await fetch("/api/ai/features");
-      if (!response.ok) return { resumeAdvisor: false, fitScoring: false };
-      return response.json();
-    },
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-  });
-  // Derive enabled flag for backward compatibility
-  const aiEnabled = aiFeatures?.resumeAdvisor || aiFeatures?.fitScoring;
+  const { resumeAdvisor, fitScoring } = useAIFeatures();
+  const aiEnabled = resumeAdvisor || fitScoring;
 
   // Check if current user is recruiter/admin (for showing admin features)
   const isRecruiterOrAdmin = user?.role === 'recruiter' || user?.role === 'super_admin';

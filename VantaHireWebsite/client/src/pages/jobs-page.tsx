@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Job } from "@shared/schema";
 import Layout from "@/components/Layout";
 import { FilterPanel, MobileFilterSheet } from "@/components/FilterPanel";
+import { useAIFeatures } from "@/hooks/use-ai-features";
 
 interface JobWithRecruiter extends Job {
   postedByName?: string;
@@ -48,18 +49,8 @@ export default function JobsPage() {
 
   useEffect(() => { setIsVisible(true); }, []);
 
-  // Fetch AI feature flag (standardized endpoint)
-  const { data: aiFeatures } = useQuery<{ resumeAdvisor: boolean; fitScoring: boolean }>({
-    queryKey: ["/api/ai/features"],
-    queryFn: async () => {
-      const response = await fetch("/api/ai/features");
-      if (!response.ok) return { resumeAdvisor: false, fitScoring: false };
-      return response.json();
-    },
-    staleTime: 5 * 60 * 1000, // Cache for 5 minutes
-  });
-  // Derive enabled flag for backward compatibility
-  const aiEnabled = aiFeatures?.resumeAdvisor || aiFeatures?.fitScoring;
+  const { resumeAdvisor, fitScoring } = useAIFeatures();
+  const aiEnabled = resumeAdvisor || fitScoring;
 
   // Fetch jobs from API
   const { data, isLoading, error } = useQuery<JobsResponse>({

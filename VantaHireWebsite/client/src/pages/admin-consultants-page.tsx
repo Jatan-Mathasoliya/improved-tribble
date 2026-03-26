@@ -80,6 +80,19 @@ const emptyForm: ConsultantFormData = {
   isActive: true,
 };
 
+function normalizeDomains(domains: unknown): string[] {
+  if (Array.isArray(domains)) {
+    return domains.filter((domain): domain is string => typeof domain === "string");
+  }
+  if (typeof domains === "string") {
+    return domains
+      .split(",")
+      .map((domain) => domain.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
 export default function AdminConsultantsPage() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -99,7 +112,14 @@ export default function AdminConsultantsPage() {
     queryKey: ["/api/admin/consultants"],
     queryFn: async () => {
       const res = await apiRequest("GET", "/api/admin/consultants");
-      return res.json();
+      const data = await res.json();
+      if (!Array.isArray(data)) {
+        return [];
+      }
+      return data.map((consultant) => ({
+        ...consultant,
+        domains: normalizeDomains(consultant.domains),
+      }));
     },
   });
 
@@ -158,11 +178,12 @@ export default function AdminConsultantsPage() {
   };
 
   const handleOpenEdit = (consultant: Consultant) => {
+    const domains = normalizeDomains(consultant.domains);
     setEditingConsultant(consultant);
     setFormData({
       name: consultant.name,
       experience: consultant.experience,
-      domains: consultant.domains.join(", "),
+      domains: domains.join(", "),
       description: consultant.description,
       photoUrl: consultant.photoUrl || "",
       linkedinUrl: consultant.linkedinUrl || "",
@@ -203,7 +224,7 @@ export default function AdminConsultantsPage() {
   // Filter consultants
   const filteredConsultants = consultants.filter(c =>
     c.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.domains.some(d => d.toLowerCase().includes(searchTerm.toLowerCase()))
+    normalizeDomains(c.domains).some(d => d.toLowerCase().includes(searchTerm.toLowerCase()))
   );
 
   const activeCount = consultants.filter(c => c.isActive).length;
@@ -307,7 +328,9 @@ export default function AdminConsultantsPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filteredConsultants.map((consultant) => (
+                    {filteredConsultants.map((consultant) => {
+                      const domains = normalizeDomains(consultant.domains);
+                      return (
                       <TableRow key={consultant.id}>
                         <TableCell>
                           <div className="flex items-center gap-3">
@@ -342,14 +365,14 @@ export default function AdminConsultantsPage() {
                         <TableCell>{consultant.experience}</TableCell>
                         <TableCell>
                           <div className="flex flex-wrap gap-1">
-                            {consultant.domains.slice(0, 3).map((domain, idx) => (
+                            {domains.slice(0, 3).map((domain, idx) => (
                               <Badge key={idx} variant="secondary" className="text-xs">
                                 {domain}
                               </Badge>
                             ))}
-                            {consultant.domains.length > 3 && (
+                            {domains.length > 3 && (
                               <Badge variant="outline" className="text-xs">
-                                +{consultant.domains.length - 3}
+                                +{domains.length - 3}
                               </Badge>
                             )}
                           </div>
@@ -368,7 +391,7 @@ export default function AdminConsultantsPage() {
                           </Button>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )})}
                   </TableBody>
                 </Table>
               )}

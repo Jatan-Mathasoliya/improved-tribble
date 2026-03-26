@@ -45,6 +45,15 @@ export function registerAdminRoutes(
   app: Express,
   csrfProtection: CsrfMiddleware
 ): void {
+  const normalizeConsultant = (consultant: any) => ({
+    ...consultant,
+    domains: Array.isArray(consultant?.domains)
+      ? consultant.domains.filter((domain: unknown): domain is string => typeof domain === 'string')
+      : typeof consultant?.domains === 'string'
+        ? consultant.domains.split(',').map((domain: string) => domain.trim()).filter(Boolean)
+        : [],
+  });
+
   // ============= ADMIN JOB MANAGEMENT =============
 
   // Get jobs by status for admin review
@@ -374,7 +383,7 @@ export function registerAdminRoutes(
   app.get("/api/admin/consultants", requireRole(['super_admin']), async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const consultants = await storage.getConsultants();
-      res.json(consultants);
+      res.json(consultants.map(normalizeConsultant));
       return;
     } catch (error) {
       next(error);
@@ -386,7 +395,7 @@ export function registerAdminRoutes(
     try {
       const consultantData = req.body;
       const consultant = await storage.createConsultant(consultantData);
-      res.status(201).json(consultant);
+      res.status(201).json(normalizeConsultant(consultant));
       return;
     } catch (error) {
       next(error);
@@ -413,7 +422,7 @@ export function registerAdminRoutes(
         return;
       }
 
-      res.json(consultant);
+      res.json(normalizeConsultant(consultant));
       return;
     } catch (error) {
       next(error);

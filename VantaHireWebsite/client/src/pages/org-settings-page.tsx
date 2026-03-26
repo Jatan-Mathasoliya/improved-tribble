@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useOrganization,
   useUpdateOrganization,
@@ -40,8 +40,8 @@ export default function OrgSettingsPage() {
   const isOwner = orgData?.membership?.role === 'owner';
   const isAdmin = orgData?.membership?.role === 'admin' || isOwner;
 
-  // Initialize form when data loads
-  useState(() => {
+  // Populate the form after async organization data loads.
+  useEffect(() => {
     if (orgData?.organization) {
       const org = orgData.organization;
       setName(org.name || "");
@@ -54,7 +54,7 @@ export default function OrgSettingsPage() {
       setBillingContactName(org.billingContactName || "");
       setGstin(org.gstin || "");
     }
-  });
+  }, [orgData]);
 
   const handleSaveGeneral = async (e: React.FormEvent) => {
     e.preventDefault();
