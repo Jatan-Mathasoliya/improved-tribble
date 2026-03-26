@@ -42,6 +42,16 @@ export function FormsModal({ open, onOpenChange, application }: FormsModalProps)
   const [customMessage, setCustomMessage] = useState("");
   const [selectedResponse, setSelectedResponse] = useState<FormResponseSummaryDTO | null>(null);
 
+  const formatShortDate = (value?: string | Date | null) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+  };
+
   // Reset selection/state when modal closes or application changes
   useEffect(() => {
     if (!open) {
@@ -284,14 +294,33 @@ export function FormsModal({ open, onOpenChange, application }: FormsModalProps)
                   value={selectedTemplateId?.toString() || ""}
                   onValueChange={(value) => setSelectedTemplateId(parseInt(value))}
                 >
-                  <SelectTrigger className=" mt-1">
-                    <SelectValue placeholder="Choose a form template..." />
-                  </SelectTrigger>
+                    <SelectTrigger className=" mt-1">
+                      <SelectValue placeholder="Choose a form template..." />
+                    </SelectTrigger>
                   <SelectContent>
                     {templates.map((template) => (
                       <SelectItem key={template.id} value={template.id.toString()}>
-                        {template.name}
-                        {template.description && ` - ${template.description}`}
+                        <div className="flex max-w-[280px] flex-col items-start gap-1 py-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-medium">{template.name}</span>
+                            <span className="text-xs text-muted-foreground">
+                              {template.fields.length} fields
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {template.isPublished ? "Published" : "Draft"}
+                            </span>
+                            {formatShortDate(template.updatedAt) && (
+                              <span className="text-xs text-muted-foreground">
+                                Updated {formatShortDate(template.updatedAt)}
+                              </span>
+                            )}
+                          </div>
+                          {template.description && (
+                            <span className="line-clamp-1 text-xs text-muted-foreground">
+                              {template.description}
+                            </span>
+                          )}
+                        </div>
                       </SelectItem>
                     ))}
                   </SelectContent>

@@ -231,6 +231,16 @@ export function ApplicationDetailPanel({
     }
   };
 
+  const formatShortDate = (value?: string | Date | null) => {
+    if (!value) return null;
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return null;
+    return date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    });
+  };
+
   const handleSendForm = () => {
     if (!selectedFormId) return;
     onSendForm(parseInt(selectedFormId), formMessage);
@@ -385,14 +395,24 @@ export function ApplicationDetailPanel({
                           })
                           .map((template) => (
                             <SelectItem key={template.id} value={template.id.toString()}>
-                              <div className="flex items-center gap-2">
-                                <span>{template.name}</span>
-                                <span className="text-xs text-muted-foreground">
-                                  ({templateTypeLabel(template.templateType)})
+                              <div className="flex max-w-[280px] flex-col items-start gap-1 py-1">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-medium">{template.name}</span>
+                                  <span className="text-xs text-muted-foreground">
+                                    {templateTypeLabel(template.templateType)}
+                                  </span>
+                                  {template.isDefault && (
+                                    <span className="text-xs font-medium text-success">Default</span>
+                                  )}
+                                  {formatShortDate(template.createdAt) && (
+                                    <span className="text-xs text-muted-foreground">
+                                      Created {formatShortDate(template.createdAt)}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="line-clamp-1 text-xs text-muted-foreground">
+                                  {template.subject}
                                 </span>
-                                {template.isDefault && (
-                                  <span className="text-xs font-medium text-success">(Default)</span>
-                                )}
                               </div>
                             </SelectItem>
                           ))}
@@ -508,7 +528,27 @@ export function ApplicationDetailPanel({
                       <SelectContent>
                         {formTemplates.map((form) => (
                           <SelectItem key={form.id} value={form.id.toString()}>
-                            {form.name}
+                            <div className="flex max-w-[280px] flex-col items-start gap-1 py-1">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <span className="font-medium">{form.name}</span>
+                                <span className="text-xs text-muted-foreground">
+                                  {form.fields.length} fields
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {form.isPublished ? "Published" : "Draft"}
+                                </span>
+                                {formatShortDate(form.updatedAt) && (
+                                  <span className="text-xs text-muted-foreground">
+                                    Updated {formatShortDate(form.updatedAt)}
+                                  </span>
+                                )}
+                              </div>
+                              {form.description && (
+                                <span className="line-clamp-1 text-xs text-muted-foreground">
+                                  {form.description}
+                                </span>
+                              )}
+                            </div>
                           </SelectItem>
                         ))}
                       </SelectContent>
