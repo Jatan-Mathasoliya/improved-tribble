@@ -160,6 +160,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
       if (!response.ok) throw new Error("Failed to fetch hiring managers");
       return response.json();
     },
+    enabled: currentStep >= 3,
   });
 
   // Fetch clients
@@ -170,6 +171,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
       if (!response.ok) throw new Error("Failed to fetch clients");
       return response.json();
     },
+    enabled: currentStep >= 3,
   });
 
   // Fetch existing jobs for template cloning
@@ -180,6 +182,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
       if (!response.ok) throw new Error("Failed to fetch jobs");
       return response.json();
     },
+    enabled: currentStep >= 4,
   });
 
   // Fetch email templates
@@ -190,6 +193,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
       if (!response.ok) throw new Error("Failed to fetch templates");
       return response.json();
     },
+    enabled: currentStep >= 4,
   });
 
   // Fetch existing pipeline stages
@@ -200,6 +204,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
       if (!response.ok) throw new Error("Failed to fetch stages");
       return response.json();
     },
+    enabled: currentStep >= 4,
   });
 
   // Clone prefill - when a job is selected, prefill form fields
