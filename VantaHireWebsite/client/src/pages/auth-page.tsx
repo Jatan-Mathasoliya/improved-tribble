@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { Redirect } from "wouter";
+import { Redirect, useSearch } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -13,6 +13,12 @@ import { useToast } from "@/hooks/use-toast";
 export default function AuthPage() {
   const { user, loginMutation, registerMutation } = useAuth();
   const { toast } = useToast();
+  const searchString = useSearch();
+  const redirectUrl = useMemo(() => {
+    const params = new URLSearchParams(searchString);
+    const redirect = params.get("redirect");
+    return redirect && redirect.startsWith("/") ? redirect : null;
+  }, [searchString]);
   const [loginData, setLoginData] = useState({ username: "", password: "" });
   const [registerData, setRegisterData] = useState({
     username: "",
@@ -65,11 +71,14 @@ export default function AuthPage() {
   if (user) {
     if (user.role === 'recruiter') {
       // Send recruiters to recruiter-auth which handles onboarding check
-      return <Redirect to="/recruiter-auth" />;
+      const recruiterAuthHref = redirectUrl
+        ? `/recruiter-auth?redirect=${encodeURIComponent(redirectUrl)}`
+        : "/recruiter-auth";
+      return <Redirect to={recruiterAuthHref} />;
     } else if (user.role === 'super_admin') {
-      return <Redirect to="/admin" />;
+      return <Redirect to={redirectUrl || "/admin"} />;
     } else if (user.role === 'hiring_manager') {
-      return <Redirect to="/hiring-manager" />;
+      return <Redirect to={redirectUrl || "/hiring-manager"} />;
     } else if (user.role === 'candidate') {
       return <Redirect to="/jobs" />;
     }

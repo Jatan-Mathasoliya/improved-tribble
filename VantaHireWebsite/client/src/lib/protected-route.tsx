@@ -2,7 +2,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { useOnboardingStatus } from "@/hooks/use-onboarding-status";
 import { useOrganization } from "@/hooks/use-organization";
 import { Loader2 } from "lucide-react";
-import { Redirect, Route } from "wouter";
+import { Redirect, Route, useLocation } from "wouter";
 import { ComponentType, LazyExoticComponent } from "react";
 
 type LazyComponent = LazyExoticComponent<ComponentType<object>>;
@@ -39,6 +39,7 @@ export function ProtectedRoute({
   requiredRole?: string[];
 }) {
   const { user, isLoading } = useAuth();
+  const [location] = useLocation();
 
   // Only check onboarding for recruiters on non-exempt paths
   const shouldCheckOnboarding =
@@ -78,9 +79,10 @@ export function ProtectedRoute({
   if (!user) {
     // Redirect to appropriate auth page based on required role
     const authPath = requiredRole?.includes('candidate') ? '/candidate-auth' : '/auth';
+    const redirectParam = encodeURIComponent(location);
     return (
       <Route path={path}>
-        <Redirect to={authPath} />
+        <Redirect to={`${authPath}?redirect=${redirectParam}`} />
       </Route>
     );
   }
