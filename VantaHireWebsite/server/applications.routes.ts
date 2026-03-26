@@ -73,6 +73,11 @@ const scheduleInterviewSchema = z.object({
   notes: z.string().optional(),
 });
 
+const requestHiringManagerReviewSchema = z.object({
+  applicationIds: z.array(z.number().int().positive()).min(1),
+  note: z.string().max(1000).optional(),
+});
+
 /**
  * Register all application-related routes
  */
@@ -850,7 +855,16 @@ export function registerApplicationsRoutes(
       const applicationsWithFeedback = applicationsList.map((application) => ({
         ...application,
         hmFeedbackCount: feedbackCounts[application.id] ?? 0,
-      }));
+      })).sort((left, right) => {
+        const leftRequestedAt = left.hmReviewRequestedAt ? new Date(left.hmReviewRequestedAt).getTime() : 0;
+        const rightRequestedAt = right.hmReviewRequestedAt ? new Date(right.hmReviewRequestedAt).getTime() : 0;
+
+        if (leftRequestedAt !== rightRequestedAt) {
+          return rightRequestedAt - leftRequestedAt;
+        }
+
+        return new Date(right.appliedAt).getTime() - new Date(left.appliedAt).getTime();
+      });
 
       res.json(applicationsWithFeedback);
       return;
@@ -933,6 +947,13 @@ export function registerApplicationsRoutes(
         const hasAccess = await storage.isRecruiterOnJob(appRecord.jobId, req.user!.id, userOrgId);
         if (!hasAccess) {
           res.status(403).json({ error: 'Access denied' });
+          return;
+        }
+        await storage.markApplicationDownloaded(applicationId);
+      } else if (role === 'hiring_manager') {
+        const access = await ensureHiringManagerOwnsApplication(req.user!.id, applicationId);
+        if (!access.ok) {
+          res.status(access.status).json({ error: access.error });
           return;
         }
         await storage.markApplicationDownloaded(applicationId);
@@ -2139,6 +2160,100 @@ export function registerApplicationsRoutes(
   });
 
   // ============= APPLICATION STATUS MANAGEMENT =============
+
+  app.post("/api/applications/bulk/request-hm-review", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const { applicationIds, note } = requestHiringManagerReviewSchema.parse(req.body);
+      const normalizedIds = Array.from(new Set(applicationIds.map((id) => Number(id))));
+
+      if (req.user!.role !== 'super_admin') {
+        const orgResult = await getUserOrganization(req.user!.id);
+        const userOrgId = orgResult?.organization.id;
+
+        const recruiterApplications = await Promise.all(
+          normalizedIds.map((id) => storage.getApplication(id))
+        );
+
+        const jobIds = Array.from(new Set(
+          recruiterApplications
+            .filter((application): application is NonNullable<typeof application> => !!application)
+            .map((application) => application.jobId)
+        ));
+
+        const accessChecks = await Promise.all(
+          jobIds.map((jobId) => storage.isRecruiterOnJob(jobId, req.user!.id, userOrgId))
+        );
+
+        if (accessChecks.includes(false)) {
+          res.status(403).json({ error: "Access denied to one or more applications" });
+          return;
+        }
+      }
+
+      const existingApplications = await Promise.all(
+        normalizedIds.map((id) => storage.getApplication(id))
+      );
+      const foundApplications = existingApplications.filter((application): application is NonNullable<typeof application> => !!application);
+      const foundIds = foundApplications.map((application) => application.id);
+      const missingIds = normalizedIds.filter((id) => !foundIds.includes(id));
+
+      if (foundApplications.length === 0) {
+        res.json({
+          success: true,
+          total: normalizedIds.length,
+          requestedCount: 0,
+          failed: missingIds.map((applicationId) => ({
+            applicationId,
+            error: "Application not found",
+          })),
+        });
+        return;
+      }
+
+      const jobIds = Array.from(new Set(foundApplications.map((application) => application.jobId)));
+      if (jobIds.length !== 1) {
+        res.status(400).json({ error: "Select candidates from a single job before requesting hiring manager review" });
+        return;
+      }
+
+      const targetJobId = jobIds[0];
+      if (!targetJobId) {
+        res.status(400).json({ error: "Select candidates from a single job before requesting hiring manager review" });
+        return;
+      }
+
+      const job = await storage.getJob(targetJobId);
+      if (!job?.hiringManagerId) {
+        res.status(400).json({ error: "Assign a hiring manager to this job before requesting review" });
+        return;
+      }
+
+      const trimmedNote = note?.trim() || null;
+      await db
+        .update(applications)
+        .set({
+          hmReviewRequestedAt: new Date(),
+          hmReviewRequestedBy: req.user!.id,
+          hmReviewNote: trimmedNote,
+          updatedAt: new Date(),
+        })
+        .where(inArray(applications.id, foundIds));
+
+      res.json({
+        success: true,
+        total: normalizedIds.length,
+        requestedCount: foundIds.length,
+        failed: missingIds.map((applicationId) => ({
+          applicationId,
+          error: "Application not found",
+        })),
+        message: `${foundIds.length} candidates sent to the hiring manager for review`,
+      });
+      return;
+    } catch (error) {
+      next(error);
+    }
+  });
 
   // Update single application status (recruiters/admins only)
   app.patch("/api/applications/:id/status", csrfProtection, requireRole(['recruiter', 'super_admin']), requireSeat(), async (req: Request, res: Response, next: NextFunction): Promise<void> => {

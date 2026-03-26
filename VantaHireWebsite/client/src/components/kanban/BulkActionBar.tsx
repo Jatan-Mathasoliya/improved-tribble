@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { X, Mail, FileText, MoveRight, Archive, Sparkles, AlertCircle } from "lucide-react";
+import { X, Mail, FileText, MoveRight, Archive, Sparkles, AlertCircle, MessageSquareMore } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 import { PipelineStage, EmailTemplate } from "@shared/schema";
 import type { FormTemplateDTO } from "@/lib/formsApi";
 import {
@@ -39,6 +40,9 @@ interface BulkActionBarProps {
   onSelectAll: (selected: boolean) => void;
   onClearSelection: () => void;
   onArchiveSelected: () => Promise<void>;
+  onRequestHiringManagerReview?: (note: string) => Promise<void>;
+  canRequestHiringManagerReview?: boolean;
+  hiringManagerReviewDisabledReason?: string | undefined;
   isBulkProcessing: boolean;
   bulkProgress?: { sent: number; total: number };
   // AI Summary props
@@ -60,6 +64,9 @@ export function BulkActionBar({
   onSelectAll,
   onClearSelection,
   onArchiveSelected,
+  onRequestHiringManagerReview,
+  canRequestHiringManagerReview = false,
+  hiringManagerReviewDisabledReason,
   isBulkProcessing,
   bulkProgress,
   onGenerateAISummary,
@@ -71,10 +78,12 @@ export function BulkActionBar({
   const [showEmailDialog, setShowEmailDialog] = useState(false);
   const [showFormsDialog, setShowFormsDialog] = useState(false);
   const [showArchiveDialog, setShowArchiveDialog] = useState(false);
+  const [showHmReviewDialog, setShowHmReviewDialog] = useState(false);
   const [selectedStageId, setSelectedStageId] = useState<string>("");
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [selectedFormId, setSelectedFormId] = useState<string>("");
   const [formMessage, setFormMessage] = useState("");
+  const [hmReviewNote, setHmReviewNote] = useState("");
 
   // Helper to format template type labels
   const templateTypeLabel = (type: string) => {
@@ -122,6 +131,13 @@ export function BulkActionBar({
     setShowFormsDialog(false);
     setSelectedFormId("");
     setFormMessage("");
+  };
+
+  const handleRequestHmReview = async () => {
+    if (!onRequestHiringManagerReview) return;
+    await onRequestHiringManagerReview(hmReviewNote);
+    setShowHmReviewDialog(false);
+    setHmReviewNote("");
   };
 
   const progressPercentage =
@@ -188,6 +204,17 @@ export function BulkActionBar({
             >
               <FileText className="h-4 w-4 mr-2" />
               Form
+            </Button>
+
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setShowHmReviewDialog(true)}
+              disabled={isBulkProcessing || !hasSelection || !canRequestHiringManagerReview || !onRequestHiringManagerReview}
+              title={!canRequestHiringManagerReview ? hiringManagerReviewDisabledReason : undefined}
+            >
+              <MessageSquareMore className="h-4 w-4 mr-2" />
+              Request HM Review
             </Button>
 
             <Button
@@ -291,6 +318,44 @@ export function BulkActionBar({
             </Button>
             <Button onClick={handleMoveStage} disabled={!selectedStageId}>
               Move Applications
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showHmReviewDialog} onOpenChange={setShowHmReviewDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Request Hiring Manager Review</DialogTitle>
+            <DialogDescription>
+              Send the selected candidates to the assigned hiring manager for evaluation. They will be able to review resumes and leave structured feedback, but not move candidates through the pipeline.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+              {selectedCount} selected candidate{selectedCount === 1 ? "" : "s"} will appear in the hiring manager review queue.
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground" htmlFor="hm-review-note">
+                Note for hiring manager (optional)
+              </label>
+              <Textarea
+                id="hm-review-note"
+                value={hmReviewNote}
+                onChange={(event) => setHmReviewNote(event.target.value)}
+                placeholder="Highlight what you want the hiring manager to assess for this shortlist..."
+                maxLength={1000}
+                className="min-h-[120px]"
+              />
+              <p className="text-xs text-muted-foreground">{hmReviewNote.length}/1000 characters</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowHmReviewDialog(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleRequestHmReview} disabled={!canRequestHiringManagerReview || !onRequestHiringManagerReview}>
+              Send Review Request
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -6,6 +6,8 @@ const storageMock = {
   getApplication: vi.fn(),
   getJob: vi.fn(),
   getUser: vi.fn(),
+  isRecruiterOnJob: vi.fn(),
+  markApplicationDownloaded: vi.fn(),
 };
 
 const selectQueue: any[][] = [];
@@ -38,6 +40,13 @@ function makeQuery(rows: any[]) {
 
 const dbMock = {
   select: vi.fn(() => makeQuery(selectQueue.shift() ?? [])),
+  update: vi.fn(() => ({
+    set() {
+      return {
+        where: vi.fn().mockResolvedValue(undefined),
+      };
+    },
+  })),
   insert: vi.fn(() => ({
     values() {
       return {
@@ -142,12 +151,12 @@ vi.mock('../lib/applicationGraphSyncProcessor', () => ({
   MIN_RESUME_TEXT_LENGTH: 100,
 }));
 
-async function buildApp() {
+async function buildApp(user = { id: 4544, role: 'hiring_manager', emailVerified: true }) {
   const { registerApplicationsRoutes } = await import('../applications.routes');
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
-    (req as any).user = { id: 4544, role: 'hiring_manager', emailVerified: true };
+    (req as any).user = user;
     next();
   });
 
@@ -167,7 +176,7 @@ async function invokeRoute(
   app: express.Express,
   method: 'get' | 'post',
   path: string,
-  input: { params: Record<string, string>; body?: Record<string, unknown> },
+  input: { params: Record<string, string>; body?: Record<string, unknown>; user?: { id: number; role: string; emailVerified?: boolean } },
 ): Promise<{ status: number; body: any }> {
   const router = (app as any)._router;
   const layer = router.stack.find((entry: any) => entry.route?.path === path && entry.route.methods?.[method]);
@@ -181,7 +190,7 @@ async function invokeRoute(
     params: input.params,
     body: input.body ?? {},
     query: {},
-    user: { id: 4544, role: 'hiring_manager', emailVerified: true },
+    user: input.user ?? { id: 4544, role: 'hiring_manager', emailVerified: true },
     headers: {},
     ip: '127.0.0.1',
     app: {
@@ -323,5 +332,53 @@ describe('hiring manager feedback access', () => {
     expect(result.status).toBe(403);
     expect(result.body).toEqual({ error: 'Access denied' });
     expect(dbMock.insert).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 when a hiring manager requests a resume for another manager’s job application', async () => {
+    storageMock.getApplication.mockResolvedValue({
+      id: 459,
+      jobId: 88,
+    });
+    storageMock.getJob.mockResolvedValue({
+      id: 88,
+      hiringManagerId: 9999,
+    });
+
+    const app = await buildApp();
+
+    const result = await invokeRoute(app, 'get', '/api/applications/:id/resume', {
+      params: { id: '459' },
+    });
+
+    expect(result.status).toBe(403);
+    expect(result.body).toEqual({ error: 'Access denied' });
+    expect(storageMock.markApplicationDownloaded).not.toHaveBeenCalled();
+  });
+
+  it('allows recruiters to request hiring manager review for accessible applications on a single job', async () => {
+    storageMock.getApplication.mockImplementation(async (id: number) => {
+      if (id === 501 || id === 502) {
+        return { id, jobId: 77 };
+      }
+      return undefined;
+    });
+    storageMock.getJob.mockResolvedValue({ id: 77, hiringManagerId: 4544 });
+    storageMock.isRecruiterOnJob.mockResolvedValue(true);
+
+    const app = await buildApp({ id: 77, role: 'recruiter', emailVerified: true });
+
+    const result = await invokeRoute(app, 'post', '/api/applications/bulk/request-hm-review', {
+      params: {},
+      user: { id: 77, role: 'recruiter', emailVerified: true },
+      body: {
+        applicationIds: [501, 502],
+        note: 'Please validate backend depth and communication clarity.',
+      },
+    });
+
+    expect(result.status).toBe(200);
+    expect(result.body.requestedCount).toBe(2);
+    expect(storageMock.isRecruiterOnJob).toHaveBeenCalledWith(77, 77, undefined);
+    expect(dbMock.update).toHaveBeenCalled();
   });
 });

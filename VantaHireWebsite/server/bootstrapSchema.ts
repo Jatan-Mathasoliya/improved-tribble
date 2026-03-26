@@ -225,6 +225,9 @@ export async function ensureAtsSchema(): Promise<void> {
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS interview_location TEXT;`);
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS interview_notes TEXT;`);
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS recruiter_notes TEXT[];`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS hm_review_requested_at TIMESTAMP;`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS hm_review_requested_by INTEGER REFERENCES users(id);`);
+  await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS hm_review_note TEXT;`);
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS rating INTEGER;`);
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS tags TEXT[];`);
   await db.execute(sql`ALTER TABLE applications ADD COLUMN IF NOT EXISTS stage_changed_at TIMESTAMP;`);
@@ -252,6 +255,7 @@ export async function ensureAtsSchema(): Promise<void> {
   // Applications table indexes (userId for auth, status for filtering)
   await db.execute(sql`CREATE INDEX IF NOT EXISTS applications_user_id_idx ON applications(user_id);`);
   await db.execute(sql`CREATE INDEX IF NOT EXISTS applications_status_idx ON applications(status);`);
+  await db.execute(sql`CREATE INDEX IF NOT EXISTS applications_hm_review_requested_at_idx ON applications(hm_review_requested_at);`);
 
   // Functional index for case-insensitive duplicate detection (recruiter-add)
   await db.execute(sql`CREATE INDEX IF NOT EXISTS applications_job_email_idx ON applications(job_id, LOWER(email));`);

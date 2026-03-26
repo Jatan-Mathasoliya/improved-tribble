@@ -439,6 +439,42 @@ export default function ApplicationManagementPage() {
     },
   });
 
+  const requestHiringManagerReviewMutation = useMutation({
+    mutationFn: async ({ applicationIds, note }: { applicationIds: number[]; note?: string }) => {
+      const res = await apiRequest("POST", "/api/applications/bulk/request-hm-review", {
+        applicationIds,
+        note,
+      });
+      return await res.json();
+    },
+    onSuccess: (data: { requestedCount: number; failed?: BulkFailureDetail[] }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/jobs", jobId, "applications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/hiring-manager/jobs"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/hiring-manager/jobs", jobId, "applications"] });
+      setSelectedApplications([]);
+
+      if (data.failed && data.failed.length > 0) {
+        toast({
+          title: applicationManagementCopy.toasts.hmReviewRequestedWithIssuesTitle,
+          description: `${data.requestedCount} queued. Failed: ${describeBulkFailures(data.failed, applications || [])}`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: applicationManagementCopy.toasts.hmReviewRequestedTitle,
+          description: `${data.requestedCount} candidate${data.requestedCount === 1 ? "" : "s"} sent to the assigned hiring manager.`,
+        });
+      }
+    },
+    onError: (error: Error) => {
+      toast({
+        title: applicationManagementCopy.toasts.hmReviewRequestFailedTitle,
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const markViewedMutation = useMutation({
     mutationFn: async (applicationId: number) => {
       const res = await apiRequest("PATCH", `/api/applications/${applicationId}/view`);
@@ -971,6 +1007,14 @@ export default function ApplicationManagementPage() {
       applicationIds: selectedApplications,
       status: 'rejected',
       notes: '[Archived via bulk action]'
+    });
+  };
+
+  const handleRequestHiringManagerReview = async (note: string) => {
+    if (selectedApplications.length === 0) return;
+    await requestHiringManagerReviewMutation.mutateAsync({
+      applicationIds: selectedApplications,
+      note,
     });
   };
 
@@ -1575,7 +1619,10 @@ export default function ApplicationManagementPage() {
             onSelectAll={handleSelectAll}
             onClearSelection={handleClearSelection}
             onArchiveSelected={handleArchiveSelected}
-            isBulkProcessing={sendBulkEmailsMutation.isPending || sendBulkFormsMutation.isPending || bulkUpdateMutation.isPending || startAISummaryMutation.isPending || !!aiSummaryJobId}
+            onRequestHiringManagerReview={handleRequestHiringManagerReview}
+            canRequestHiringManagerReview={!!job?.hiringManagerId}
+            hiringManagerReviewDisabledReason={!job?.hiringManagerId ? "Assign a hiring manager to this job before requesting review." : undefined}
+            isBulkProcessing={sendBulkEmailsMutation.isPending || sendBulkFormsMutation.isPending || bulkUpdateMutation.isPending || requestHiringManagerReviewMutation.isPending || startAISummaryMutation.isPending || !!aiSummaryJobId}
             bulkProgress={bulkProgress}
             onGenerateAISummary={() => setShowAISummaryDialog(true)}
             aiSummaryEnabled={true}

@@ -83,6 +83,8 @@ describe('HiringManagerDashboard review routing', () => {
               currentStage: 3,
               jobId: 77,
               hmFeedbackCount: 0,
+              hmReviewRequestedAt: '2026-03-26T09:00:00.000Z',
+              hmReviewNote: 'Please validate backend depth and communication clarity.',
             },
           ],
         };
@@ -106,7 +108,7 @@ describe('HiringManagerDashboard review routing', () => {
       expect(fetchMock).toHaveBeenCalledWith('/api/hiring-manager/jobs/77/applications');
     });
 
-    await user.click(screen.getByRole('button', { name: /view candidates/i }));
+    await user.click(screen.getByRole('button', { name: /review requested candidates/i }));
     expect(setLocationMock).toHaveBeenCalledWith('/hiring-manager/jobs/77/review');
 
     await user.click(screen.getByRole('button', { name: /^review$/i }));

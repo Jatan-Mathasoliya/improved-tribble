@@ -150,6 +150,9 @@ export const applications = pgTable("applications", {
   interviewLocation: text("interview_location"),
   interviewNotes: text("interview_notes"),
   recruiterNotes: text("recruiter_notes").array(),
+  hmReviewRequestedAt: timestamp("hm_review_requested_at"),
+  hmReviewRequestedBy: integer("hm_review_requested_by").references(() => users.id),
+  hmReviewNote: text("hm_review_note"),
   rating: integer("rating"),
   tags: text("tags").array(),
   stageChangedAt: timestamp("stage_changed_at"),
@@ -200,6 +203,7 @@ export const applications = pgTable("applications", {
     .on(table.jobId, sql`lower(${table.email})`),
   userIdIdx: index("applications_user_id_idx").on(table.userId),
   statusIdx: index("applications_status_idx").on(table.status),
+  hmReviewRequestedAtIdx: index("applications_hm_review_requested_at_idx").on(table.hmReviewRequestedAt),
   rejectionReasonIdx: index("applications_rejection_reason_idx").on(table.rejectionReason),
 }));
 
