@@ -173,10 +173,10 @@ function EditableRow({
       <TableCell className="w-[220px]">
         {editing ? (
           <div className="flex gap-1 justify-end">
-            <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={handleSave} disabled={saving || isPatchPending}>
+            <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={handleSave} disabled={saving || isPatchPending} aria-label="Save row changes">
               {saving || isPatchPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             </Button>
-            <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={handleCancel} disabled={saving || isPatchPending}>
+            <Button type="button" size="icon" variant="ghost" className="h-7 w-7" onClick={handleCancel} disabled={saving || isPatchPending} aria-label="Cancel row editing">
               <X className="h-3.5 w-3.5" />
             </Button>
           </div>
@@ -220,6 +220,7 @@ function EditableRow({
                 className="h-7 w-7 text-muted-foreground hover:text-destructive"
                 onClick={() => onDismiss(item.id)}
                 title="Dismiss from view"
+                aria-label="Dismiss from view"
               >
                 <EyeOff className="h-3.5 w-3.5" />
               </Button>

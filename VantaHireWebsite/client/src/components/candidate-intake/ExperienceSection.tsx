@@ -87,6 +87,7 @@ export function ExperienceSection({
                     size="icon"
                     className="h-8 w-8 text-muted-foreground hover:text-destructive"
                     onClick={() => removeItem(item.id)}
+                    aria-label={`Remove experience ${index + 1}`}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>

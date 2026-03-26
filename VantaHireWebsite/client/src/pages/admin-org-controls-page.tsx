@@ -203,7 +203,7 @@ export default function AdminOrgControlsPage() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="icon" asChild>
+            <Button variant="ghost" size="icon" aria-label="Back to admin dashboard" asChild>
               <Link href="/admin">
                 <ArrowLeft className="h-4 w-4" />
               </Link>

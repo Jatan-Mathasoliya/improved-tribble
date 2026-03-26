@@ -280,7 +280,7 @@ export default function AdminOrganizationsPage() {
                       </TableCell>
                       <TableCell>
                         <Link href={`/admin/organizations/${org.id}`}>
-                          <Button variant="ghost" size="icon">
+                          <Button variant="ghost" size="icon" aria-label={`View organization ${org.name}`}>
                             <ExternalLink className="h-4 w-4" />
                           </Button>
                         </Link>

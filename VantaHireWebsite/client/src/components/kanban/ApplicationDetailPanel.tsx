@@ -603,7 +603,7 @@ export function ApplicationDetailPanel({
               <p className="text-muted-foreground text-sm text-center py-8">No history available</p>
             ) : (
               stageHistory.map((entry: any, index: number) => (
-                <Card key={index} className="bg-muted/50 border-border">
+                <Card key={`${entry.timestamp ?? "history"}-${entry.action ?? index}-${index}`} className="bg-muted/50 border-border">
                   <CardContent className="p-4">
                     <div className="flex items-start gap-3">
                       <HistoryIcon className="h-4 w-4 text-primary mt-1" />
@@ -695,7 +695,10 @@ export function ApplicationDetailPanel({
 
             {application.recruiterNotes && application.recruiterNotes.length > 0 ? (
               application.recruiterNotes.map((note: any, index: number) => (
-                <Card key={index} className="bg-muted/50 border-border">
+                <Card
+                  key={`${typeof note === "string" ? note : note.timestamp ?? note.content ?? "note"}-${index}`}
+                  className="bg-muted/50 border-border"
+                >
                   <CardContent className="p-4">
                     <p className="text-muted-foreground text-sm">{note.content || note}</p>
                     {note.timestamp && (

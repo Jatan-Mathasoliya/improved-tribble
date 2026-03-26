@@ -388,7 +388,7 @@ export default function JobEditPage() {
                       className="flex-1"
                       onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddSkill())}
                     />
-                    <Button type="button" onClick={handleAddSkill} size="icon">
+                    <Button type="button" onClick={handleAddSkill} size="icon" aria-label="Add required skill">
                       <Plus className="h-4 w-4" />
                     </Button>
                   </div>
@@ -396,7 +396,7 @@ export default function JobEditPage() {
                     <div className="flex flex-wrap gap-2">
                       {formData.skills.map((skill, index) => (
                         <Badge
-                          key={index}
+                          key={`${skill}-${index}`}
                           variant="secondary"
                           className="bg-destructive/10 text-destructive border-destructive/20 pl-3 pr-1 py-1"
                         >
@@ -406,6 +406,7 @@ export default function JobEditPage() {
                             onClick={() => setFormData({ ...formData, skills: formData.skills.filter((s) => s !== skill) })}
                             variant="ghost"
                             size="icon"
+                            aria-label={`Remove required skill ${skill}`}
                             className="ml-2 p-0 h-4 w-4 hover:bg-destructive/20"
                           >
                             <X className="h-3 w-3" />
@@ -439,7 +440,7 @@ export default function JobEditPage() {
                       className="flex-1"
                       onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddGoodToHaveSkill())}
                     />
-                    <Button type="button" onClick={handleAddGoodToHaveSkill} size="icon">
+                    <Button type="button" onClick={handleAddGoodToHaveSkill} size="icon" aria-label="Add preferred skill">
                       <Plus className="h-4 w-4" />
                     </Button>
                   </div>
@@ -447,7 +448,7 @@ export default function JobEditPage() {
                     <div className="flex flex-wrap gap-2">
                       {formData.goodToHaveSkills.map((skill, index) => (
                         <Badge
-                          key={index}
+                          key={`${skill}-${index}`}
                           variant="secondary"
                           className="bg-green-500/10 text-green-600 border-green-500/20 pl-3 pr-1 py-1"
                         >
@@ -457,6 +458,7 @@ export default function JobEditPage() {
                             onClick={() => setFormData({ ...formData, goodToHaveSkills: formData.goodToHaveSkills.filter((s) => s !== skill) })}
                             variant="ghost"
                             size="icon"
+                            aria-label={`Remove preferred skill ${skill}`}
                             className="ml-2 p-0 h-4 w-4 hover:bg-green-500/20"
                           >
                             <X className="h-3 w-3" />

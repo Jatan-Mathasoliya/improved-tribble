@@ -381,6 +381,7 @@ export default function AdminSubscriptionsPage() {
                           size="icon"
                           onClick={() => handleExtend(sub)}
                           title="Extend subscription"
+                          aria-label={`Extend subscription for ${sub.organization.name}`}
                         >
                           <Calendar className="h-4 w-4" />
                         </Button>

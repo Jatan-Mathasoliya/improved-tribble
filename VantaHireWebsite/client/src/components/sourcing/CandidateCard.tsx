@@ -203,6 +203,7 @@ export function CandidateCard({ candidate, onClick, onShortlist, isUpdating }: C
             onShortlist();
           }}
           title={isShortlisted ? "Remove from shortlist" : "Add to shortlist"}
+          aria-label={isShortlisted ? "Remove from shortlist" : "Add to shortlist"}
         >
           <Star
             className={cn(

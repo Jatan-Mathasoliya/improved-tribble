@@ -485,7 +485,7 @@ export default function JobDetailsPage() {
                       <div className="flex flex-wrap gap-2">
                         {job.skills.map((skill, index) => (
                           <Badge
-                            key={index}
+                            key={`${skill}-${index}`}
                             variant="outline"
                             className="border-destructive/30 text-destructive bg-destructive/10"
                           >
@@ -510,7 +510,7 @@ export default function JobDetailsPage() {
                       <div className="flex flex-wrap gap-2">
                         {job.goodToHaveSkills.map((skill, index) => (
                           <Badge
-                            key={index}
+                            key={`${skill}-${index}`}
                             variant="outline"
                             className="border-green-500/30 text-green-600 bg-green-500/10"
                           >

@@ -206,6 +206,7 @@ export default function OrgSettingsPage() {
                   type="button"
                   variant="ghost"
                   size="icon"
+                  aria-label="Copy organization slug"
                   onClick={() => copyToClipboard(org.slug)}
                 >
                   <Copy className="h-4 w-4" />

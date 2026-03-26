@@ -294,7 +294,7 @@ export default function ProfileSettingsPage() {
                   <div className="flex flex-wrap gap-2">
                     {formData.skills.map((skill, index) => (
                       <Badge
-                        key={index}
+                        key={`${skill}-${index}`}
                         variant="secondary"
                         className="bg-primary/20 text-primary pr-1"
                       >
@@ -302,6 +302,7 @@ export default function ProfileSettingsPage() {
                         <button
                           type="button"
                           onClick={() => removeSkill(skill)}
+                          aria-label={`Remove ${skill}`}
                           className="ml-2 hover:bg-purple-200 rounded p-0.5"
                         >
                           <X className="h-3 w-3" />

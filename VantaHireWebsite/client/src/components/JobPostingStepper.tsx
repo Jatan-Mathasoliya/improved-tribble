@@ -685,7 +685,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                     className="flex-1"
                     onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddSkill())}
                   />
-                  <Button type="button" onClick={handleAddSkill} size="icon">
+                  <Button type="button" onClick={handleAddSkill} size="icon" aria-label="Add required skill">
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
@@ -693,7 +693,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                   <div className="flex flex-wrap gap-2">
                     {skills.map((skill, index) => (
                       <Badge
-                        key={index}
+                        key={`${skill}-${index}`}
                         variant="secondary"
                         className="bg-destructive/10 text-destructive border-destructive/20 pl-3 pr-1 py-1"
                       >
@@ -703,6 +703,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                           onClick={() => setSkills(skills.filter((s) => s !== skill))}
                           variant="ghost"
                           size="icon"
+                          aria-label={`Remove required skill ${skill}`}
                           className="ml-2 p-0 h-4 w-4 hover:bg-destructive/20"
                         >
                           <X className="h-3 w-3" />
@@ -736,7 +737,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                     className="flex-1"
                     onKeyPress={(e) => e.key === "Enter" && (e.preventDefault(), handleAddGoodToHaveSkill())}
                   />
-                  <Button type="button" onClick={handleAddGoodToHaveSkill} size="icon">
+                  <Button type="button" onClick={handleAddGoodToHaveSkill} size="icon" aria-label="Add preferred skill">
                     <Plus className="h-4 w-4" />
                   </Button>
                 </div>
@@ -744,7 +745,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                   <div className="flex flex-wrap gap-2">
                     {goodToHaveSkills.map((skill, index) => (
                       <Badge
-                        key={index}
+                        key={`${skill}-${index}`}
                         variant="secondary"
                         className="bg-green-500/10 text-green-600 border-green-500/20 pl-3 pr-1 py-1"
                       >
@@ -754,6 +755,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                           onClick={() => setGoodToHaveSkills(goodToHaveSkills.filter((s) => s !== skill))}
                           variant="ghost"
                           size="icon"
+                          aria-label={`Remove preferred skill ${skill}`}
                           className="ml-2 p-0 h-4 w-4 hover:bg-green-500/20"
                         >
                           <X className="h-3 w-3" />
@@ -1084,7 +1086,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                         <div className="space-y-2">
                           {customStages.map((stage, index) => (
                             <div
-                              key={index}
+                              key={`${stage.name}-${stage.color}-${index}`}
                               className="flex items-center gap-3 bg-white rounded p-2 border border-border"
                             >
                               <div
@@ -1098,6 +1100,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                                 type="button"
                                 variant="ghost"
                                 size="icon"
+                                aria-label={`Remove stage ${stage.name}`}
                                 className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                                 onClick={() => setCustomStages(prev => prev.filter((_, i) => i !== index))}
                               >
@@ -1141,6 +1144,7 @@ export function JobPostingStepper({ onSuccess }: JobPostingStepperProps) {
                         <Button
                           type="button"
                           size="icon"
+                          aria-label="Add custom pipeline stage"
                           onClick={() => {
                             if (newStageName.trim()) {
                               const colorInput = document.getElementById("newStageColor") as HTMLInputElement;

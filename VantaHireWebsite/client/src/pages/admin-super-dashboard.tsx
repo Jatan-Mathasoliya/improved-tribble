@@ -909,6 +909,7 @@ export default function AdminSuperDashboard() {
                 <Button
                   variant="outline"
                   size="icon"
+                  aria-label="Refresh operations metrics"
                   onClick={() => refetchOps()}
                   disabled={opsRefetching}
                 >

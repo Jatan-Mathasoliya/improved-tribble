@@ -264,7 +264,7 @@ export default function RecruiterProfilePage() {
                     <div className="flex flex-wrap gap-2">
                       {profile.skills.map((skill, index) => (
                         <Badge
-                          key={index}
+                          key={`${skill}-${index}`}
                           variant="outline"
                           className="border-primary/30 text-primary bg-primary/10"
                         >

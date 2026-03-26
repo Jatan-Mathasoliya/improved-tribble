@@ -70,6 +70,7 @@ export function ProfileCompletionBanner() {
                 onClick={handleDismissForNow}
                 disabled={isSnoozing}
                 title="Remind me tomorrow"
+                aria-label="Remind me tomorrow"
               >
                 <X className="h-4 w-4" />
               </Button>

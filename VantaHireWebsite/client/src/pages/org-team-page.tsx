@@ -551,6 +551,7 @@ export default function OrgTeamPage() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            aria-label={`Remove ${member.user.firstName || member.user.username} from the organization`}
                             onClick={() => handleRemoveMember(member)}
                             disabled={removeMember.isPending}
                           >
