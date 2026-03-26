@@ -173,4 +173,50 @@ describe('ProtectedRoute onboarding gate', () => {
 
     expect(screen.getByText('Access Denied')).toBeInTheDocument();
   });
+
+  it('redirects unauthenticated hiring managers to /auth with the review destination preserved', () => {
+    currentLocation = '/hiring-manager/jobs/12/review';
+
+    render(
+      <ProtectedRoute
+        path="/hiring-manager/jobs/:id/review"
+        component={ProtectedContent}
+        requiredRole={['hiring_manager']}
+      />
+    );
+
+    const redirect = screen.getByTestId('redirect');
+    expect(redirect.getAttribute('data-to')).toBe('/auth?redirect=%2Fhiring-manager%2Fjobs%2F12%2Freview');
+  });
+
+  it('renders the hiring manager review route for hiring managers', () => {
+    authState.user = { role: 'hiring_manager' };
+    currentLocation = '/hiring-manager/jobs/12/review';
+
+    render(
+      <ProtectedRoute
+        path="/hiring-manager/jobs/:id/review"
+        component={ProtectedContent}
+        requiredRole={['hiring_manager']}
+      />
+    );
+
+    expect(screen.getByTestId('protected-content')).toBeInTheDocument();
+    expect(screen.queryByTestId('redirect')).toBeNull();
+  });
+
+  it('denies recruiters access to the hiring manager review route', () => {
+    authState.user = { role: 'recruiter' };
+    currentLocation = '/hiring-manager/jobs/12/review';
+
+    render(
+      <ProtectedRoute
+        path="/hiring-manager/jobs/:id/review"
+        component={ProtectedContent}
+        requiredRole={['hiring_manager']}
+      />
+    );
+
+    expect(screen.getByText('Access Denied')).toBeInTheDocument();
+  });
 });
