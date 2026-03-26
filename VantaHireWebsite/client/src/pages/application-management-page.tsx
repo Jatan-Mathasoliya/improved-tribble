@@ -60,7 +60,6 @@ import {
 } from "@/components/ui/dialog";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
-import { FormsModal } from "@/components/FormsModal";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { BulkActionBar } from "@/components/kanban/BulkActionBar";
 import { ApplicationDetailModal } from "@/components/kanban/ApplicationDetailModal";
@@ -106,7 +105,6 @@ export default function ApplicationManagementPage() {
   const [bulkFormMessage, setBulkFormMessage] = useState("");
   const [bulkFormsProgress, setBulkFormsProgress] = useState<{ sent: number; total: number }>({ sent: 0, total: 0 });
   const [showHistoryDialog, setShowHistoryDialog] = useState(false);
-  const [showFormsDialog, setShowFormsDialog] = useState(false);
   const [emailDialogApp, setEmailDialogApp] = useState<Application | null>(null);
   const [showBatchInterviewDialog, setShowBatchInterviewDialog] = useState(false);
   const [batchInterviewDate, setBatchInterviewDate] = useState("");
@@ -235,7 +233,7 @@ export default function ApplicationManagementPage() {
   const { data: invitationQuota } = useQuery<InvitationQuotaResponse>({
     queryKey: formsQueryKeys.invitationQuota(),
     queryFn: () => formsApi.getInvitationQuota(),
-    enabled: showBulkFormsDialog || showFormsDialog,
+    enabled: showBulkFormsDialog,
     staleTime: 30_000, // Cache for 30 seconds
   });
 
@@ -2266,16 +2264,6 @@ export default function ApplicationManagementPage() {
             </div>
           </DialogContent>
         </Dialog>
-
-        {/* Forms Dialog */}
-        {selectedApp && (
-          <FormsModal
-            key={selectedApp.id}
-            open={showFormsDialog}
-            onOpenChange={setShowFormsDialog}
-            application={selectedApp}
-          />
-        )}
 
         {/* Add Candidate Intake Form */}
         {jobId && (
