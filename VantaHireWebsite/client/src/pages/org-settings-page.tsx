@@ -36,25 +36,31 @@ export default function OrgSettingsPage() {
   const [billingContactEmail, setBillingContactEmail] = useState("");
   const [billingContactName, setBillingContactName] = useState("");
   const [gstin, setGstin] = useState("");
+  const [isGeneralDirty, setIsGeneralDirty] = useState(false);
+  const [isBillingDirty, setIsBillingDirty] = useState(false);
 
   const isOwner = orgData?.membership?.role === 'owner';
   const isAdmin = orgData?.membership?.role === 'admin' || isOwner;
 
-  // Populate the form after async organization data loads.
+  // Keep forms in sync with server data until the user starts editing.
   useEffect(() => {
     if (orgData?.organization) {
       const org = orgData.organization;
-      setName(org.name || "");
-      setBillingName(org.billingName || "");
-      setBillingAddress(org.billingAddress || "");
-      setBillingCity(org.billingCity || "");
-      setBillingState(org.billingState || "");
-      setBillingPincode(org.billingPincode || "");
-      setBillingContactEmail(org.billingContactEmail || "");
-      setBillingContactName(org.billingContactName || "");
-      setGstin(org.gstin || "");
+      if (!isGeneralDirty) {
+        setName(org.name || "");
+      }
+      if (!isBillingDirty) {
+        setBillingName(org.billingName || "");
+        setBillingAddress(org.billingAddress || "");
+        setBillingCity(org.billingCity || "");
+        setBillingState(org.billingState || "");
+        setBillingPincode(org.billingPincode || "");
+        setBillingContactEmail(org.billingContactEmail || "");
+        setBillingContactName(org.billingContactName || "");
+        setGstin(org.gstin || "");
+      }
     }
-  }, [orgData]);
+  }, [orgData, isBillingDirty, isGeneralDirty]);
 
   const handleSaveGeneral = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -66,6 +72,7 @@ export default function OrgSettingsPage() {
         title: orgSettingsPageCopy.toasts.settingsSavedTitle,
         description: orgSettingsPageCopy.toasts.settingsSavedDescription,
       });
+      setIsGeneralDirty(false);
     } catch (error: any) {
       toast({
         title: orgSettingsPageCopy.toasts.errorTitle,
@@ -93,6 +100,7 @@ export default function OrgSettingsPage() {
         title: orgSettingsPageCopy.toasts.billingSavedTitle,
         description: orgSettingsPageCopy.toasts.billingSavedDescription,
       });
+      setIsBillingDirty(false);
     } catch (error: any) {
       toast({
         title: orgSettingsPageCopy.toasts.errorTitle,
@@ -102,12 +110,20 @@ export default function OrgSettingsPage() {
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    navigator.clipboard.writeText(text);
-    toast({
-      title: orgSettingsPageCopy.toasts.copiedTitle,
-      description: orgSettingsPageCopy.toasts.copiedDescription,
-    });
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      toast({
+        title: orgSettingsPageCopy.toasts.copiedTitle,
+        description: orgSettingsPageCopy.toasts.copiedDescription,
+      });
+    } catch {
+      toast({
+        title: orgSettingsPageCopy.toasts.errorTitle,
+        description: "Failed to copy to clipboard.",
+        variant: "destructive",
+      });
+    }
   };
 
   if (isLoading) {
@@ -166,7 +182,10 @@ export default function OrgSettingsPage() {
               <Input
                 id="name"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => {
+                  setName(e.target.value);
+                  setIsGeneralDirty(true);
+                }}
                 disabled={!isOwner}
                 placeholder={orgSettingsPageCopy.general.organizationNamePlaceholder}
               />
@@ -277,7 +296,10 @@ export default function OrgSettingsPage() {
                 <Input
                   id="billingContactName"
                   value={billingContactName}
-                  onChange={(e) => setBillingContactName(e.target.value)}
+                  onChange={(e) => {
+                    setBillingContactName(e.target.value);
+                    setIsBillingDirty(true);
+                  }}
                   disabled={!isAdmin}
                   placeholder={orgSettingsPageCopy.billing.billingContactNamePlaceholder}
                 />
@@ -288,7 +310,10 @@ export default function OrgSettingsPage() {
                   id="billingContactEmail"
                   type="email"
                   value={billingContactEmail}
-                  onChange={(e) => setBillingContactEmail(e.target.value)}
+                  onChange={(e) => {
+                    setBillingContactEmail(e.target.value);
+                    setIsBillingDirty(true);
+                  }}
                   disabled={!isAdmin}
                   placeholder={orgSettingsPageCopy.billing.billingContactEmailPlaceholder}
                 />
@@ -300,7 +325,10 @@ export default function OrgSettingsPage() {
               <Input
                 id="billingName"
                 value={billingName}
-                onChange={(e) => setBillingName(e.target.value)}
+                onChange={(e) => {
+                  setBillingName(e.target.value);
+                  setIsBillingDirty(true);
+                }}
                 disabled={!isAdmin}
                 placeholder={orgSettingsPageCopy.billing.legalNamePlaceholder}
               />
@@ -311,7 +339,10 @@ export default function OrgSettingsPage() {
               <Input
                 id="gstin"
                 value={gstin}
-                onChange={(e) => setGstin(e.target.value.toUpperCase())}
+                onChange={(e) => {
+                  setGstin(e.target.value.toUpperCase());
+                  setIsBillingDirty(true);
+                }}
                 disabled={!isAdmin}
                 placeholder={orgSettingsPageCopy.billing.gstinPlaceholder}
                 maxLength={15}
@@ -326,7 +357,10 @@ export default function OrgSettingsPage() {
               <Textarea
                 id="billingAddress"
                 value={billingAddress}
-                onChange={(e) => setBillingAddress(e.target.value)}
+                onChange={(e) => {
+                  setBillingAddress(e.target.value);
+                  setIsBillingDirty(true);
+                }}
                 disabled={!isAdmin}
                 placeholder="123 Business Street, Suite 100"
                 rows={2}
@@ -339,7 +373,10 @@ export default function OrgSettingsPage() {
                 <Input
                   id="billingCity"
                   value={billingCity}
-                  onChange={(e) => setBillingCity(e.target.value)}
+                  onChange={(e) => {
+                    setBillingCity(e.target.value);
+                    setIsBillingDirty(true);
+                  }}
                   disabled={!isAdmin}
                   placeholder="Mumbai"
                 />
@@ -349,7 +386,10 @@ export default function OrgSettingsPage() {
                 <Input
                   id="billingState"
                   value={billingState}
-                  onChange={(e) => setBillingState(e.target.value)}
+                  onChange={(e) => {
+                    setBillingState(e.target.value);
+                    setIsBillingDirty(true);
+                  }}
                   disabled={!isAdmin}
                   placeholder="Maharashtra"
                 />
@@ -359,7 +399,10 @@ export default function OrgSettingsPage() {
                 <Input
                   id="billingPincode"
                   value={billingPincode}
-                  onChange={(e) => setBillingPincode(e.target.value)}
+                  onChange={(e) => {
+                    setBillingPincode(e.target.value);
+                    setIsBillingDirty(true);
+                  }}
                   disabled={!isAdmin}
                   placeholder="400001"
                   maxLength={6}

@@ -160,6 +160,9 @@ export default function OrgChoicePage() {
     try {
       // Get CSRF token
       const csrfRes = await fetch('/api/csrf-token', { credentials: 'include' });
+      if (!csrfRes.ok) {
+        throw new Error('Failed to initialize secure request');
+      }
       const { token } = await csrfRes.json();
 
       const res = await fetch(`/api/invites/${inviteCode.trim()}/accept`, {
@@ -198,6 +201,9 @@ export default function OrgChoicePage() {
     setRequestingJoin(true);
     try {
       const csrfRes = await fetch('/api/csrf-token', { credentials: 'include' });
+      if (!csrfRes.ok) {
+        throw new Error('Failed to initialize secure request');
+      }
       const { token } = await csrfRes.json();
 
       const res = await fetch(`/api/organizations/request-join/${domainOrg.id}`, {

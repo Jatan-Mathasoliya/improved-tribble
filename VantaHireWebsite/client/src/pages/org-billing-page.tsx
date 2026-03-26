@@ -128,6 +128,9 @@ export default function OrgBillingPage() {
     }
     return String(value);
   };
+  const currentPeriodEndDate = subscription?.currentPeriodEnd ? new Date(subscription.currentPeriodEnd) : null;
+  const hasValidCurrentPeriodEnd = !!currentPeriodEndDate && !Number.isNaN(currentPeriodEndDate.getTime());
+  const seatAddCreditsSummary = commercialConfig?.seatPolicies?.seatAddCredits?.summary;
 
   const handleUpgrade = async () => {
     if (!selectedPlan) return;
@@ -438,7 +441,7 @@ export default function OrgBillingPage() {
                   <span className="text-sm">{isPro ? "Current Paid Term Ends" : "Free Plan Active"}</span>
                 </div>
                 <p className="text-lg font-bold">
-                  {format(new Date(subscription.currentPeriodEnd), 'MMM d, yyyy')}
+                  {hasValidCurrentPeriodEnd ? format(currentPeriodEndDate, 'MMM d, yyyy') : "—"}
                 </p>
               </div>
             </div>
@@ -462,7 +465,7 @@ export default function OrgBillingPage() {
               <div className="flex-1">
                 <p className="font-medium">Cancellation Scheduled</p>
                 <p className="text-sm text-muted-foreground">
-                  Your paid Growth access will end on {format(new Date(subscription.currentPeriodEnd), 'MMM d, yyyy')}
+                  Your paid Growth access will end on {hasValidCurrentPeriodEnd ? format(currentPeriodEndDate, 'MMM d, yyyy') : "—"}
                 </p>
               </div>
               {isOwner && (
@@ -635,7 +638,7 @@ export default function OrgBillingPage() {
                           </div>
                         </TableCell>
                         <TableCell>{format(new Date(entry.createdAt), "MMM d, yyyy p")}</TableCell>
-                        <TableCell>{entry.actor.name || entry.actor.email || "System"}</TableCell>
+                        <TableCell>{entry.actor?.name || entry.actor?.email || "System"}</TableCell>
                         <TableCell className="text-right font-medium">
                           {formatCreditLedgerAmount(entry.type, entry.amount)}
                         </TableCell>
@@ -783,7 +786,7 @@ export default function OrgBillingPage() {
                 onChange={(e) => setSeats(parseInt(e.target.value) || 1)}
               />
               <p className="text-sm text-muted-foreground">
-                Growth includes {formatMetric(proCreditsPerSeat)} AI credits per seat per month, pooled across your organization. With {seats} seat{seats === 1 ? "" : "s"}, that is {selectedPlanIncludedCredits} included credits per month. {commercialConfig?.seatPolicies?.seatAddCredits.summary} {creditPackConfig ? `Extra ${creditPackConfig.creditsPerPack}-credit packs can be added anytime.` : 'Extra credit packs can be added anytime.'}
+                Growth includes {formatMetric(proCreditsPerSeat)} AI credits per seat per month, pooled across your organization. With {seats} seat{seats === 1 ? "" : "s"}, that is {selectedPlanIncludedCredits} included credits per month. {seatAddCreditsSummary ?? "Seat additions include prorated credits for the remainder of the term."} {creditPackConfig ? `Extra ${creditPackConfig.creditsPerPack}-credit packs can be added anytime.` : 'Extra credit packs can be added anytime.'}
               </p>
             </div>
             <div className="space-y-2">

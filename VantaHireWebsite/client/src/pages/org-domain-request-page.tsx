@@ -80,6 +80,9 @@ export default function OrgDomainRequestPage() {
     try {
       // Get CSRF token
       const csrfRes = await fetch('/api/csrf-token', { credentials: 'include' });
+      if (!csrfRes.ok) {
+        throw new Error(orgDomainRequestPageCopy.toasts.submitFailed);
+      }
       const { token } = await csrfRes.json();
 
       const res = await fetch('/api/organizations/domain/request', {
