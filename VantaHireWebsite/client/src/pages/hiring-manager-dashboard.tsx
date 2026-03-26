@@ -103,7 +103,10 @@ export default function HiringManagerDashboard() {
 
   return (
     <Layout>
-      <div className={cn(DASHBOARD_PAGE_BACKGROUND, "min-h-screen px-4 pb-10 pt-6 md:px-8")} data-tour="hm-dashboard">
+      <div
+        className={cn(DASHBOARD_PAGE_BACKGROUND, "hiring-manager-dashboard min-h-screen overflow-x-hidden px-4 pb-10 pt-6 md:px-8")}
+        data-tour="hm-dashboard"
+      >
         <div className="mx-auto max-w-[1500px] space-y-8">
           <div className="mt-0 space-y-6 pt-3">
             <div className={cn(DASHBOARD_SHELL_PANEL, "relative px-4 py-5 sm:px-6 sm:py-6 md:px-8 md:py-8")}>
@@ -111,101 +114,86 @@ export default function HiringManagerDashboard() {
                 <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
                   <div className="space-y-3">
                     <p className={DASHBOARD_EYEBROW}>Hiring Manager Workspace</p>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <h1 className={cn(DASHBOARD_TITLE, "text-[28px] md:text-[34px]")}>
-                        {hiringManagerDashboardCopy.header.title}
-                      </h1>
-                      <Badge
-                        variant="outline"
-                        className="rounded-full border-[#D8DBE6] bg-white/80 px-3 py-1 text-xs font-semibold text-[#0F4C81]"
-                      >
-                        Review Queue
-                      </Badge>
-                    </div>
+                    <h1 className={cn(DASHBOARD_TITLE, "text-[28px] md:text-[34px]")}>
+                      {hiringManagerDashboardCopy.header.title}
+                    </h1>
                     <p className="max-w-2xl text-sm text-[#5F6675] md:text-[15px]">
                       {hiringManagerDashboardCopy.header.subtitlePrefix} {user.firstName || user.username}!{" "}
                       {hiringManagerDashboardCopy.header.subtitleSuffix}
                     </p>
                   </div>
                   <div className={cn(DASHBOARD_PANEL_MUTED, "max-w-md px-5 py-4 text-sm text-[#4B5563]")}>
-                    <div className="flex items-start gap-3">
-                      <div className="rounded-2xl bg-[#E9F2FF] p-2 text-[#0F4C81]">
-                        <Sparkles className="h-4 w-4" />
-                      </div>
-                      <div>
-                        <p className="font-semibold text-[#111827]">Recruiters send you a focused review queue.</p>
-                        <p className="mt-1">
-                          Open resumes, review recruiter notes, and leave structured decisions without taking over pipeline ownership.
-                        </p>
-                      </div>
-                    </div>
+                    <p className="font-semibold text-[#111827]">Recruiters send you a focused review queue.</p>
+                    <p className="mt-1">
+                      Open resumes, review recruiter notes, and leave structured decisions without taking over pipeline ownership.
+                    </p>
                   </div>
                 </div>
 
                 <ProfileCompletionBanner />
 
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-                  <Card className={cn(DASHBOARD_PANEL, "shadow-none")}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {hiringManagerDashboardCopy.stats.myJobs}
-              </CardTitle>
-              <Briefcase className="h-4 w-4 text-info" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">{myJobs.length}</div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {hiringManagerDashboardCopy.stats.myJobsHint}
-              </p>
-            </CardContent>
-          </Card>
+                  <Card className={cn(DASHBOARD_PANEL, "rounded-[26px] bg-white/95")}>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">
+                        {hiringManagerDashboardCopy.stats.myJobs}
+                      </CardTitle>
+                      <Briefcase className="h-4 w-4 text-info" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-foreground">{myJobs.length}</div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {hiringManagerDashboardCopy.stats.myJobsHint}
+                      </p>
+                    </CardContent>
+                  </Card>
 
-                  <Card className={cn(DASHBOARD_PANEL, "shadow-none")}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {hiringManagerDashboardCopy.stats.totalCandidates}
-              </CardTitle>
-              <Users className="h-4 w-4 text-success" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">{allApplications.length}</div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {hiringManagerDashboardCopy.stats.totalCandidatesHint}
-              </p>
-            </CardContent>
-          </Card>
+                  <Card className={cn(DASHBOARD_PANEL, "rounded-[26px] bg-white/95")}>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">
+                        {hiringManagerDashboardCopy.stats.totalCandidates}
+                      </CardTitle>
+                      <Users className="h-4 w-4 text-success" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-foreground">{allApplications.length}</div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {hiringManagerDashboardCopy.stats.totalCandidatesHint}
+                      </p>
+                    </CardContent>
+                  </Card>
 
-                  <Card className={cn(DASHBOARD_PANEL, "shadow-none")}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {hiringManagerDashboardCopy.stats.requestedReviews}
-              </CardTitle>
-              <ClipboardCheck className="h-4 w-4 text-info" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">{requestedReviewApplications.length}</div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {hiringManagerDashboardCopy.stats.requestedReviewsHint}
-              </p>
-            </CardContent>
-          </Card>
+                  <Card className={cn(DASHBOARD_PANEL, "rounded-[26px] bg-white/95")}>
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">
+                        {hiringManagerDashboardCopy.stats.requestedReviews}
+                      </CardTitle>
+                      <ClipboardCheck className="h-4 w-4 text-info" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-foreground">{requestedReviewApplications.length}</div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {hiringManagerDashboardCopy.stats.requestedReviewsHint}
+                      </p>
+                    </CardContent>
+                  </Card>
 
-                  <Card className={cn(DASHBOARD_PANEL, "shadow-none")} data-tour="pending-feedback">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {hiringManagerDashboardCopy.stats.awaitingFeedback}
-              </CardTitle>
-              <MessageSquare className="h-4 w-4 text-warning" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-foreground">
-                {applicationsNeedingFeedback.length}
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {hiringManagerDashboardCopy.stats.awaitingFeedbackHint}
-              </p>
-            </CardContent>
-          </Card>
+                  <Card className={cn(DASHBOARD_PANEL, "rounded-[26px] bg-white/95")} data-tour="pending-feedback">
+                    <CardHeader className="flex flex-row items-center justify-between pb-2">
+                      <CardTitle className="text-sm font-medium text-muted-foreground">
+                        {hiringManagerDashboardCopy.stats.awaitingFeedback}
+                      </CardTitle>
+                      <MessageSquare className="h-4 w-4 text-warning" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-foreground">
+                        {applicationsNeedingFeedback.length}
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {hiringManagerDashboardCopy.stats.awaitingFeedbackHint}
+                      </p>
+                    </CardContent>
+                  </Card>
                 </div>
               </div>
             </div>
@@ -214,7 +202,7 @@ export default function HiringManagerDashboard() {
           <div className="grid gap-6 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             <section data-tour="my-jobs">
               <div className="mb-4 flex items-center gap-2">
-                <div className="rounded-2xl bg-[#E9F2FF] p-2 text-[#0F4C81]">
+                <div className={cn(DASHBOARD_PANEL_MUTED, "p-2 text-[#111827]")}>
                   <Briefcase className="h-4 w-4" />
                 </div>
                 <div>
@@ -226,13 +214,13 @@ export default function HiringManagerDashboard() {
               </div>
 
           {jobsLoading ? (
-                <Card className={cn(DASHBOARD_PANEL, "shadow-none")}>
+                <Card className={cn(DASHBOARD_PANEL, "rounded-[26px] bg-white/95")}>
                   <CardContent className="py-12 text-center text-muted-foreground">
                     {hiringManagerDashboardCopy.sections.loadingJobs}
                   </CardContent>
                 </Card>
           ) : myJobs.length === 0 ? (
-                <Card className={cn(DASHBOARD_PANEL, "shadow-none")}>
+                <Card className={cn(DASHBOARD_PANEL, "rounded-[26px] bg-white/95")}>
               <CardContent className="py-12 text-center">
                 <Briefcase className="mx-auto mb-3 h-12 w-12 text-muted-foreground/50" />
                 <p className="text-muted-foreground">{hiringManagerDashboardCopy.sections.emptyJobs}</p>
@@ -242,7 +230,7 @@ export default function HiringManagerDashboard() {
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            <div className="grid grid-cols-1 gap-4">
               {myJobs.map((job) => {
                 const jobApplications = allApplications.filter((app) => app.jobId === job.id);
                 const requestedReviewCount = jobApplications.filter((app) => !!app.hmReviewRequestedAt).length;
@@ -254,61 +242,62 @@ export default function HiringManagerDashboard() {
                 return (
                       <Card
                         key={job.id}
-                        className={cn(DASHBOARD_PANEL, "shadow-none transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_45px_rgba(15,23,42,0.08)]")}
+                        className={cn(DASHBOARD_PANEL, "rounded-[26px] bg-white/95 transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_45px_rgba(15,23,42,0.08)]")}
                       >
-                    <CardHeader>
-                      <div className="flex items-start justify-between gap-3">
-                        <div>
-                          <CardTitle className="text-base text-foreground">{job.title}</CardTitle>
-                          <CardDescription className="mt-1 text-sm">
+                    <CardContent className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+                      <div className="flex items-start gap-3">
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2">
+                            <CardTitle className="text-base text-foreground">{job.title}</CardTitle>
+                            {job.isActive && (
+                              <Badge className="bg-success/20 text-success-foreground hover:bg-success/20">
+                                Active
+                              </Badge>
+                            )}
+                          </div>
+                          <p className="mt-1 text-sm text-muted-foreground">
                             {job.location} • {job.type}
-                          </CardDescription>
+                          </p>
                         </div>
-                        {job.isActive && (
-                          <Badge className="bg-success/20 text-success-foreground hover:bg-success/20">
-                            Active
-                          </Badge>
-                        )}
                       </div>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                      <div className="grid grid-cols-2 gap-3">
-                            <div className={cn(DASHBOARD_PANEL_MUTED, "p-3")}>
+
+                      <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                        <div className={cn(DASHBOARD_PANEL_MUTED, "px-4 py-2.5 text-center")}>
                           <p className="text-xs uppercase tracking-wide text-muted-foreground">Candidates</p>
-                          <p className="mt-1 text-lg font-semibold text-foreground">{jobApplications.length}</p>
+                          <p className="mt-0.5 text-lg font-semibold text-foreground">{jobApplications.length}</p>
                         </div>
-                            <div className={cn(DASHBOARD_PANEL_MUTED, "p-3")}>
+                        <div className={cn(DASHBOARD_PANEL_MUTED, "px-4 py-2.5 text-center")}>
                           <p className="text-xs uppercase tracking-wide text-muted-foreground">Requested</p>
-                          <p className="mt-1 text-lg font-semibold text-foreground">{requestedReviewCount}</p>
+                          <p className="mt-0.5 text-lg font-semibold text-foreground">{requestedReviewCount}</p>
                         </div>
+
+                        {needingFeedback > 0 ? (
+                          <div className="flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
+                            <span className="text-amber-900">Awaiting your feedback</span>
+                            <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning-foreground">
+                              {needingFeedback}
+                            </Badge>
+                          </div>
+                        ) : hasReviewQueue ? (
+                          <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
+                            All reviewed
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+                            No review requested
+                          </div>
+                        )}
+
+                        <Button
+                          onClick={() => handleViewJob(job.id)}
+                          className="h-11 rounded-2xl"
+                          variant={hasReviewQueue ? "default" : "outline"}
+                          disabled={!hasReviewQueue}
+                        >
+                          {hasReviewQueue ? "Review Requested Candidates" : "No Review Requested"}
+                          <ArrowRight className="ml-2 h-4 w-4" />
+                        </Button>
                       </div>
-
-                      {needingFeedback > 0 ? (
-                        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm">
-                          <span className="text-amber-900">Awaiting your feedback</span>
-                          <Badge variant="outline" className="border-warning/30 bg-warning/10 text-warning-foreground">
-                            {needingFeedback}
-                          </Badge>
-                        </div>
-                      ) : hasReviewQueue ? (
-                        <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-900">
-                          All requested candidates already have your feedback.
-                        </div>
-                      ) : (
-                        <div className="rounded-lg border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
-                          Recruiter has not requested review for this role yet.
-                        </div>
-                      )}
-
-                      <Button
-                        onClick={() => handleViewJob(job.id)}
-                            className="mt-2 h-11 w-full rounded-2xl"
-                        variant={hasReviewQueue ? "default" : "outline"}
-                        disabled={!hasReviewQueue}
-                      >
-                        {hasReviewQueue ? "Review Requested Candidates" : "No Review Requested"}
-                        <ArrowRight className="ml-2 h-4 w-4" />
-                      </Button>
                     </CardContent>
                   </Card>
                 );
@@ -319,7 +308,7 @@ export default function HiringManagerDashboard() {
 
             <section>
               <div className="mb-4 flex items-center gap-2">
-                <div className="rounded-2xl bg-[#FFF4E8] p-2 text-[#B45309]">
+                <div className={cn(DASHBOARD_PANEL_MUTED, "p-2 text-[#111827]")}>
                   <MessageSquare className="h-4 w-4" />
                 </div>
                 <div>
@@ -329,7 +318,7 @@ export default function HiringManagerDashboard() {
               </div>
 
           {applicationsNeedingFeedback.length === 0 ? (
-                <Card className={cn(DASHBOARD_PANEL, "shadow-none")}>
+                <Card className={cn(DASHBOARD_PANEL, "rounded-[26px] bg-white/95")}>
               <CardContent className="py-12 text-center">
                 <MessageSquare className="mx-auto mb-3 h-12 w-12 text-muted-foreground/50" />
                 <p className="text-muted-foreground">No recruiter-requested reviews are waiting on you.</p>
@@ -343,7 +332,7 @@ export default function HiringManagerDashboard() {
               {applicationsNeedingFeedback.map((app) => (
                     <Card
                       key={app.id}
-                      className={cn(DASHBOARD_PANEL, "shadow-none transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_45px_rgba(15,23,42,0.08)]")}
+                      className={cn(DASHBOARD_PANEL, "rounded-[26px] bg-white/95 transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_45px_rgba(15,23,42,0.08)]")}
                     >
                   <CardContent className="p-4">
                     <div className="flex items-center justify-between gap-4">

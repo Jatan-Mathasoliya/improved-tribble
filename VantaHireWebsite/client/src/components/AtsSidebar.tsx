@@ -71,6 +71,7 @@ interface AtsSidebarProps {
   organizationData: { organization: Organization; membership: Membership } | null | undefined;
   isRecruiter: boolean;
   isAdmin: boolean;
+  isHiringManager: boolean;
   isOrgOwner: boolean;
   isOrgOwnerOrAdmin: boolean;
   displayName: string;
@@ -89,6 +90,7 @@ export default function AtsSidebar({
   organizationData,
   isRecruiter,
   isAdmin,
+  isHiringManager,
   isOrgOwner,
   isOrgOwnerOrAdmin,
   displayName,
@@ -116,10 +118,12 @@ export default function AtsSidebar({
   const mainItems: NavItem[] = [
     {
       label: atsShellCopy.routes.dashboard.label,
-      path: "/recruiter-dashboard",
+      path: isHiringManager ? "/hiring-manager" : "/recruiter-dashboard",
       icon: Home,
-      visible: isRecruiter || isAdmin,
-      active: location === "/recruiter-dashboard",
+      visible: isRecruiter || isAdmin || isHiringManager,
+      active: isHiringManager
+        ? location === "/hiring-manager" || /^\/hiring-manager\/jobs\/\d+\/review/.test(location)
+        : location === "/recruiter-dashboard",
     },
     {
       label: atsShellCopy.routes.applications.label,
@@ -186,7 +190,7 @@ export default function AtsSidebar({
       label: atsShellCopy.routes.profileSettings.label,
       path: "/profile/settings",
       icon: Settings,
-      visible: isRecruiter || isAdmin,
+      visible: isRecruiter || isAdmin || isHiringManager,
       active: matchesPath(location, "/profile/settings"),
     },
     {

@@ -26,6 +26,7 @@ const Layout = ({ children }: LayoutProps) => {
   // Type guard to help TypeScript narrow the user type
   const isRecruiter = user?.role === 'recruiter';
   const isAdmin = user?.role === 'super_admin';
+  const isHiringManager = user?.role === 'hiring_manager';
 
   // Organization role checks
   const orgRole = orgData?.membership?.role;
@@ -47,7 +48,7 @@ const Layout = ({ children }: LayoutProps) => {
   };
 
   // ATS context detection - determines if we should use light ATS theme
-  const atsUser = isRecruiter || isAdmin;
+  const atsUser = isRecruiter || isAdmin || isHiringManager;
 
   const isAtsRoute = (path: string): boolean => {
     const atsRoutes = [
@@ -59,6 +60,7 @@ const Layout = ({ children }: LayoutProps) => {
       '/admin',
       '/analytics',
       '/clients',
+      '/hiring-manager',
       '/profile/settings',
       '/org/settings',
       '/org/team',
@@ -76,6 +78,10 @@ const Layout = ({ children }: LayoutProps) => {
 
     // Check for job management route patterns: /jobs/:id/applications, /jobs/:id/edit, /jobs/:id/pipeline, /jobs/:id/analytics
     if (path.match(/^\/jobs\/\d+\/(applications|edit|pipeline|analytics|sourcing|bulk-import)/)) {
+      return true;
+    }
+
+    if (path.match(/^\/hiring-manager\/jobs\/\d+\/review/)) {
       return true;
     }
 
@@ -145,6 +151,7 @@ const Layout = ({ children }: LayoutProps) => {
             organizationData={orgData}
             isRecruiter={isRecruiter}
             isAdmin={isAdmin}
+            isHiringManager={isHiringManager}
             isOrgOwner={isOrgOwner}
             isOrgOwnerOrAdmin={isOrgOwnerOrAdmin}
             displayName={displayName}
