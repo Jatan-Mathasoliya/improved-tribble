@@ -24,6 +24,7 @@ function getRequiredFields(role: string): string[] {
     required.push("resume");
   } else if (role === "recruiter" || role === "hiring_manager") {
     required.push("company");
+    required.push("phone");
   }
 
   return required;
@@ -38,7 +39,7 @@ export async function computeProfileCompletion(
   const missingNiceToHave: string[] = [];
 
   let profile = inputs.profile;
-  if (!profile && (requiredFields.includes("company") || NICE_TO_HAVE_FIELDS.length > 0)) {
+  if (!profile && (requiredFields.includes("company") || requiredFields.includes("phone") || NICE_TO_HAVE_FIELDS.length > 0)) {
     profile = await storage.getUserProfile(user.id);
   }
 
@@ -61,6 +62,10 @@ export async function computeProfileCompletion(
 
   if (requiredFields.includes("company")) {
     if (!profile?.company) missingRequired.push("company");
+  }
+
+  if (requiredFields.includes("phone")) {
+    if (!profile?.phone) missingRequired.push("phone");
   }
 
   if (!profile?.linkedin) missingNiceToHave.push("linkedin");
