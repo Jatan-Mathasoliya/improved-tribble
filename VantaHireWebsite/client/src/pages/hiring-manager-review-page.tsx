@@ -22,6 +22,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { hiringManagerReviewPageCopy } from "@/lib/internal-copy";
+import {
+  DASHBOARD_EYEBROW,
+  DASHBOARD_PAGE_BACKGROUND,
+  DASHBOARD_PANEL,
+  DASHBOARD_PANEL_MUTED,
+  DASHBOARD_SHELL_PANEL,
+  DASHBOARD_TITLE,
+} from "@/lib/dashboard-theme";
+import { cn } from "@/lib/utils";
 
 interface HiringManagerJob {
   id: number;
@@ -134,100 +143,115 @@ export default function HiringManagerReviewPage() {
 
   return (
     <Layout>
-      <div className="container mx-auto max-w-7xl px-4 py-8">
-        <Card className="mb-8 overflow-hidden border-border bg-gradient-to-br from-slate-950 via-slate-900 to-slate-800 text-white shadow-xl">
-          <CardContent className="flex flex-col gap-6 p-8 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-3xl">
-              <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-medium uppercase tracking-[0.24em] text-white/80">
-                <ClipboardCheck className="h-3.5 w-3.5" />
-                Recruiter-Requested Review Queue
-              </div>
-              <h1 className="text-3xl font-bold tracking-tight">
-                {hiringManagerReviewPageCopy.header.title}
-              </h1>
-              <p className="mt-2 text-sm text-white/75 md:text-base">
-                {hiringManagerReviewPageCopy.header.subtitle}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-white/80 backdrop-blur">
-              <p className="font-medium text-white">Your job here is evaluation, not pipeline control.</p>
-              <p className="mt-1">
-                Open recruiter-requested candidates, inspect resumes, and record a clear recommendation for the recruiting team.
-              </p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className={cn(DASHBOARD_PAGE_BACKGROUND, "min-h-screen px-4 pb-10 pt-6 md:px-8")}>
+        <div className="mx-auto max-w-[1500px] space-y-8">
+          <div className="mt-0 space-y-6 pt-3">
+            <div className={cn(DASHBOARD_SHELL_PANEL, "relative px-4 py-5 sm:px-6 sm:py-6 md:px-8 md:py-8")}>
+              <div className="relative space-y-6">
+                <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+                  <div className="space-y-3">
+                    <p className={DASHBOARD_EYEBROW}>Recruiter-Requested Review Queue</p>
+                    <div className="flex flex-wrap items-center gap-3">
+                      <h1 className={cn(DASHBOARD_TITLE, "text-[28px] md:text-[34px]")}>
+                        {hiringManagerReviewPageCopy.header.title}
+                      </h1>
+                      <Badge
+                        variant="outline"
+                        className="rounded-full border-[#D8DBE6] bg-white/80 px-3 py-1 text-xs font-semibold text-[#0F4C81]"
+                      >
+                        Hiring Manager Review
+                      </Badge>
+                    </div>
+                    <p className="max-w-2xl text-sm text-[#5F6675] md:text-[15px]">
+                      {hiringManagerReviewPageCopy.header.subtitle}
+                    </p>
+                  </div>
+                  <div className={cn(DASHBOARD_PANEL_MUTED, "max-w-md px-5 py-4 text-sm text-[#4B5563]")}>
+                    <div className="flex items-start gap-3">
+                      <div className="rounded-2xl bg-[#E9F2FF] p-2 text-[#0F4C81]">
+                        <ClipboardCheck className="h-4 w-4" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-[#111827]">Your job here is evaluation, not pipeline control.</p>
+                        <p className="mt-1">
+                          Open recruiter-requested candidates, inspect resumes, and record a clear recommendation for the recruiting team.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-        <div className="mb-6">
+                {job && (
+                  <Card className={cn(DASHBOARD_PANEL, "shadow-none")}>
+                    <CardContent className="flex flex-col gap-4 p-6 lg:flex-row lg:items-center lg:justify-between">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <Briefcase className="h-4 w-4 text-info" />
+                          <p className="font-semibold text-foreground">{job.title}</p>
+                        </div>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {job.location} • {job.type}
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                        <Card className={cn(DASHBOARD_PANEL_MUTED, "border-[#EEF0F4] shadow-none")}>
+                          <CardContent className="p-4">
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                              {hiringManagerReviewPageCopy.stats.totalCandidates}
+                            </p>
+                            <p className="mt-1 text-2xl font-bold text-foreground">{applications.length}</p>
+                          </CardContent>
+                        </Card>
+                        <Card className={cn(DASHBOARD_PANEL_MUTED, "border-[#EEF0F4] shadow-none")}>
+                          <CardContent className="p-4">
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                              {hiringManagerReviewPageCopy.stats.requestedReviews}
+                            </p>
+                            <p className="mt-1 text-2xl font-bold text-foreground">{requestedApplications.length}</p>
+                          </CardContent>
+                        </Card>
+                        <Card className={cn(DASHBOARD_PANEL_MUTED, "border-[#EEF0F4] shadow-none")}>
+                          <CardContent className="p-4">
+                            <p className="text-xs uppercase tracking-wide text-muted-foreground">
+                              {hiringManagerReviewPageCopy.stats.awaitingFeedback}
+                            </p>
+                            <p className="mt-1 text-2xl font-bold text-foreground">{awaitingFeedbackCount}</p>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-2">
           <Button
             variant="ghost"
-            className="w-fit px-0 text-muted-foreground hover:text-foreground"
+            className="w-fit px-0 text-[#687182] hover:text-[#111827]"
             onClick={() => setLocation("/hiring-manager")}
           >
             <ArrowLeft className="mr-2 h-4 w-4" />
             {hiringManagerReviewPageCopy.header.back}
           </Button>
-        </div>
-
-        {job && (
-          <div className="mb-8 grid gap-6 md:grid-cols-3">
-            <Card className="border-border bg-card md:col-span-3">
-              <CardContent className="flex flex-col gap-4 p-6 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Briefcase className="h-4 w-4 text-info" />
-                    <p className="font-semibold text-foreground">{job.title}</p>
-                  </div>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {job.location} • {job.type}
-                  </p>
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <Card className="border-border bg-muted/30 shadow-none">
-                    <CardContent className="p-4">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                        {hiringManagerReviewPageCopy.stats.totalCandidates}
-                      </p>
-                      <p className="mt-1 text-2xl font-bold text-foreground">{applications.length}</p>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-border bg-muted/30 shadow-none">
-                    <CardContent className="p-4">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                        {hiringManagerReviewPageCopy.stats.requestedReviews}
-                      </p>
-                      <p className="mt-1 text-2xl font-bold text-foreground">{requestedApplications.length}</p>
-                    </CardContent>
-                  </Card>
-                  <Card className="border-border bg-muted/30 shadow-none">
-                    <CardContent className="p-4">
-                      <p className="text-xs uppercase tracking-wide text-muted-foreground">
-                        {hiringManagerReviewPageCopy.stats.awaitingFeedback}
-                      </p>
-                      <p className="mt-1 text-2xl font-bold text-foreground">{awaitingFeedbackCount}</p>
-                    </CardContent>
-                  </Card>
-                </div>
-              </CardContent>
-            </Card>
           </div>
-        )}
 
         {!jobsLoading && !job ? (
-          <Card className="border-border bg-card">
+            <Card className={cn(DASHBOARD_PANEL, "shadow-none")}>
             <CardContent className="py-12 text-center">
               <Briefcase className="mx-auto mb-3 h-12 w-12 text-muted-foreground/50" />
               <p className="text-foreground">{hiringManagerReviewPageCopy.sections.inaccessibleJob}</p>
             </CardContent>
           </Card>
         ) : isLoading ? (
-          <Card className="border-border bg-card">
+            <Card className={cn(DASHBOARD_PANEL, "shadow-none")}>
             <CardContent className="py-12 text-center text-muted-foreground">
               {hiringManagerReviewPageCopy.sections.loading}
             </CardContent>
           </Card>
         ) : applicationsError ? (
-          <Card className="border-border bg-card">
+            <Card className={cn(DASHBOARD_PANEL, "shadow-none")}>
             <CardContent className="py-12 text-center">
               <MessageSquare className="mx-auto mb-3 h-12 w-12 text-muted-foreground/50" />
               <p className="text-foreground">Unable to load candidates for this job.</p>
@@ -235,7 +259,7 @@ export default function HiringManagerReviewPage() {
             </CardContent>
           </Card>
         ) : requestedApplications.length === 0 ? (
-          <Card className="border-border bg-card">
+            <Card className={cn(DASHBOARD_PANEL, "shadow-none")}>
             <CardContent className="py-12 text-center">
               <ClipboardCheck className="mx-auto mb-3 h-12 w-12 text-muted-foreground/50" />
               <p className="text-foreground">{hiringManagerReviewPageCopy.sections.noRequestedReviews}</p>
@@ -243,8 +267,8 @@ export default function HiringManagerReviewPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
-            <Card className="border-border bg-card">
+            <div className="grid gap-6 lg:grid-cols-[360px_minmax(0,1fr)]">
+              <Card className={cn(DASHBOARD_PANEL, "shadow-none")}>
               <CardHeader>
                 <CardTitle>{hiringManagerReviewPageCopy.sections.candidates}</CardTitle>
                 <CardDescription>
@@ -261,10 +285,10 @@ export default function HiringManagerReviewPage() {
                       key={application.id}
                       type="button"
                       onClick={() => setSelectedApplicationId(application.id)}
-                      className={`w-full rounded-xl border p-4 text-left transition-colors ${
+                        className={`w-full rounded-[22px] border p-4 text-left transition-colors ${
                         isSelected
-                          ? "border-primary bg-primary/5"
-                          : "border-border bg-background hover:border-primary/40 hover:bg-muted/30"
+                            ? "border-[#C9D6F2] bg-[#F7FAFF]"
+                            : "border-[#E7E9F0] bg-white hover:border-[#C9D6F2] hover:bg-[#F7F8FC]"
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -299,7 +323,7 @@ export default function HiringManagerReviewPage() {
                       </div>
 
                       {application.hmReviewNote ? (
-                        <p className="mt-3 line-clamp-2 rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm text-foreground">
+                          <p className="mt-3 line-clamp-2 rounded-2xl border border-[#E7E9F0] bg-[#F7F8FC] px-3 py-2 text-sm text-foreground">
                           <span className="font-medium">Recruiter note:</span> {application.hmReviewNote}
                         </p>
                       ) : null}
@@ -312,7 +336,7 @@ export default function HiringManagerReviewPage() {
             <div className="space-y-4">
               {selectedApplication ? (
                 <>
-                  <Card className="border-border bg-card">
+                    <Card className={cn(DASHBOARD_PANEL, "shadow-none")}>
                     <CardHeader>
                       <CardTitle>{selectedApplication.name}</CardTitle>
                       <CardDescription>{selectedApplication.email}</CardDescription>
@@ -336,7 +360,7 @@ export default function HiringManagerReviewPage() {
                       </div>
 
                       {selectedApplication.hmReviewNote ? (
-                        <div className="rounded-xl border border-border bg-muted/30 p-4">
+                            <div className="rounded-[22px] border border-[#E7E9F0] bg-[#F7F8FC] p-4">
                           <p className="text-sm font-medium text-foreground">
                             {hiringManagerReviewPageCopy.sections.recruiterContext}
                           </p>
@@ -348,7 +372,7 @@ export default function HiringManagerReviewPage() {
                     </CardContent>
                   </Card>
 
-                  <Card className="border-border bg-card">
+                    <Card className={cn(DASHBOARD_PANEL, "shadow-none")}>
                     <CardHeader>
                       <div className="flex items-center justify-between gap-3">
                         <div>
@@ -385,7 +409,7 @@ export default function HiringManagerReviewPage() {
                     </CardHeader>
                     <CardContent>
                       {canInlinePreview && resumePreviewUrl ? (
-                        <div className="overflow-hidden rounded-xl border border-border bg-muted/20">
+                            <div className="overflow-hidden rounded-[22px] border border-[#E7E9F0] bg-[#F7F8FC]">
                           <iframe
                             title={`Resume preview for ${selectedApplication.name}`}
                             src={resumePreviewUrl}
@@ -393,7 +417,7 @@ export default function HiringManagerReviewPage() {
                           />
                         </div>
                       ) : (
-                        <div className="rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center">
+                            <div className="rounded-[22px] border border-dashed border-[#CBD5E1] bg-[#F8FAFC] p-6 text-center">
                           <FileText className="mx-auto mb-3 h-10 w-10 text-muted-foreground/50" />
                           <p className="font-medium text-foreground">
                             {selectedApplication.resumeFilename || "Resume"}
@@ -409,7 +433,7 @@ export default function HiringManagerReviewPage() {
                   <FeedbackPanel applicationId={selectedApplication.id} jobId={jobId} />
                 </>
               ) : (
-                <Card className="border-border bg-card">
+                  <Card className={cn(DASHBOARD_PANEL, "shadow-none")}>
                   <CardContent className="py-12 text-center text-muted-foreground">
                     {hiringManagerReviewPageCopy.sections.chooseCandidate}
                   </CardContent>
@@ -418,6 +442,7 @@ export default function HiringManagerReviewPage() {
             </div>
           </div>
         )}
+        </div>
       </div>
     </Layout>
   );
